@@ -10,7 +10,11 @@ function loadGUI()
 end
 
 local function create(zone, options)
-  local config = loadScript("/WIDGETS/" .. name .. "/" .. model.getInfo().name .. ".lua")();
+  local cf = loadScript("/WIDGETS/" .. name .. "/" .. model.getInfo().name .. ".lua");
+  local config = nil;
+  if (cf) then
+    config = cf();
+  end
   return loadScript("/WIDGETS/" .. name .. "/buttons.lua")(zone, options, config);
 end
 
@@ -27,7 +31,6 @@ local options = {
 }
 
 local function update(widget, options)
---  print("update:", options.Address);
   widget.options = options;
   widget.update();
 end
