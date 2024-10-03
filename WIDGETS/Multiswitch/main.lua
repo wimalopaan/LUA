@@ -31,6 +31,7 @@ local options = {
 }
 
 local function update(widget, options)
+  print("Update1", options);
   widget.options = options;
   widget.update();
 end

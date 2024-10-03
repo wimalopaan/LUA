@@ -25,7 +25,7 @@ their (logical) address (0..255)
 --]]
 
 local function sendData()
-  print("senddata adr:", widget.options.Address);
+  print("senddata adr:", widget.options.Address, state);
   local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET, widget.options.Address, state};
   crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end
@@ -116,19 +116,6 @@ end
 
 local buttons = {};
 
-local function create() 
-  if not(buttons) then
-    buttons = {};
-  end
-  local name = "";
-  for row = 0, 3 do
-    buttons[#buttons + 1] = buildButton(name, COL1, row, row);
-  end
-  for row = 0, 3 do
-    buttons[#buttons + 1] = buildButton(name, COL3, row, row + 4);
-  end
-end
-
 local function lsChanged(b, newValue) 
   print("lsChanged:", b, newValue);
   local button = buttons[b];
@@ -145,12 +132,15 @@ local lsState = {};
 
 local function readLS() 
   for i, ls in ipairs(ls) do
-    local lsname = "ls" .. ls;
-    local v = getValue(lsname);
---    print("readLS:", lsname, v);
-    if (lsState[i] ~= v) then
-      lsState[i] = v;
-      lsChanged(i, v > 0 and true or false);
+    local lsw = model.getLogicalSwitch(ls - 1);
+    if ((lsw ~= nil) and (lsw.func ~= LS_FUNC_NONE)) then -- bug in EdgeTx???
+      local lsname = "ls" .. ls;
+      local v = getValue(lsname);
+      print("readLS:", lsname, v, lsw);
+      if (lsState[i] ~= v) then
+        lsState[i] = v;
+        lsChanged(i, v > 0 and true or false);
+      end        
     end
   end
 end
@@ -194,7 +184,15 @@ end
 -- type of button (does not reveive the EVT_VIRTUAL_EXIT ???), needs PR 5585
 -- color of button
 -- timeout value
+local lo = nil;
 function widget.update()
+  print("update")
+  if (lo == widget.options) then -- bug in EdgeTx?
+    return;
+  end
+  lo = widget.options;
+  print("update lo")
+
   ls = {};
   lsState = {};
   gui = libGUI.newGUI()
@@ -222,6 +220,7 @@ function widget.update()
   end
 
   timeout = timeout + widget.options.Address; -- each different timeout
+  print("update: timeout:", timeout);
 
   for row = 1, 8 do
     local bname = "F" .. row;
@@ -251,9 +250,9 @@ function widget.update()
       end
     end
     if (row < 5) then
-      buttons[row] = buildButton(bname, COL1, row - 1, row, btype); 
+      buttons[row] = buildButton(bname, COL1, row - 1, row - 1, btype); 
     else
-      buttons[row] = buildButton(bname, COL3, row - 1 - 4, row, btype); 
+      buttons[row] = buildButton(bname, COL3, row - 1 - 4, row - 1, btype); 
     end
   end
 
