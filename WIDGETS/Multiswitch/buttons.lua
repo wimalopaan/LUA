@@ -24,6 +24,11 @@ All MultiSwitc-E8 grab the CRSF-COMMAND packets corresponding their realm CRSF_R
 their (logical) address (0..255)
 --]]
 
+--[[
+* To use momentary switches EdgeTx PR5585 is needed.
+* ExpressLRS PR2941 is needed to use config-menu for more than one MultiSwitch-E at a time 
+--]]
+
 local function sendData()
   print("senddata adr:", widget.options.Address, state);
   local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET, widget.options.Address, state};
@@ -31,6 +36,7 @@ local function sendData()
 end
 
 local WIDTH  = 180
+local WLEFT  = WIDTH / 20
 local HEIGHT = 32
 local COL1   = 20
 local MID    = 480 / 2
@@ -66,14 +72,36 @@ local function callback(item)
   sendData();
 end
 
-local function buildButton(name, col, row, id, bt) 
+local function buildButton(name, col, row, id, bt, help) 
 --  print("buildbutton: ", name, col, row, id, bt);
   local b = nil;
   if (bt == "t") then
     b = gui.toggleButton(col, TOP + row * ROW, WIDTH, HEIGHT, name, false, callback);
+    b.help = help;
+    function b.draw(focused)
+      local x = col;
+      local y = TOP + row * ROW;
+      local w = WIDTH;
+      local h = HEIGHT;
+      local fg = libGUI.colors.primary2
+      local bg = libGUI.colors.focus
+
+      if b.value then
+          fg = libGUI.colors.primary3
+          bg = libGUI.colors.active
+      end
+
+      lcd.drawFilledRectangle(x, y, w, h, bg)
+      lcd.drawText(x + w / 2, y + h / 2, b.title, bit32.bor(fg, b.flags))
+      lcd.drawText(x + w - 30, y + h - 15, b.help, SMLSIZE + COLOR_THEME_SECONDARY3);
+      lcd.drawFilledRectangle(x, y, WLEFT, h, COLOR_THEME_SECONDARY1);
+      if b.disabled then
+          lcd.drawFilledRectangle(x, y, w, h, GREY, 7)
+      end
+    end
   elseif (bt == "m") then
     b = gui.button(col, TOP + row * ROW, WIDTH, HEIGHT, name, callback);
-
+    b.help = help;
     function b.onEvent(event, touchState)
       if (event == EVT_TOUCH_FIRST) then
         gui.editing = true;
@@ -98,11 +126,12 @@ local function buildButton(name, col, row, id, bt)
       if b.value then
           fg = libGUI.colors.primary3
           bg = libGUI.colors.active
-          border = libGUI.colors.focus
       end
 
       lcd.drawFilledRectangle(x, y, w, h, bg)
       lcd.drawText(x + w / 2, y + h / 2, b.title, bit32.bor(fg, b.flags))
+      lcd.drawText(x + w - 30, y + h - 15, b.help, SMLSIZE + COLOR_THEME_SECONDARY3);
+      lcd.drawFilledTriangle(x, y, x + WLEFT, y + h/2, x, y + h, COLOR_THEME_WARNING)
 
       if b.disabled then
           lcd.drawFilledRectangle(x, y, w, h, GREY, 7)
@@ -153,7 +182,7 @@ local function widgetRefresh()
 end
 
 local function fullScreenRefresh(event, touchState)
-  lcd.drawText(MID, TOP / 2, config.buttons[widget.options.Address].name .. "@" .. widget.options.Address, CENTER + VCENTER + libGUI.colors.primary3);
+  lcd.drawText(MID, TOP / 2, config.buttons[widget.options.Address].name .. "@" .. widget.options.Address, CENTER + VCENTER + libGUI.colors.primary1);
   gui.run(event, touchState)
 end
 
@@ -187,7 +216,9 @@ end
 local lo = nil;
 function widget.update()
   print("update")
-  if (lo == widget.options) then -- bug in EdgeTx?
+  -- update() is called if user changes options OR if zone changes (switch from full-screen to app-mode)
+  -- if only zone changes, option table ref remains same (2.11, previous?)
+  if (lo == widget.options) then
     return;
   end
   lo = widget.options;
@@ -249,10 +280,15 @@ function widget.update()
         end
       end
     end
+    local htext = "-";
+    if (ls[row]) then
+      htext = "LS" .. ls[row];
+    end
+    print("Button", bname, htext);
     if (row < 5) then
-      buttons[row] = buildButton(bname, COL1, row - 1, row - 1, btype); 
+      buttons[row] = buildButton(bname, COL1, row - 1, row - 1, btype, htext); 
     else
-      buttons[row] = buildButton(bname, COL3, row - 1 - 4, row - 1, btype); 
+      buttons[row] = buildButton(bname, COL3, row - 1 - 4, row - 1, btype, htext); 
     end
   end
 
