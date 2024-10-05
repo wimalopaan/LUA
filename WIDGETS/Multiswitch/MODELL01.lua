@@ -12,6 +12,12 @@ config.buttons = {
         [1] = {name = "Sirene", type = "momentary", ls = 20},
         [2] = {name = "Horn", type = "m", ls = 21},
     };
+    [3] = { -- Adresse [0, 255]
+        name = "Test",
+        [1] = {name = "Taster", type = "momentary", ls = 30},
+        [2] = {name = "Schalter", type = "toggle", ls = 31},
+        [3] = {name = "Schieber", type = "slider"},
+    };
 };
 config.global = {
     intervall = 1000, -- milli seconds: state update intervall without action 

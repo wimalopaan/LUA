@@ -15,6 +15,7 @@ CRSF_SUBCMD_CC_ADATA    = 0x01;
 CRSF_SUBCMD_CC_ACHUNK   = 0x02;
 CRSF_SUBCMD_CC_ACHANNEL = 0x03;
 CRSF_SUBCMD_SWITCH_SET  = 0x01;
+CRSF_SUBCMD_PROP_SET    = 0x02;
 
 local state = 0;
 
@@ -34,6 +35,11 @@ local function sendData()
   local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET, widget.options.Address, state};
   crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end
+local function sendProp(channel, value)
+  print("sendprop adr:", widget.options.Address, channel, value);
+  local payloadOut = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_PROP_SET, widget.options.Address, channel, value};
+  crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
+end
 
 local WIDTH  = 180
 local WLEFT  = WIDTH / 20
@@ -46,6 +52,11 @@ local ROW    = (272 - TOP) / 4
 
 local libGUI = loadGUI()
 local gui = libGUI.newGUI()
+
+local function callbackSlider(item)
+  --print("callbackSlider: ", item.title, item.value, item.id, widget.options.Address);
+  sendProp(item.id, item.value);
+end
 
 local function callback(item)
 --print("callback 1: ", item.title, item.value, item.id, state, widget.options.Address);
@@ -136,6 +147,29 @@ local function buildButton(name, col, row, id, bt, help)
       if b.disabled then
           lcd.drawFilledRectangle(x, y, w, h, GREY, 7)
       end
+    end
+  elseif (bt == "s") then
+    b = gui.horizontalSlider(col, TOP + row * ROW + HEIGHT / 2, WIDTH, 0, 0, 99, 1, callbackSlider);
+    b.title = name;
+    function b.draw(focused)
+      local x = col;
+      local y = TOP + row * ROW;
+      local w = WIDTH;
+      local h = HEIGHT;
+      local ys = y + h / 2;
+      local xdot = x + w * (b.value - b.min) / (b.max - b.min)
+
+      local colorBar = libGUI.colors.primary3
+      local colorDot = libGUI.colors.primary2
+      local colorDotBorder = libGUI.colors.primary3
+
+      lcd.drawFilledRectangle(x, ys - 2, w, 5, colorBar)
+      lcd.drawFilledCircle(xdot, ys, libGUI.SLIDER_DOT_RADIUS, colorDot)
+      for i = -1, 1 do
+          lcd.drawCircle(xdot, ys, libGUI.SLIDER_DOT_RADIUS + i, colorDotBorder)
+      end
+      lcd.drawRectangle(x, y, w, h, COLOR_THEME_SECONDARY2);
+      lcd.drawText(x + w / 2, y + h / 2, b.title, SMLSIZE + CENTER);
   end
 
   end
@@ -276,6 +310,9 @@ function widget.update()
             btype = "m";
           elseif (string.sub(t, 1, 1) == "t") then
             btype = "t";
+          elseif (string.sub(t, 1, 1) == "s") then
+            btype = "s";
+            ls[row] = nil;
           end
         end
       end
