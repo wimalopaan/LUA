@@ -83,6 +83,30 @@ local function callback(item)
   sendData();
 end
 
+local sliderPrompt = libGUI.newGUI();
+local sly = 50;
+function sliderPrompt.fullScreenRefresh()
+  lcd.drawFilledRectangle(20, sly + 30, LCD_W - 40, 30, COLOR_THEME_SECONDARY1)
+  lcd.drawFilledRectangle(20, sly + 60, LCD_W - 40, 100, libGUI.colors.primary2)
+  lcd.drawRectangle(20, sly + 30, LCD_W - 40, 130, libGUI.colors.primary1, 2)
+  lcd.drawText(40, sly + 45, sliderPrompt.item.title, VCENTER + MIDSIZE + libGUI.colors.primary2);
+end
+-- Make a dismiss button from a custom element
+local custom2 = sliderPrompt.custom({ }, LCD_W - 45, sly + 36, 20, 20)
+local promptSlider = sliderPrompt.horizontalSlider(30, sly + 100, LCD_W - 60, 0, 0, 99, 1, function(s) 
+  sliderPrompt.item.value = s.value; 
+  callbackSlider(sliderPrompt.item); 
+end);
+function custom2.draw(focused)
+  lcd.drawRectangle(LCD_W - 45, sly + 36, 20, 20, libGUI.colors.primary2)
+  lcd.drawText(LCD_W - 35, sly + 45, "X", MIDSIZE + CENTER + VCENTER + libGUI.colors.primary2)
+end
+function custom2.onEvent(event, touchState)
+  if event == EVT_VIRTUAL_ENTER then
+    gui.dismissPrompt()
+  end
+end
+
 local function buildButton(name, col, row, id, bt, help) 
 --  print("buildbutton: ", name, col, row, id, bt);
   local b = nil;
@@ -149,7 +173,7 @@ local function buildButton(name, col, row, id, bt, help)
       end
     end
   elseif (bt == "s") then
-    b = gui.horizontalSlider(col, TOP + row * ROW + HEIGHT / 2, WIDTH, 0, 0, 99, 1, callbackSlider);
+    b = gui.horizontalSlider(col, TOP + row * ROW + HEIGHT / 2, WIDTH, 0, 0, 99, 1);
     b.title = name;
     function b.draw(focused)
       local x = col;
@@ -170,7 +194,13 @@ local function buildButton(name, col, row, id, bt, help)
       end
       lcd.drawRectangle(x, y, w, h, COLOR_THEME_SECONDARY2);
       lcd.drawText(x + w / 2, y + h / 2, b.title, SMLSIZE + CENTER);
-  end
+    end
+
+    function b.onEvent(event, touchState)
+      sliderPrompt.item = b;
+      promptSlider.value = b.value;
+      gui.showPrompt(sliderPrompt);
+    end
 
   end
   b.id = id;
