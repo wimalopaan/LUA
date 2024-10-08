@@ -1,3 +1,5 @@
+local SLIDER_POPUP = 1;
+
 local config = {};
 
 config.buttons = {
@@ -16,12 +18,12 @@ config.buttons = {
         name = "Test",
         [1] = {name = "Taster", type = "momentary", ls = 30},
         [2] = {name = "Schalter", type = "toggle", ls = 31},
-        [3] = {name = "Schieber", type = "slider"},
+        [3] = {name = "Schieber1", type = "s"},
+        [4] = {name = "Schieber2", type = "slider", options = SLIDER_POPUP},
     };
 };
 config.global = {
     intervall = 1000, -- milli seconds: state update intervall without action 
 };
-
 
 return config;
