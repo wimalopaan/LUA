@@ -23,4 +23,6 @@ EdgeTx LUA Widget for ELRS MultiSwitch
 
 EdgeTx LUA Widget for the `hardware-extension`-protocol.
 
+== Mixer-Script `crsfch.lua`
 
+Sends additional channels (up to 32) to FC
