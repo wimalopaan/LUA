@@ -10,7 +10,7 @@ CRSF_SUBCMD_CC_ACHAN_LO = 0x04;
 CRSF_SUBCMD_CC_ACHAN_HI = 0x05;
 
 local function scaleTo8Bit(channel)
-  local v = getOutputValue(channel);
+  local v = getOutputValue(channel - 1);
   if (v >= 0) then
     return (v * 127) / 1023;
   else
@@ -19,12 +19,12 @@ local function scaleTo8Bit(channel)
 end
 
 local function sendChannels(startChannel, numberOfChannels) 
-  print("sendchannels", startChannel, numberOfChannels, "ch0:", scaleTo8Bit(0));
+--  print("sendchannels", startChannel, numberOfChannels, "ch:", scaleTo8Bit(startChannel));
   local payloadOut = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_CC, CRSF_SUBCMD_CC_ACHANNEL};
-  for ch=startChannel, (startChannel + numberOfChannels) do
+  for ch=startChannel, (startChannel + numberOfChannels - 1) do
     payloadOut[5 + ch - startChannel] = scaleTo8Bit(ch);
   end
- crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
+  crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end
 
 local inputs = {
