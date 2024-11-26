@@ -167,24 +167,25 @@ function refresh(widget, event, touchState)
     local command, data = crossfireTelemetryPop();
     local app_id = 0;
     if (command == 0x80 or command == 0x7F) and data ~= nil then
-        app_id = bit32.lshift(data[1], 8) + data[2];
-        if #data >= 26 then 
+        local dest = data[1]; 
+        adr = data[2];
+        app_id = bit32.lshift(data[3], 8) + data[4];
+        if #data >= 27 then 
             if (app_id == 6000) then
                 frameCounter = frameCounter + 1;
-                adr     = data[3]; 
-                steer1  = bit32.lshift(data[4], 8) + data[5];
-                power1  = bit32.lshift(data[6], 8) + data[7];
-                actual1 = bit32.lshift(data[8], 8) + data[9];
-                curr1   = bit32.lshift(data[10], 8) + data[11] * 0.01;                    
-                rpm1    = bit32.lshift(data[12], 8) + data[13];
-                steer2  = bit32.lshift(data[14], 8) + data[15];                    
-                power2  = bit32.lshift(data[16], 8) + data[17];
-                actual2 = bit32.lshift(data[18], 8) + data[19];                    
-                curr2   = bit32.lshift(data[20], 8) + data[21] * 0.01;
-                rpm2    = bit32.lshift(data[22], 8) + data[23];                    
-                turns1  = data[24]; 
-                turns2  = data[25];
-                flags   = data[26];
+                steer1  = bit32.lshift(data[5], 8) + data[6];
+                power1  = bit32.lshift(data[7], 8) + data[8];
+                actual1 = bit32.lshift(data[9], 8) + data[10];
+                curr1   = bit32.lshift(data[11], 8) + data[12] * 0.01;                    
+                rpm1    = bit32.lshift(data[13], 8) + data[14];
+                steer2  = bit32.lshift(data[15], 8) + data[16];                    
+                power2  = bit32.lshift(data[17], 8) + data[18];
+                actual2 = bit32.lshift(data[19], 8) + data[20];                    
+                curr2   = bit32.lshift(data[21], 8) + data[22] * 0.01;
+                rpm2    = bit32.lshift(data[23], 8) + data[24];                    
+                turns1  = data[25]; 
+                turns2  = data[26];
+                flags   = data[27];
             end
         end
     end
