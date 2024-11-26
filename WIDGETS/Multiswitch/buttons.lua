@@ -142,18 +142,21 @@ local function initGUI()
     end
 
     function self.onEvent(event, touchState)
-      if (self.covers(touchState.x, touchState.y)) then
-        if (event == EVT_TOUCH_FIRST) then
+      if (event == EVT_TOUCH_FIRST) then
+        if (self.covers(touchState.x, touchState.y)) then
           gui.editing = true;
           self.value = true;
           return self.callBack(self);
         end
+      elseif (event == EVT_VIRTUAL_ENTER_LONG) then
+        gui.editing = true;
+        self.value = true;
+        return self.callBack(self);
+      elseif (event == EVT_TOUCH_BREAK) or (event == EVT_VIRTUAL_EXIT) then
+        gui.editing = false;
+        self.value = false;
+        return self.callBack(self);
       end
-      if (event == EVT_TOUCH_RELEASE) then
-          gui.editing = false;
-          self.value = false;
-          return self.callBack(self);
-      end          
     end
 
     gui.custom(self, x, y, w, h)
@@ -198,7 +201,7 @@ local function initGUI()
       end
       gui.drawRectangle(x, y, w, h, COLOR_THEME_SECONDARY2);
       if (self.title) then
-        gui.drawText(x + w / 2, y + h / 2 + 6, self.title, SMLSIZE + CENTER);        
+        gui.drawText(x + w / 2, y + h / 2 + 6, self.title, SMLSIZE + CENTER);
       end
     end
 
@@ -232,7 +235,7 @@ local function initGUI()
     gui.custom(self, x, y, w, h)
 
     return self
-  end 
+  end
 
   return gui;
 end
@@ -347,10 +350,12 @@ end
 
 local function widgetRefresh()
   lcd.drawText(zone.w / 2, zone.h / 2, "MultiSwitch", DBLSIZE + CENTER + VCENTER + libGUI.colors.primary3);
-  if (config.buttons[widget.options.Address].name) then
-    lcd.drawText(zone.w / 2, zone.h / 2 + 20,
-      config.buttons[widget.options.Address].name .. "@" .. widget.options.Address,
-      CENTER + VCENTER + libGUI.colors.primary3);
+  if (config.buttons[widget.options.Address]) then
+    if (config.buttons[widget.options.Address].name) then
+      lcd.drawText(zone.w / 2, zone.h / 2 + 20,
+        config.buttons[widget.options.Address].name .. "@" .. widget.options.Address,
+        CENTER + VCENTER + libGUI.colors.primary3);
+    end      
   end
 end
 
@@ -388,13 +393,20 @@ end
 -- color of button
 -- timeout value
 local lo = nil;
+local address = 0;
 function widget.update()
   print("update")
+  print("file:", widget.options.File)
   -- update() is called if user changes options OR if zone changes (switch from full-screen to app-mode)
   -- if only zone changes, option table ref remains same (2.11, previous?)
   if (lo == widget.options) then
-    return;
+    print("ref:", lo);
+    if (widget.options.Address == address) then
+      print("adr: ", address);
+      return;
+    end      
   end
+  address = widget.options.Address;
   lo = widget.options;
   print("update lo")
 

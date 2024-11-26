@@ -26,12 +26,18 @@ local function background(widget)
   widget.background();
 end
 
+local ver, radio, maj, minor, rev, osname = getVersion();
+
 local options = {
-  {"Address", VALUE, 0, 0, 255};
+  {"Address", VALUE, 0, 0, 255}
 }
 
+if ((maj >= 2) and (minor >= 11)) then
+  options[#options + 1] = {"File", FILE, model.getInfo().name .. ".lua", "/WIDGETS/Multiswitch"};
+end
+
 local function update(widget, options)
-  print("Update1", options);
+--  print("Update1", options);
   widget.options = options;
   widget.update();
 end
