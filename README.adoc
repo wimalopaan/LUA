@@ -25,4 +25,9 @@ EdgeTx LUA Widget for the `hardware-extension`-protocol.
 
 == Mixer-Script `crsfch.lua`
 
+EdgeTx mixer script.
 Sends additional channels (up to 32) to FC
+
+== Widget for RC720E32 (Schottel-Controller)
+
+EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
