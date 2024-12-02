@@ -31,3 +31,9 @@ Sends additional channels (up to 32) to FC
 == Widget for RC720E32 (Schottel-Controller)
 
 EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
+
+== Voith-Schneider EdgeTx / OpenTx LUA mixer script 
+
+This is a limiter script for controlling Voith-Schneider propellers. It incorporates an
+additional correction algorithm. This is neccessary due to the geometry of the fixed rectangular servo configuration.
+
