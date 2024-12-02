@@ -25,7 +25,7 @@ EdgeTx LUA Widget for the `hardware-extension`-protocol.
 
 == Mixer-Script `crsfch.lua`
 
-EdgeTx mixer script.
+EdgeTx mixer script `crsfch.lua`.
 Sends additional channels (up to 32) to FC
 
 == Widget for RC720E32 (Schottel-Controller)
@@ -34,6 +34,10 @@ EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
 
 == Voith-Schneider EdgeTx / OpenTx LUA mixer script 
 
-This is a limiter script for controlling Voith-Schneider propellers. It incorporates an
+This is a limiter script `vsp.lua` for controlling Voith-Schneider propellers. It incorporates an
 additional correction algorithm. This is neccessary due to the geometry of the fixed rectangular servo configuration.
 
+== Incremental mixer script
+
+The `increm.lua` mixer script implements an incremental channel: an output value that is the integral (sum over time) of 
+the choosen input scaled with some (speed) factor.
