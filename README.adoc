@@ -41,3 +41,21 @@ additional correction algorithm. This is neccessary due to the geometry of the f
 
 The `increm.lua` mixer script implements an incremental channel: an output value that is the integral (sum over time) of 
 the choosen input scaled with some (speed) factor. This sometimes called hydraulic-simulation.
+
+== EdgeTx Simulator
+
+As of version 2.11 the EdgeTx simulator supports using host serial ports (e.g. USB/serial adapters) as AUX1/2 in the simulator. These serial ports can be used for all purposes but for internal/external module connection.
+
+Connecting an ELRS-module (e.g. a rx-as-tx) via USB/serial is easy. One can also use a ELRS-module with USB, if you tweak the internal pin connection of UART1 to the USB.
+
+Now the `crsf16.lua` script can send CRSF packets out of the serial to the ELRS-module. Then this module connects to the receiver (if already bound).
+
+To make configuration changes you need a modified version of `elrsV3.lua` that also uses the serial instead of the internal/external modul connection (which is not working on simulator).
+
+=== CRSF channels mixer script 
+
+The `crsf16.lua` mixer script sends the first 16 channels over serial (921600 baud).
+
+=== ELRSV3 for simulator: `elrsV3simu.lua`
+
+Adaption of the `elrsv3.lua` to send/receive CRSF packets over serial (921600 baud).
