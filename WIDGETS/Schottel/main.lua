@@ -1,3 +1,5 @@
+local VERSION = "V1.1"
+
 local onSimu = false;
 local _, rv = getVersion()
 if string.sub(rv, -5) == "-simu" then 
@@ -260,7 +262,7 @@ function refresh(widget, event, touchState)
 
         gui.run(event, touchState);
     else
-        lcd.drawText(widget.zone.x + widget.zone.w / 2, widget.zone.y, "Click to fullscreen", CENTER + SMLSIZE + COLOR_THEME_PRIMARY1);
+        lcd.drawText(widget.zone.x + widget.zone.w / 2, widget.zone.y, VERSION, CENTER + SMLSIZE + COLOR_THEME_PRIMARY1);
     end
 end
 
