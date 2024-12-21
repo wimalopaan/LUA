@@ -1,3 +1,18 @@
+local onSimu = false;
+local _, rv = getVersion()
+if string.sub(rv, -5) == "-simu" then 
+  local c = loadScript("/WIDGETS/Schottel/crsfserial.lua");
+  if (c ~= nil) then
+    print("load crsf serial")
+    local t = c();
+    if (t ~= nil) then
+        crossfireTelemetryPush = t.crossfireTelemetryPush;
+        crossfireTelemetryPop  = t.crossfireTelemetryPop;
+        onSimu = true;
+    end
+  end
+end
+
 local libGUI = loadScript("/WIDGETS/LibGUI/libgui.lua")()
 local gui = libGUI.newGUI()
 
@@ -205,11 +220,16 @@ function refresh(widget, event, touchState)
 
     local alarm1 = false;
     local alarm2 = false;
+    local alarm3 = false;
     if (bit32.band(flags, 0x01) ~= 0x00) then
         alarm1 = true;
     end
     if (bit32.band(flags, 0x02) ~= 0x00) then
         alarm2 = true;
+    end
+    if (bit32.band(flags, 0x04) ~= 0x00) then
+        alarm3 = true;
+        playTone(440, 500, 100);
     end
 
     drawGauge(widget, 0, steer1, power1, actual1, widget.options.Offset, alarm1);
@@ -217,7 +237,11 @@ function refresh(widget, event, touchState)
 
     if (event ~= nil) then
         lcd.drawText(widget.zone.x + widget.zone.w / 2 - 5, widget.zone.y, "Adr: " .. adr, RIGHT + SMLSIZE + COLOR_THEME_WARNING);
-        lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "]", LEFT + SMLSIZE + COLOR_THEME_WARNING);
+        if (onSimu) then
+            lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "]simu", LEFT + SMLSIZE + COLOR_THEME_WARNING);
+        else
+            lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "]", LEFT + SMLSIZE + COLOR_THEME_WARNING);
+        end
 
         lcd.drawText(widget.zone.x + widget.zone.w / 2 - 5, widget.zone.y + widget.zone.h - 18, "Steer/Pwr", RIGHT + SMLSIZE + COLOR_THEME_WARNING);
         lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y + widget.zone.h - 18, "Actual", LEFT + SMLSIZE + COLOR_THEME_EDIT);
@@ -234,9 +258,10 @@ function refresh(widget, event, touchState)
         lcd.drawText(widget.zone.x + widget.zone.w - 120, widget.zone.y + widget.zone.h - 18, "RpM: " .. rpm2, LEFT + SMLSIZE + COLOR_THEME_PRIMARY1);
         lcd.drawText(widget.zone.x + widget.zone.w, widget.zone.y + widget.zone.h - 18, "Turns: " .. turns2, RIGHT + SMLSIZE + COLOR_THEME_PRIMARY1);
 
-        gui.run(event, touchState)
+        gui.run(event, touchState);
+    else
+        lcd.drawText(widget.zone.x + widget.zone.w / 2, widget.zone.y, "Click to fullscreen", CENTER + SMLSIZE + COLOR_THEME_PRIMARY1);
     end
-
 end
 
 local options = {
