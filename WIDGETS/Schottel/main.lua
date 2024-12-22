@@ -1,4 +1,4 @@
-local VERSION = "V1.1"
+local VERSION = "V1.2"
 
 local onSimu = false;
 local _, rv = getVersion()
@@ -59,7 +59,7 @@ confirmPrompt.button(LCD_W / 2 + 60, 120, 80, 40, "NO", function()
     gui.dismissPrompt();
 end)
 
-gui.button(LCD_W / 2 - 30, LCD_H - 40, 60, 20, "Reset", 
+gui.button(LCD_W / 2 - 30, LCD_H - 42, 60, 20, "Reset", 
 function()
     gui.showPrompt(confirmPrompt);
 end);
