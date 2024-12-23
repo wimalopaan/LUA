@@ -1,4 +1,4 @@
-local VERSION = "V1.2"
+local VERSION = "V1.3"
 
 local onSimu = false;
 local _, rv = getVersion()
@@ -124,8 +124,8 @@ local function drawGauge(widget, side, steer, throttle, actual, offset, alarm)
 
     local offset_phi = offset * (math.pi / 2);
     -- negative phi, disply is upside-down
-    local steer_phi  = -math.pi * steer / 2024 + offset_phi;
-    local actual_phi = -math.pi * actual / 2024 + offset_phi;
+    local steer_phi  = -math.pi * steer / 2048 + offset_phi;
+    local actual_phi = -math.pi * actual / 2048 + offset_phi;
     local thr_norm = math.max(0, throttle / 820);
     local thr_r = rr * (1 - thr_norm);
 
@@ -172,6 +172,82 @@ local rpm2 = 0;
 local turns2 = 0;
 local flags = 0;
 
+local hasInfoFrame = false;
+
+local s1 = {
+    srv = {
+        fw = {maj = 255, min = 255};
+        hw = {maj = 255, min = 255};
+    };
+    esc = {
+        fw = {maj = 255, min = 255};
+        hw = {maj = 255, min = 255};
+    }
+};
+local s2 = {
+    srv = {
+        fw = {maj = 255, min = 255};
+        hw = {maj = 255, min = 255};
+    };
+    esc = {
+        fw = {maj = 255, min = 255};
+        hw = {maj = 255, min = 255};
+    }
+};
+
+local function getVersionString(d)
+    local r = "";
+    if (d.maj == 255) then
+        r = r .. "-";
+    else 
+        r = r .. d.maj;
+    end
+    r = r .. ".";
+    if (d.min == 255) then
+        r = r .. "-";
+    else 
+        r = r .. d.min;
+    end
+    return r;
+end
+
+local function getServoFirmwareString(n) 
+    local s;
+    if (n == 1) then 
+        s = s1;
+    else 
+        s = s2;
+    end
+    return getVersionString(s.srv.fw);
+end
+local function getServoHardwareString(n) 
+    local s;
+    if (n == 1) then 
+        s = s1;
+    else 
+        s = s2;
+    end
+    return getVersionString(s.srv.hw);
+end
+local function getEscFirmwareString(n) 
+    local s;
+    if (n == 1) then 
+        s = s1;
+    else 
+        s = s2;
+    end
+    return getVersionString(s.esc.fw);
+end
+local function getEscHardwareString(n) 
+    local s;
+    if (n == 1) then 
+        s = s1;
+    else 
+        s = s2;
+    end
+    return getVersionString(s.esc.hw);
+end
+
 local frameCounter = 0;
 local lastFrameCounter = 0;
 local refreshCounter = 0;
@@ -184,10 +260,10 @@ function refresh(widget, event, touchState)
     local command, data = crossfireTelemetryPop();
     local app_id = 0;
     if (command == 0x80 or command == 0x7F) and data ~= nil then
-        local dest = data[1]; 
-        adr = data[2];
-        app_id = bit32.lshift(data[3], 8) + data[4];
-        if #data >= 27 then 
+        if #data >= 20 then 
+            local dest = data[1]; 
+            adr = data[2];
+            app_id = bit32.lshift(data[3], 8) + data[4];
             if (app_id == 6000) then
                 frameCounter = frameCounter + 1;
                 steer1  = bit32.lshift(data[5], 8) + data[6];
@@ -204,6 +280,27 @@ function refresh(widget, event, touchState)
                 turns2  = data[26];
                 flags   = data[27];
             end
+            if (app_id == 6001) then
+                hasInfoFrame = true;
+                frameCounter = frameCounter + 1;
+                s1.srv.fw.maj = data[5];
+                s1.srv.fw.min = data[6];
+                s1.srv.hw.maj = data[7];
+                s1.srv.hw.min = data[8];
+                s2.srv.fw.maj = data[9];
+                s2.srv.fw.min = data[10];
+                s2.srv.hw.maj = data[11];
+                s2.srv.hw.min = data[12];
+
+                s1.esc.fw.maj = data[13];
+                s1.esc.fw.min = data[14];
+                s1.esc.hw.maj = data[16];
+                s1.esc.hw.min = data[16];
+                s2.esc.fw.maj = data[17];
+                s2.esc.fw.min = data[18];
+                s2.esc.hw.maj = data[19];
+                s2.esc.hw.min = data[20];
+            end
         end
     end
 
@@ -218,6 +315,11 @@ function refresh(widget, event, touchState)
         refreshCounter = 0;
         lastFrameCounter = frameCounter;
         frameCounter = 0;
+    end
+    if (not onSimu) then
+        if (lastFrameCounter == 0) then
+            hasInfoFrame = false;
+        end            
     end
 
     local alarm1 = false;
@@ -234,13 +336,34 @@ function refresh(widget, event, touchState)
         playTone(440, 500, 100);
     end
 
-    drawGauge(widget, 0, steer1, power1, actual1, widget.options.Offset, alarm1);
-    drawGauge(widget, 1, steer2, power2, actual2, widget.options.Offset, alarm2);
+    if (widget.options.SwapLR == 0) then
+        drawGauge(widget, 0, steer1, power1, actual1, widget.options.Offset, alarm1);
+        drawGauge(widget, 1, steer2, power2, actual2, widget.options.Offset, alarm2);
+    else
+        drawGauge(widget, 0, steer2, power2, actual2, widget.options.Offset, alarm2);
+        drawGauge(widget, 1, steer1, power1, actual1, widget.options.Offset, alarm1);
+    end
 
     if (event ~= nil) then
         lcd.drawText(widget.zone.x + widget.zone.w / 2 - 5, widget.zone.y, "Adr: " .. adr, RIGHT + SMLSIZE + COLOR_THEME_WARNING);
+
+        if (hasInfoFrame) then
+            local srvfw1 = getServoFirmwareString(1);           
+            local srvhw1 = getServoHardwareString(1);           
+            lcd.drawText(widget.zone.x + 5, widget.zone.y + 20, "FW" .. srvfw1 .. " HW: " .. srvhw1, LEFT + SMLSIZE + COLOR_THEME_SECONDARY1);
+            local srvfw2 = getServoFirmwareString(2);           
+            local srvhw2 = getServoHardwareString(2);           
+            lcd.drawText(widget.zone.x + widget.zone.w - 5, widget.zone.y + 20, "FW: " .. srvfw2 .. " HW: " .. srvhw2, RIGHT + SMLSIZE + COLOR_THEME_SECONDARY1);
+
+            local escfw1 = getEscFirmwareString(1);           
+            local eschw1 = getEscHardwareString(1);           
+            lcd.drawText(widget.zone.x + 5, widget.zone.y + widget.zone.h - 38, "FW" .. escfw1 .. " HW: " .. eschw1, LEFT + SMLSIZE + COLOR_THEME_SECONDARY1);
+            local escfw2 = getEscFirmwareString(2);           
+            local eschw2 = getEscHardwareString(2);           
+            lcd.drawText(widget.zone.x + widget.zone.w - 5, widget.zone.y + widget.zone.h - 36, "FW: " .. escfw2 .. " HW: " .. eschw2, RIGHT + SMLSIZE + COLOR_THEME_SECONDARY1);
+        end
         if (onSimu) then
-            lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "]simu", LEFT + SMLSIZE + COLOR_THEME_WARNING);
+            lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "] simu", LEFT + SMLSIZE + COLOR_THEME_WARNING);
         else
             lcd.drawText(widget.zone.x + widget.zone.w / 2 + 5, widget.zone.y, "[" .. lastFrameCounter .. "]", LEFT + SMLSIZE + COLOR_THEME_WARNING);
         end
@@ -268,6 +391,7 @@ end
 
 local options = {
     {"Offset", VALUE, 0, 0, 3};
+    {"SwapLR", VALUE, 0, 0, 1};
 }
   
 return {
