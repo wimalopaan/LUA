@@ -172,6 +172,9 @@ local rpm2 = 0;
 local turns2 = 0;
 local flags = 0;
 
+local sw_remote = 0;
+local hw_remote = 0;
+
 local hasInfoFrame = false;
 
 local s1 = {
@@ -300,6 +303,9 @@ function refresh(widget, event, touchState)
                 s2.esc.fw.min = data[18];
                 s2.esc.hw.maj = data[19];
                 s2.esc.hw.min = data[20];
+
+                sw_remote = data[21];
+                hw_remote = data[22];
             end
         end
     end
@@ -348,6 +354,7 @@ function refresh(widget, event, touchState)
         lcd.drawText(widget.zone.x + widget.zone.w / 2 - 5, widget.zone.y, "Adr: " .. adr, RIGHT + SMLSIZE + COLOR_THEME_WARNING);
 
         if (hasInfoFrame) then
+            lcd.drawText(widget.zone.x + widget.zone.w / 2, widget.zone.y + 20, "CC: HW: " .. hw_remote .. " SW: " .. sw_remote, CENTER + SMLSIZE + COLOR_THEME_PRIMARY3);
             local srvfw1 = getServoFirmwareString(1);           
             local srvhw1 = getServoHardwareString(1);           
             lcd.drawText(widget.zone.x + 5, widget.zone.y + 20, "FW" .. srvfw1 .. " HW: " .. srvhw1, LEFT + SMLSIZE + COLOR_THEME_SECONDARY1);
