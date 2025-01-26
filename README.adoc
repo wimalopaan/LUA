@@ -59,3 +59,10 @@ The `crsf16.lua` mixer script sends the first 16 channels over serial (921600 ba
 === ELRSV3 for simulator: `elrsV3simu.lua`
 
 Adaption of the `elrsv3.lua` to send/receive CRSF packets over serial (921600 baud).
+
+=== `crossfireTelemetry...()` replacement
+
+The `elrsV3simu.lua` uses LUA implementations of `crossfireTelemetryPop()` and `crossfireTelemetryPush)()`. These replacements are broken out into the `crsfserial.lua` (in `WIDGETS/Schottel`). 
+Other scripts can load this file and make use of these functions, so that LUA widgets using crossfire telemetry will also work on `simulator`. Please refer to `elrsV3simu.lua` or
+`WIDGETS/Schottel/main.lua` to see how to use them.
+
