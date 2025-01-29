@@ -28,6 +28,11 @@ EdgeTx LUA Widget for the `hardware-extension`-protocol.
 EdgeTx mixer script `crsfch.lua`.
 Sends additional channels (up to 32) to FC
 
+== Mixer-Script `shm.lua`
+
+Reads up to 6 Shared-Memory-Variables and outputs them _without_ any processing. 
+This is usesful to use the Shared-Memoty-Variables as mixer-inputs.
+
 == Widget for RC720E32 (Schottel-Controller)
 
 EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
