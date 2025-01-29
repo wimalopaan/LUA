@@ -28,6 +28,12 @@ EdgeTx LUA Widget for the `hardware-extension`-protocol.
 EdgeTx mixer script `crsfch.lua`.
 Sends additional channels (up to 32) to FC
 
+== lvglControls Widget
+
+This widget shows up to 16 _virtual sources_ (sliders). The values of these controls are stored in
+Shared-Memory variables. These variables can be uses via <<shm.lua>>.
+
+[[shm.lua]]
 == Mixer-Script `shm.lua`
 
 Reads up to 6 Shared-Memory-Variables and outputs them _without_ any processing. 
