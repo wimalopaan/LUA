@@ -12,6 +12,17 @@ widget.ui = nil;
 local settings = {}
 local settingsFilename = "/WIDGETS/" .. dir .. "/" .. model.getInfo().name .. "_" .. widget.options.Name .. ".lua";
 
+local function resetSettings()
+    settings.version = settingsVersion;
+    settings.numberOfSliders = 6;
+    settings.sliders = {};
+    for i = 1, 16 do
+        settings.sliders[i] = { name = "VS" .. i, shm = i, width = (LCD_W - 20) / settings.numberOfSliders,
+        color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
+    end
+end
+resetSettings();
+
 local function askClose()
     lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() lvgl.exitFullScreen(); end) })
 end
@@ -42,7 +53,7 @@ end
 
 function widget.controlPage()
     local page = lvgl.page({
-        title = "Virtual Controls",
+        title = widget.name,
         subtitle = "Controls - " .. widget.options.Name,
         back = (function() askClose(); end),
     });
@@ -99,7 +110,7 @@ end
 
 function widget.settingsPage()
     local page = lvgl.page({
-        title = "Virtual Controls",
+        title = widget.name,
         subtitle = "Settings - " .. widget.options.Name,
         back = (function() askClose(); end),
     });
@@ -111,7 +122,7 @@ end
 
 function widget.globalsPage() 
     local page = lvgl.page({
-        title = "Virtual Controls",
+        title = widget.name,
         subtitle = "Global - " .. widget.options.Name,
         back = (function() askClose(); end),
     });
@@ -128,6 +139,7 @@ function widget.globalsPage()
                         end) } 
                 }
             },
+            {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
             {type = "hline", w = 100, h = 1},
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                 {type = "button", text = "Controls", press = widget.controlPage },
@@ -158,16 +170,6 @@ local function isValidSettingsTable(t)
         end
     end
     return false;
-end
-
-local function resetSettings()
-    settings.version = settingsVersion;
-    settings.numberOfSliders = 6;
-    settings.sliders = {};
-    for i = 1, 16 do
-        settings.sliders[i] = { name = "VS" .. i, shm = i, width = (LCD_W - 20) / settings.numberOfSliders,
-        color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
-    end
 end
 
 local initialized = false;

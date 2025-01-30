@@ -1,8 +1,9 @@
-local name = "LVGLControls"
+local name = "LVGLContr"
+local longname = "LVGL-Controls"
 local dir = "lvglControls"
 
 local function create(zone, options, id)
-    return loadScript("/WIDGETS/" .. dir .. "/ui.lua")(zone, options, name, dir, id);
+    return loadScript("/WIDGETS/" .. dir .. "/ui.lua")(zone, options, longname, dir, id);
 end
 
 local function refresh(widget, event, touchState)
@@ -16,7 +17,6 @@ local function background(widget)
     widget.background();
 end
 
-local ver, radio, maj, minor, rev, osname = getVersion();
 local options = {
     {"Name", STRING, "Sliders"}
 }
