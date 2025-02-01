@@ -1,7 +1,4 @@
 -- todo
--- show physical controls if assigned
--- evaluate 2nd switch for 3-pos
-
 -- autoconf fsm
 -- control page: column width
 -- global page: nicer (rectangle for line heigth and column width, columns)
@@ -35,7 +32,7 @@ local state = {};
 local crsf  = loadScript("/WIDGETS/" .. dir .. "/crsf.lua")(state, widget, widget_id, dir);
 local fsm   = loadScript("/WIDGETS/" .. dir .. "/fsm.lua")(crsf);
 
-local settingsVersion = 6;
+local settingsVersion = 7;
 local function resetSettings() 
 --    print("reset settings")
     settings.version = settingsVersion;
@@ -43,6 +40,7 @@ local function resetSettings()
     settings.line_height = 45;
     settings.momentaryButton_radius = 20;
     settings.buttons = {};
+    settings.show_physical = 1;
     state.buttons = {};
     for i = 1, 8 do
         settings.buttons[i] = {name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
@@ -68,15 +66,13 @@ local function bool2int(v)
 end
 
 local function setButton(btnstate, v, v2)
-    if (v ~= nil) then
-        local vv = bool2int(v) + 2 * bool2int(v2);
-        if (vv ~= btnstate.value) then
-            btnstate.value = vv;
-            fsm.update();
-            return true;
-        else
-        end
-    end                    
+--        print("setButton", v, v2);
+    local vv = bool2int(v) + 2 * bool2int(v2);
+    if (vv ~= btnstate.value) then
+        btnstate.value = vv;
+        fsm.update();
+        return true;
+    end
     return false;
 end
 
@@ -92,8 +88,8 @@ local function readPhysical()
             end
         else
             if (btn.switch > 0) then
-                local v = getSwitchValue(btn.switch);
-                local v2 = getSwitchValue(btn.switch2);
+                local v  = (btn.switch > 0 ) and getSwitchValue(btn.switch);
+                local v2 = (btn.switch2 > 0) and getSwitchValue(btn.switch2);
                 if (setButton(btnstate, v, v2)) then
                     if (widget.ui ~= nil) then
                         -- todo: caching ref
@@ -105,7 +101,6 @@ local function readPhysical()
                 end
             end
         end      
---        print("b", i, btnstate.value, btn.switch);
     end
 end
 
@@ -135,13 +130,22 @@ end
 
 local function createButton(i, width)
     if (settings.buttons[i].type == TYPE_BUTTON) then
-        return { type = "button", name = "b" .. i, text = settings.buttons[i].name, w = width, h = settings.line_height, 
+        return { type = "button", name = "b" .. i, text = (function() 
+                    local sw = settings.buttons[i].switch * settings.show_physical;
+                    if (sw > 0) then
+                        return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                    else
+                        return settings.buttons[i].name;
+                    end
+                 end)(), 
+                 w = width, h = settings.line_height, 
                  color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
                  press = (function() state.buttons[i].value = invert(state.buttons[i].value); fsm.update(); return state.buttons[i].value; end),
                  active = (function() if (settings.buttons[i].switch > 0) then return false; else return true; end; end)
             };
     elseif (settings.buttons[i].type == TYPE_MOMENTARY) then
-        return { type = "momentaryButton", text = settings.buttons[i].name, w = width, h = settings.line_height, cornerRadius = settings.momentaryButton_radius,
+        return { type = "momentaryButton", text = settings.buttons[i].name, 
+        w = width, h = settings.line_height, cornerRadius = settings.momentaryButton_radius,
         color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
         press = (function() state.buttons[i].value = 1; fsm.update(); end),
         release = (function() state.buttons[i].value = 0; fsm.update(); end),
@@ -149,7 +153,16 @@ local function createButton(i, width)
     };
     elseif (settings.buttons[i].type == TYPE_3POS) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-            { type = "label", text = settings.buttons[i].name, w = width / 2, font = settings.buttons[i].font},
+            { type = "label", text = (function() 
+                local sw = settings.buttons[i].switch * settings.show_physical;
+                local sw2 = settings.buttons[i].switch2;
+                if (sw > 0) then
+                    return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. "|" .. getSwitchName(sw2) .. ")";
+                else
+                    return settings.buttons[i].name;
+                end
+             end)(), 
+              w = width / 2, font = settings.buttons[i].font},
             { type = "slider", min = -1, max = 1, 
                                 get = (function() local v = state.buttons[i].value; if (v <= 1) then return v; else return -1; end; end), 
                                 set = (function(v) if (v == -1) then state.buttons[i].value = 2; else state.buttons[i].value = v; end; fsm.update(); end), 
@@ -159,7 +172,15 @@ local function createButton(i, width)
         }};
     elseif (settings.buttons[i].type == TYPE_TOGGLE) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-            { type = "label", text = settings.buttons[i].name, w = width / 2, font = settings.buttons[i].font },
+            { type = "label", text = (function() 
+                local sw = settings.buttons[i].switch * settings.show_physical;
+                if (sw > 0) then
+                    return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                else
+                    return settings.buttons[i].name;
+                end
+             end)(), 
+              w = width / 2, font = settings.buttons[i].font },
             { type = "toggle", get = (function() if (state.buttons[i].value ~= 0) then return 1; else return 0; end; end), 
                                set = (function(v) state.buttons[i].value = v; fsm.update(); end), w = width / 2 ,
                                active = (function() if (settings.buttons[i].switch > 0) then return false; else return true; end; end),
@@ -167,7 +188,15 @@ local function createButton(i, width)
         }};
     elseif (settings.buttons[i].type == TYPE_SLIDER) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-            { type = "label", text = settings.buttons[i].name, w = width / 3, font = settings.buttons[i].font},
+            { type = "label", text = (function() 
+                local so = settings.buttons[i].source * settings.show_physical;
+                if (so > 0) then
+                    return settings.buttons[i].name .. " (" .. getSourceName(so) .. ")";
+                else
+                    return settings.buttons[i].name;
+                end
+             end)(), 
+              w = width / 3, font = settings.buttons[i].font},
             { type = "slider", min = -100, max = 100, get = (function() return state.buttons[i].value; end),
                                                       set = (function(v) state.buttons[i].value = v; crsf.sendProp(i, v); end), w = (2 * width) / 3,
                                                       active = (function() if (settings.buttons[i].source > 0) then return false; else return true; end; end),
@@ -206,6 +235,12 @@ function widget.globalsPage()
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Radius momentary Button: "},
                     {type = "numberEdit", min = 10, max = 30, w = 40, get = (function() return settings.momentaryButton_radius; end), set = (function(v) settings.momentaryButton_radius = v; end) } 
+                }
+                },
+                {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+                    {type = "label", text = "Show physical names: "},
+                    {type = "toggle", get = (function() return settings.show_physical; end), 
+                                      set = (function(v) settings.show_physical = v; end) }
                 }
                 },
                 {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
@@ -282,12 +317,12 @@ local function createSettingsRow(i, edit_width, maxLen)
             { type = "label", text = " Type:" },
             { type = "choice", title = "Type", values = {"Button", "Toggle", "3-Pos", "Momentary", "Slider"}, get = (function() return settings.buttons[i].type; end), set = (function(t) settings.buttons[i].type = t; end) }, 
             { type = "label", text = " Switch:" },
-            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH, 
-                active = (function() if (settings.buttons[i].type == TYPE_SLIDER) then return false; else return true; end; end), 
+            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR, 
+                active = (function() if ((settings.buttons[i].type == TYPE_SLIDER) or (settings.buttons[i].type == TYPE_MOMENTARY)) then return false; else return true; end; end), 
                 get = (function() return settings.buttons[i].switch; end), set = (function(s) settings.buttons[i].switch = s; end) },
             { type = "label", text = " Switch2:", 
                 visible = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end) },
-            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH, 
+            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR, 
                 visible = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end),
                 get = (function() return settings.buttons[i].switch2; end), set = (function(s) settings.buttons[i].switch2 = s; end) },
             { type = "label", text = " Source:" },
@@ -351,6 +386,9 @@ end
 
 local initialized = false;
 function widget.update()
+    print("update:", widget.options.Intervall, widget.options.Autoconf);
+    fsm.intervall(widget.options.Intervall);
+    fsm.autoconf(widget.options.Autoconf);
     if (not initialized) then
         local st = serialize.load(settingsFilename);
         if (st ~= nil) then

@@ -14,6 +14,14 @@ local EVT_UPDATE = 1;
 local sendTimeout = 100;
 local lastTimeSend = 0;
 
+local useAutoconf = 0;
+
+local function intervall(i)
+  sendTimeout = i;
+end
+local function autoconf(a)
+  useAutoconf = a;
+end
 local function sendEvent(e)
     event = e;
 end
@@ -34,6 +42,9 @@ local function tick(configCallback)
   local oldstate = state;
   if (timeout()) then
     crsf.send();
+    return;
+  end
+  if (useAutoconf == 0) then
     return;
   end
   if (state == 0) then
@@ -74,4 +85,6 @@ end
 
 return {tick = tick, 
         update = update,
+        intervall = intervall,
+        autoconf = autoconf,
        };

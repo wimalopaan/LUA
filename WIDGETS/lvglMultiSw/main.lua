@@ -19,6 +19,7 @@ end
 
 local options = {
     { "Address",  VALUE, 0, 0, 255 },
+    { "Intervall",  VALUE, 100, 10, 100 },
     { "Autoconf", BOOL,  0 },
 --    { "File", FILE, model.getInfo().name .. ".lua", "/WIDGETS/" .. dir};
 }
