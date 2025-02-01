@@ -58,7 +58,17 @@ local function isValidSettingsTable(t)
     end
     return false;
 end
-local settingsFilename = "/WIDGETS/" .. dir .. "/" .. model.getInfo().name .. "_" .. widget.options.Address .. ".lua";
+local settingsFilename = nil;
+
+local function updateFilename()
+    local fname = "/WIDGETS/" .. dir .. "/" .. model.getInfo().name .. "_" .. widget.options.Address .. ".lua";
+    if (fname ~= settingsFilename) then
+        settingsFilename = fname;
+        return true;
+    end
+    return false;
+end
+updateFilename();
 
 local function bool2int(v)
     if (v) then return 1; end
@@ -386,10 +396,12 @@ end
 
 local initialized = false;
 function widget.update()
-    print("update:", widget.options.Intervall, widget.options.Autoconf);
+    local changed = updateFilename();
+--    print("update:", widget.options.Intervall, widget.options.Autoconf, settingsFilename);
     fsm.intervall(widget.options.Intervall);
     fsm.autoconf(widget.options.Autoconf);
-    if (not initialized) then
+    if ((not initialized) or changed) then
+--        print("update: not initialzed or other filename");
         local st = serialize.load(settingsFilename);
         if (st ~= nil) then
             if (isValidSettingsTable(st)) then
