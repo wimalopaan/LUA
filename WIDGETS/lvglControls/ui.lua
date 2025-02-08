@@ -5,6 +5,12 @@ widget.id = widget_id;
 widget.zone = zone;
 widget.name = name;
 
+local TYPE_BUTTON    = 1;
+local TYPE_TOGGLE    = 2;
+local TYPE_3POS      = 3;
+local TYPE_MOMENTARY = 4;
+local TYPE_SLIDER    = 5;
+
 local serialize = loadScript("/WIDGETS/" .. dir .. "/tableser.lua")();
 
 widget.ui = nil;
@@ -12,22 +18,43 @@ widget.ui = nil;
 local settings = {};
 local state = {};
 local settingsFilename = "/WIDGETS/" .. dir .. "/" .. model.getInfo().name .. "_" .. widget.options.Name .. ".lua";
+local settingsVersion = 11;
+
+local function saveSettings() 
+    serialize.save(settings, settingsFilename);
+end
+
+local function resetSlider(i)
+    settings.sliders[i] = { name = "VS" .. i, shm = i, vin = i, useShm = 0, width = (LCD_W - 20) / settings.numberOfSliders,
+                            color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
+    state.values[i] = 0;
+end
+
+local function resetButton(i) 
+    settings.buttons[i] = { name = "Button" .. i, type = TYPE_BUTTON; width = (LCD_W - 20) / 4, vs = i,
+    color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
+    state.buttons[i] = getVirtualSwitch(settings.buttons[i].vs);
+end
 
 local function resetSettings()
     settings.version = settingsVersion;
     settings.numberOfSliders = 6;
     settings.sliders = {};
     state.values = {};
-    for i = 1, 16 do
-        settings.sliders[i] = { name = "VS" .. i, shm = i, vin = i, useShm = 0, width = (LCD_W - 20) / settings.numberOfSliders,
-        color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
-        state.values[i] = 0;
+    for i = 1, settings.numberOfSliders do
+        resetSlider(i);
+    end
+    settings.numberOfButtons = 6;
+    settings.buttons = {};
+    state.buttons = {};
+    for i = 1, settings.numberOfButtons do
+        resetButton(i);
     end
 end
 resetSettings();
 
 local function askClose()
-    lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() lvgl.exitFullScreen(); end) })
+    lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() saveSettings(); lvgl.exitFullScreen(); end) })
 end
   
 local function createSlider(i)    
@@ -40,8 +67,7 @@ local function createSlider(i)
                                     else 
                                         state.values[i] = v; 
                                         setVirtualInput(settings.sliders[i].vin, v); 
-                                        print("set", settings.sliders[i].vin, v);
-                                    end; 
+                                    end 
                                 end),
                 color = settings.sliders[i].color
             },
@@ -61,6 +87,49 @@ local function createSliders()
     return children;
 end
 
+local function invert(v) 
+    if (v == 0) then
+        return 1;
+    else
+        return 0;
+    end    
+end
+
+local function createButton(i)
+    print("createButton", i, settings.buttons[i].name);
+    return {type = "button", text = settings.buttons[i].name, w = settings.buttons[i].width,
+            color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
+            checked = state.buttons[i],
+            press = (function() state.buttons[i] = not state.buttons[i]; setVirtualSwitch(settings.buttons[i].vs, state.buttons[i]); if (state.buttons[i]) then return 1; else return 0; end; end),
+};
+end
+
+local function createButtons(row)
+    print("createButtons", row);
+    local children = {};
+    local i1 = (row - 1) * 4 + 1;
+    local i2 = math.min(row * 4, settings.numberOfButtons);
+    for i = i1, i2 do
+        children[#children+1] = createButton(i);
+    end
+    return children;
+end
+
+local function createButtonRow(r)
+    print("createButtonRow", r);
+    return {type = "box", flexFlow = lvgl.FLOW_ROW, children = createButtons(r)};
+end
+
+local function createButtons()
+    local children = {};
+    local rows = math.floor(settings.numberOfButtons / 4 + 0.9);
+    print("createButtons", rows);
+    for i = 1, rows do
+        children[i] = createButtonRow(i);
+    end
+    return children;
+end
+
 function widget.controlPage()
     local page = lvgl.page({
         title = widget.name,
@@ -70,6 +139,8 @@ function widget.controlPage()
     local uit = {
         {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = createSliders()},
+            {type = "hline", w = 100, h = 1},
+            {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = createButtons()},
             {type = "hline", w = 100, h = 1},
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                 {type = "button", text = "Settings", press = widget.settingsPage },
@@ -116,15 +187,45 @@ local function createSetting(i)
     }
 end
 
+local function createButtonSetting(i)
+    local w = widget.zone.w / 6;
+    local wmin = math.min(30, w);
+    local wmax = math.max(widget.zone.w / 2, w);
+    return { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "label", text = "Name: "},
+            {type = "textEdit", value = settings.buttons[i].name, set = (function(v) settings.buttons[i].name = v; end), w = 100},
+            {type = "label", text = "Width: "},
+            {type = "numberEdit", min = wmin , max = wmax, w = 60, get = (function() return settings.buttons[i].width; end), set = (function(v) settings.buttons[i].width = v; end) }, 
+            { type = "label", text = " Color:" },
+            { type = "color", get = (function() return settings.buttons[i].color; end),
+                              set = (function(v) settings.buttons[i].color = v; end) },
+            { type = "label", text = " TextColor:" },
+            { type = "color", get = (function() return settings.buttons[i].textColor; end),
+                              set = (function(v) settings.buttons[i].textColor = v; end) },                                     
+            { type = "label", text = " Font:" },
+            { type = "font", get = (function() return settings.buttons[i].font; end),
+                            set = (function(v) settings.buttons[i].font = v; end) },                                     
+            {type = "label", text = "VS: "},
+            {type = "numberEdit", min = 1 , max = 64, w = 60, 
+                    get = (function() return settings.buttons[i].vs; end), 
+                    set = (function(v) settings.buttons[i].vs = v; end) },                             
+        }
+    }
+end
+
 local function createSettings()
     local children = {};
     for i = 1, settings.numberOfSliders do
         children[#children+1] = createSetting(i);        
     end
     children[#children+1] = {type = "hline", w = 100, h = 1};
+    for i = 1, settings.numberOfButtons do
+        children[#children+1] = createButtonSetting(i);        
+    end
+    children[#children+1] = {type = "hline", w = 100, h = 1};
     children[#children+1] = {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-        {type = "button", text = "Controls", press = widget.controlPage},
-        {type = "button", text = "Global", press = widget.globalsPage}
+        {type = "button", text = "Controls", press = (function() saveSettings(); widget.controlPage(); end)},
+        {type = "button", text = "Global", press = (function() saveSettings(); widget.globalsPage(); end)}
     }};
     return children;
 end
@@ -153,9 +254,29 @@ function widget.globalsPage()
                 {type = "label", text = "Number of Sliders: "},
                 {type = "numberEdit", min = 1, max = 8, w = 40, 
                         get = (function() return settings.numberOfSliders; end), 
-                        set = (function(v) settings.numberOfSliders = v;
+                        set = (function(v) 
                             for i = 1, settings.numberOfSliders do
+                                settings.sliders[i] = nil;
+                            end
+                            settings.numberOfSliders = v;
+                            for i = 1, settings.numberOfSliders do
+                                resetSlider(i);
                                 settings.sliders[i].width = widget.zone.w / settings.numberOfSliders;
+                            end
+                        end) } 
+                }
+            },
+            {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+                {type = "label", text = "Number of buttons: "},
+                {type = "numberEdit", min = 1, max = 64, w = 40, 
+                        get = (function() return settings.numberOfButtons; end), 
+                        set = (function(v) 
+                            for i = 1, settings.numberOfButtons do
+                                settings.buttons[i] = nil;
+                            end
+                            settings.numberOfButtons = v;
+                            for i = 1, settings.numberOfButtons do
+                                resetButton(i);
                             end
                         end) } 
                 }
@@ -163,8 +284,8 @@ function widget.globalsPage()
             {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
             {type = "hline", w = 100, h = 1},
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-                {type = "button", text = "Controls", press = widget.controlPage },
-                {type = "button", text = "Settings", press = widget.settingsPage }
+                {type = "button", text = "Controls", press = (function() saveSettings(); widget.controlPage(); end) },
+                {type = "button", text = "Settings", press = (function() saveSettings(); widget.settingsPage(); end) }
             }}
             }
         }
@@ -183,9 +304,9 @@ function widget.widgetPage()
     });
 end
 
-local settingsVersion = 9;
 local function isValidSettingsTable(t) 
     if (t.version ~= nil) then
+        print("valied:", t.version);
         if (t.version == settingsVersion) then
             return true;
         end
@@ -204,6 +325,9 @@ function widget.update()
                 resetSettings();
             end
         end
+        for i = 1, settings.numberOfSliders do
+            state.values[i] = 0;
+        end
         initialized = true;
     end
     if lvgl.isFullScreen() then
@@ -211,7 +335,7 @@ function widget.update()
     else
         widget.widgetPage();
     end
-    serialize.save(settings, settingsFilename);
+    saveSettings();
 end
 
 function widget.background()
