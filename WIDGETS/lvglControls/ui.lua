@@ -256,11 +256,13 @@ function widget.globalsPage()
                         get = (function() return settings.numberOfSliders; end), 
                         set = (function(v) 
                             for i = 1, settings.numberOfSliders do
+                                activateVirtualInput(settings.sliders[i].vin, false);
                                 settings.sliders[i] = nil;
                             end
                             settings.numberOfSliders = v;
                             for i = 1, settings.numberOfSliders do
                                 resetSlider(i);
+                                activateVirtualInput(settings.sliders[i].vin, true);
                                 settings.sliders[i].width = widget.zone.w / settings.numberOfSliders;
                             end
                         end) } 
@@ -272,11 +274,13 @@ function widget.globalsPage()
                         get = (function() return settings.numberOfButtons; end), 
                         set = (function(v) 
                             for i = 1, settings.numberOfButtons do
+                                activateVirtualSwitch(settings.buttons[i].vs, false);
                                 settings.buttons[i] = nil;
                             end
                             settings.numberOfButtons = v;
                             for i = 1, settings.numberOfButtons do
                                 resetButton(i);
+                                activateVirtualSwitch(settings.buttons[i].vs, true);
                             end
                         end) } 
                 }
@@ -327,6 +331,10 @@ function widget.update()
         end
         for i = 1, settings.numberOfSliders do
             state.values[i] = 0;
+            activateVirtualInput(settings.sliders[i].vin, true);
+        end
+        for i = 1, settings.numberOfButtons do
+            activateVirtualSwitch(settings.buttons[i].vs, true);
         end
         initialized = true;
     end
