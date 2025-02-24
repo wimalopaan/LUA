@@ -1,9 +1,19 @@
 local name = "LVGLContr"
 local longname = "LVGL-Controls"
-local dir = "lvglControls"
 
-local function create(zone, options, id)
-    return loadScript("/WIDGETS/" .. dir .. "/ui.lua")(zone, options, longname, dir, id);
+-- local function featureTest() 
+--     if (getVirtualSwitch ~= nil) then
+--         return true;
+--     end
+--     return false;
+-- end
+
+local function create(zone, options, dir)
+    print("create", dir)
+    -- if (not featureTest()) then
+    --     return {zone = zone, options = options, update = (function() end), background = (function() end), refresh = (function() end)};
+    -- end
+    return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
 end
 
 local function refresh(widget, event, touchState)

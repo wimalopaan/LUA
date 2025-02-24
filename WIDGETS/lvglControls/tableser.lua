@@ -31,8 +31,6 @@ local function save(tbl, filename)
                 io.write(file, charS .. exportstring(v) .. "," .. charE)
             elseif stype == "number" then
                 io.write(file, charS .. tostring(v) .. "," .. charE)
-            elseif stype == "boolean" then
-                io.write(file, charS .. tostring(v) .. "," .. charE)
             end
         end
 
