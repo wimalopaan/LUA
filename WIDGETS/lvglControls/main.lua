@@ -1,18 +1,10 @@
 local name = "LVGLContr"
 local longname = "LVGL-Controls"
 
--- local function featureTest() 
---     if (getVirtualSwitch ~= nil) then
---         return true;
---     end
---     return false;
--- end
-
 local function create(zone, options, dir)
-    print("create", dir)
-    -- if (not featureTest()) then
-    --     return {zone = zone, options = options, update = (function() end), background = (function() end), refresh = (function() end)};
-    -- end
+    if (dir == nil) then
+        dir = "/WIDGETS/lvglControls/";
+    end
     return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
 end
 
