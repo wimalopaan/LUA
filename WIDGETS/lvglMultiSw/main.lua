@@ -1,9 +1,11 @@
 local name = "MultiSw-EL"
 local longname = "MultiSwitch-E/L"
-local dir = "lvglMultiSw"
 
-local function create(zone, options, id)
-    return loadScript("/WIDGETS/" .. dir .. "/ui.lua")(zone, options, longname, dir, id);
+local function create(zone, options, dir)
+    if (dir == nil) then
+        dir = "/WIDGETS/lvglMultiSw/";
+    end
+    return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
 end
 
 local function refresh(widget, event, touchState)
