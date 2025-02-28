@@ -26,24 +26,20 @@ local function sendEvent(e)
     event = e;
 end
 local function update()
-    crsf.send();
-    lastTimeSend = getTime();
+    if (crsf.send() == true) then
+      lastTimeSend = getTime();     
+    end
 end
-local function timeout()
+local function onTimeout(f)
     local t = getTime();
     if ((t - lastTimeSend) > sendTimeout) then
-        lastTimeSend = t;
-        return true;
+      update();
     end
-    return false;
 end
 
 local function tick(configCallback) 
   local oldstate = state;
-  if (timeout()) then
-    crsf.send();
-    return;
-  end
+  onTimeout(crsf.send);
   if (useAutoconf == 0) then
     return;
   end

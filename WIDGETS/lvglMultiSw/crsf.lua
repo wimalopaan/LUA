@@ -1,4 +1,4 @@
-local state, widget, widget_id, dir = ... 
+local state, widget, dir = ... 
 
 local CRSF_ADDRESS_CONTROLLER     = 0xC8;
 local CRSF_ADDRESS_TRANSMITTER    = 0xEA;
@@ -36,7 +36,7 @@ local setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
 
 local _, rv = getVersion()
 if string.sub(rv, -5) == "-simu" then 
-  local c = loadScript("/WIDGETS/" .. dir .. "/crsfserial.lua");
+  local c = loadScript(dir .. "crsfserial.lua");
   if (c ~= nil) then
     --print("load crsf serial")
     local t = c();
@@ -68,20 +68,23 @@ local function computeState4()
     return s;
 end
 local function send()
-    print("senddata adr:", widget.options.Address);
+    local ret = false;
     if (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET) then
         local state2 = computeState2(state);
         local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
                              widget.options.Address, state2 };
-        crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+        ret = crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
     elseif (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET4) then
         local state4 = computeState4(state);
         local state_high = bit32.rshift(state4, 8);
         local state_low = bit32.band(state4, 0xff);
         local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
         widget.options.Address, state_high, state_low };
-        crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+        ret = crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
     end
+    if (ret == nil) then ret = true; end;
+    print("senddata adr:", widget.options.Address, ret);
+    return ret;
 end
 local function sendProp(channel, value)
       --print("sendprop adr:", widget.options.Address, channel, value);
@@ -109,11 +112,7 @@ local frameCounter = 0;
 local function readItem()
   local command = 0;
   local data = {};
-  if (crossfireTelemetryPopPrivate ~= nil) then
-    command, data = crossfireTelemetryPopPrivate(widget_id);
-  else
-    command, data = crossfireTelemetryPop();
-  end
+  command, data = crossfireTelemetryPop();
   local t = {};
   if (command == CRSF_FRAMETYPE_ARDUPILOT) and data ~= nil then
       if #data >= 9 then 

@@ -1,17 +1,18 @@
 -- todo
+-- restore button state when switch page/update
+-- fsm.config() instead of diffent functions
 -- autoconf fsm
 -- control page: column width
 -- global page: nicer (rectangle for line heigth and column width, columns)
 
-local zone, options, name, dir, widget_id = ...
+local zone, options, name, dir = ...
 local widget = {}
 widget.options = options;
-widget.id = widget_id;
 widget.zone = zone;
 widget.name = name;
 
-local serialize = loadScript("/WIDGETS/" .. dir .. "/tableser.lua")();
-local util      = loadScript("/WIDGETS/" .. dir .. "/util.lua")();
+local serialize = loadScript(dir .. "tableser.lua")();
+local util      = loadScript(dir .. "util.lua")();
 
 local PAGE_CONTROL  = 1;
 local PAGE_SETTINGS = 2;
@@ -29,8 +30,8 @@ local TYPE_SLIDER    = 5;
 local settings = {}
 local state = {};
 
-local crsf  = loadScript("/WIDGETS/" .. dir .. "/crsf.lua")(state, widget, widget_id, dir);
-local fsm   = loadScript("/WIDGETS/" .. dir .. "/fsm.lua")(crsf);
+local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
+local fsm   = loadScript(dir .. "fsm.lua")(crsf);
 
 local settingsVersion = 7;
 local function resetSettings() 
@@ -61,7 +62,7 @@ end
 local settingsFilename = nil;
 
 local function updateFilename()
-    local fname = "/WIDGETS/" .. dir .. "/" .. model.getInfo().name .. "_" .. widget.options.Address .. ".lua";
+    local fname = dir .. model.getInfo().name .. "_" .. widget.options.Address .. ".lua";
     if (fname ~= settingsFilename) then
         settingsFilename = fname;
         return true;
@@ -222,6 +223,7 @@ end
   
 
 function widget.globalsPage() 
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name .. "@" .. widget.options.Address .. " : " .. settings.name ,
         subtitle = "Global-Settings",
@@ -264,7 +266,7 @@ function widget.globalsPage()
 end
 
 function widget.controlPage()
---    print("controlPage");
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name .. "@" .. widget.options.Address .. " : " ..settings.name ,
         subtitle = "Control",
@@ -361,7 +363,7 @@ local function createSettingsRows(edit_width, maxLen)
 end
 
 function widget.settingsPage()
---    print("settingsPage");
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name .. "@" .. widget.options.Address .. " : " ..settings.name ,
         subtitle = "Function-Settings",
@@ -398,7 +400,7 @@ local initialized = false;
 function widget.update()
     local changed = updateFilename();
 --    print("update:", widget.options.Intervall, widget.options.Autoconf, settingsFilename);
-    fsm.intervall(widget.options.Intervall);
+    fsm.intervall(widget.options.Intervall + widget.options.Address); -- dither timeout a little bit
     fsm.autoconf(widget.options.Autoconf);
     if ((not initialized) or changed) then
 --        print("update: not initialzed or other filename");

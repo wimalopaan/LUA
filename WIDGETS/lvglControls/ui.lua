@@ -54,38 +54,38 @@ local function setVInput(i, v)
     else
         if (hasVirtualInputs) then
             setVirtualInput(settings.sliders[i].vin, v);
+            state.values[i] = v;
         end    
     end
 end
 
 local function getVInput(i)
-    if ((settings.sliders[i] ~= nil) and (settings.sliders[i].useShm > 0)) then 
+    if (settings.sliders[i].useShm > 0) then 
         return getShmVar(settings.sliders[i].shm); 
     else 
         return state.values[i]; 
     end;
 end
 
-local function activateVInput(i)
+local function activateVInput(i, b)
     if (hasVirtualInputs) then
-        activateVirtualInput(settings.sliders[i].vin, true);        
+        activateVirtualInput(settings.sliders[i].vin, b);        
     end
 end
 
-local function activateVSwitch(i)
+local function activateVSwitch(i, b)
     if (hasVirtualInputs) then
-        activateVirtualSwitch(settings.buttons[i].vs, true);        
+        activateVirtualSwitch(settings.buttons[i].vs, b);        
     end
 end
 
-local function buttonToggle()
+local function buttonToggle(i)
     state.buttons[i] = not state.buttons[i]; 
     setVSwitch(settings.buttons[i].vs, state.buttons[i]); 
     if (state.buttons[i]) then 
         return 1; 
-    else 
-        return 0; 
     end; 
+    return 0; 
 end
 
 local function saveSettings() 
@@ -124,7 +124,7 @@ end
 resetSettings();
 
 local function askClose()
-    lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() saveSettings(); lvgl.exitFullScreen(); end) })
+    lvgl.confirm({title = "Exit", message = "Really exit?", confirm = (function() saveSettings(); lvgl.exitFullScreen(); end) })
 end
   
 local function createSlider(i)    
@@ -155,7 +155,7 @@ local function createButton(i)
     return {type = "button", text = settings.buttons[i].name, w = settings.buttons[i].width,
             color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
             checked = state.buttons[i],
-            press = buttonToggle,
+            press = (function() return buttonToggle(i); end),
 };
 end
 
@@ -200,6 +200,7 @@ local function createControls()
 end
 
 function widget.controlPage()
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name,
         subtitle = "Controls - " .. widget.options.Name,
@@ -294,6 +295,7 @@ local function createSettings()
 end
 
 function widget.settingsPage()
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name,
         subtitle = "Settings - " .. widget.options.Name,
@@ -306,6 +308,7 @@ function widget.settingsPage()
 end
 
 function widget.globalsPage() 
+    lvgl.clear();
     local page = lvgl.page({
         title = widget.name,
         subtitle = "Global - " .. widget.options.Name,
