@@ -1,6 +1,7 @@
 local switchCb, propCb = ...;
 
 local state = 0;
+local type = 0;
 local length = -1;
 local payloadsum = 0;
 local msgcontroller = 0;
