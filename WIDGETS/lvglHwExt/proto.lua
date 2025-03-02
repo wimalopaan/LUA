@@ -27,7 +27,7 @@ local function decode(controller, type, payload)
                 if (bit32.band(diff, m) > 0) then
                     local switch = (i - 1) * 8 + b;
                     local swstate = bit32.band(payload[i], m);
-                    switchCb(controller + 1, switch, (swstate > 0));
+                    switchCb(controller, switch, (swstate > 0));
                 end
                 m = m * 2;
             end
@@ -91,7 +91,7 @@ local function parse(byte)
 end 
 
 local function process()
-    local data = serialRead();
+    local data = serialRead(64);
     for i = 1, #data do
         parse(string.byte(data, i));
     end

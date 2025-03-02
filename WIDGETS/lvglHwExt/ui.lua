@@ -11,12 +11,17 @@ local serialize = loadScript(dir .. "tableser.lua")();
 widget.ui = nil;
 
 local settings = {}
+local controllersOnline = 0;
 
 local function switchCallback(controller, switch, on)
     print("switchCB:", controller, switch, on);
-    if ((settings.controller ~= nil) and (settings.controller[controller] ~= nil)) then
-        if (settings.controller[controller].switches[switch] ~= nil) then
-            setVirtualSwitch(switch, on);
+
+    for i, c in ipairs(settings.controller) do
+        if (c.id == controller) then
+            local s = c.switches[switch];
+            if ((s ~= nil) and (s > 0)) then
+                setVirtualSwitch(s, on);        
+            end
         end
     end
 end
@@ -25,11 +30,11 @@ local function propCallback(controller, prop, value)
 end
 
 local function activateVSwitches()
-    for c = 1, #settings.controller do
-        if (settings.controller[c] ~= nil) then
-            for s = 1, #settings.controller[c].switches do
-                if (settings.controller[c].switches[s] ~= nil) then
-                    activateVirtualSwitch(settings.controller[c].switches[s], true);        
+    for ci, c in ipairs(settings.controller) do
+        if (c ~= nil) then
+            for si, s in ipairs(c.switches) do
+                if (s ~= nil) then
+                    activateVirtualSwitch(s, true);        
                 end
             end
         end        
@@ -39,14 +44,14 @@ end
 local function activateVInputs()
 end
 
-local settingsVersion = 2;
+local settingsVersion = 7;
 local function resetSettings() 
     print("resetSettings");
     settings.version = settingsVersion;
-    settings.controller = {{
-        switches = {1, 2, 3, 4, 5};
-        props = {};
-    }};
+    settings.controller = { 
+        { id = 0, name = "Intern", switches = {1, 2, 3, 4, 5},  props = {} },
+        { id = 1, name = "Pult",   switches = {17, 0, 19, 20}, props = {} }
+    };
     activateVSwitches();
     activateVInputs();
 end
@@ -64,7 +69,7 @@ end
 local settingsFilename = nil;
 
 local function updateFilename()
-    local fname = dir .. model.getInfo().name .. "_" .. widget.options.Name .. ".lua";
+    local fname = dir .. model.getInfo().name .. ".lua";
     if (fname ~= settingsFilename) then
         settingsFilename = fname;
         return true;
@@ -75,41 +80,206 @@ updateFilename();
 
 local function askClose()
     lvgl.confirm({title = "Exit", message = "Really exit?", 
-                  confirm = (function() serialize.save(settings, settingsFilename); lvgl.exitFullScreen(); end),
+                  confirm = (function() 
+--                    serialize.save(settings, settingsFilename); 
+                    lvgl.exitFullScreen(); 
+                end),
                  })
+end
+
+local function createSwitchDisplay(c)
+    local swlines = {};
+    local xoffset = 20
+    local rw = (LCD_W - 2 * xoffset) / 16;
+    local rh = rw;
+
+    for row = 1, 4 do
+        for col = 1, 16 do
+            local swn = (row - 1) * 16 + col;
+            local filled = false;
+            for i, sw in ipairs(c.switches) do
+                if (sw == swn) then
+                    filled = true;
+                end
+            end                   
+            swlines[#swlines+1] = {type = "rectangle", x = xoffset + (col - 1) * rw, y = (row - 1) * rh, w = rw / 2, h = rh / 2, filled = filled,
+                                   color = (function() 
+                                    if (filled) then
+                                        if (getVirtualSwitch(swn)) then 
+                                            return COLOR_THEME_WARNING; 
+                                        else 
+                                            return COLOR_THEME_SECONDARY1; 
+                                        end; 
+                                    else
+                                        return COLOR_THEME_SECONDARY2;
+                                    end
+                                end),
+                                  };
+        end 
+    end
+    local sd = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+        {type = "label", text = "Switches"},
+        {type = "box", children = swlines}
+    }
+    };
+    return sd;
+end
+
+local function createPropDisplay(c)
+    local pd = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+        {type = "label", text = "Props"},
+    }};
+    return pd;
+end
+
+local function createControllerDisplay(c)
+    local cd = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+       createSwitchDisplay(c),
+       {type = "hline", w = 100, h = 1},
+       createPropDisplay(c)
+       }
+    };
+    return cd;
 end
 
 local function createDisplay() 
     local children = {};
-    return children;
+    for i, c in ipairs(settings.controller) do
+        children[#children+1] = {type = "label", text = "Controller@" .. c.id .. ": " .. c.name};
+        children[#children+1] = createControllerDisplay(c);           
+        children[#children+1] = {type = "hline", w = LCD_W - 10, h = 3};
+    end
+    children[#children+1] = {type = "hline", w = 100, h = 1};
+    children[#children+1] = {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+        {type = "button", text = "Settings", press = widget.settingsPage },
+    }};
+       return children;
 end
 
 function widget.displayPage()
     lvgl.clear();
     local page = lvgl.page({
-        title = widget.name .. " : " .. widget.options.Name,
+        title = widget.name,
         subtitle = "Display",
         back = askClose,
     });
-    local uit = { {
-            type = "box",
-            flexFlow = lvgl.FLOW_COLUMN,
-            flexPad = lvgl.PAD_LARGE,
-            children = createDisplay();
-         }
-    };
+    local uit = {{type = "box", flexFlow = lvgl.FLOW_COLUMN, flexPad = lvgl.PAD_LARGE, children = createDisplay(); }};
     widget.ui = page:build(uit);
+end
+
+-- Anzahl Controller
+-- je Controller: 
+-- Id
+-- name
+-- ContSw -> Sw
+-- ContProp -> Prop
+
+local function addController()
+    local maxid = 0;
+    for i, c in ipairs(settings.controller) do
+        if (c and (c.id > maxid)) then
+            maxid = c.id;
+        end
+    end
+    settings.controller[#settings.controller+1] = {id = maxid + 1, name = "", switches = {}, props = {}};
+    widget.settingsPage();
+end
+
+local function deleteController(c)
+    for i, cx in pairs(settings.controller) do
+        if (cx == c) then
+            table.remove(settings.controller, i);
+            break;
+        end
+    end
+    widget.settingsPage();
+end
+
+local function controllerSetting(c)
+    local cs = {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+        {type = "label", text = "Name"},
+        {type = "textEdit", value = c.name, set = (function(v) c.name = v; end), w = 100},
+        {type = "label", text = "ID"},
+        {type = "numberEdit", min = 0, max = 7, get = (function() return c.id; end), set = (function(v) c.id = v; end),  w = 30 },
+        {type = "button", text = "Delete", press = (function() deleteController(c); end)}
+    }};
+    return cs;
+end
+
+local function controllerSettings()
+    local cs = {};
+    cs[#cs+1] = {type = "label", text = "Controller:"};
+    for i, c in ipairs(settings.controller) do
+        cs[#cs+1] = controllerSetting(c);            
+    end
+    cs[#cs+1] = {type = "hline", w = 100, h = 1};
+    cs[#cs+1] = {type = "button", text = "Add Controller", press = addController };
+    return cs;
+end
+
+local function deleteMapping(controller, inp)  
+    controller.switches[inp] = 0;
+end
+
+local function switchMapping(controller, iswitch, vswitch)
+    local sm = {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+        {type = "label", text = "Controller:"},
+        {type = "label", text = controller.name},
+        {type = "label", text = "In:"},
+        {type = "numberEdit", min = 1, max = 64, get = (function() return iswitch; end), set = (function(v) end),  w = 50 },
+        {type = "label", text = "Out:"},
+        {type = "numberEdit", min = 1, max = 64, get = (function() return vswitch; end), set = (function(v) end),  w = 50 },
+        {type = "button", text = "Delete", press = (function() deleteMapping(controller, iswitch); end)}
+    }};
+    return sm;
+end
+
+local function addMappingDialog()
+    local dg = lvgl.dialog({title="Add Mapping", flexFlow=lvgl.FLOW_COLUMN, flexPad=lvgl.PAD_LARGE});
+    local uit = {
+        {type = "setting", title = "Controller", children = {
+            {type = "choice", title = "Controller", x = 100, values = {"a", "b"}};
+        }},
+        {type = "setting", title = "In", children = {
+            {type = "numberEdit", x = 100, min = 1, max = 64, set = (function(v) end),  w = 50 },    
+        }},      
+        {type = "hline", w = 100, h = 1},
+        {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad=lvgl.PAD_LARGE, childen = {
+            {type = "button", text = "Add", press = (function() end)},
+            {type = "button", text = "Cancel", press = (function() end)}
+        }}
+    };
+    dg:build(uit);
+end
+
+local function switchMappings()
+    local sm = {};
+    for ci, c in ipairs(settings.controller) do
+        for si, s in ipairs(c.switches) do
+            if (s > 0) then
+                sm[#sm+1] = switchMapping(c, si, s);                
+            end
+        end
+        sm[#sm+1] = {type = "hline", w = 100, h = 1};
+    end
+    sm[#sm+1] = {type = "button", text = "Add Mapping", press = addMappingDialog };
+    return sm;
 end
 
 local function createSettings() 
     local children = {};
+    children[#children+1] = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = controllerSettings()};
+    children[#children+1] = {type = "hline", w = LCD_W - 10, h = 3};
+    children[#children+1] = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = switchMappings()};
+    children[#children+1] = {type = "hline", w = LCD_W - 10, h = 3};
+    children[#children+1] = {type = "button", text = "Display", press = widget.displayPage };
     return children;
 end
 
 function widget.settingsPage()
     lvgl.clear();
     local page = lvgl.page({
-        title = widget.name .. " : " .. widget.options.Name,
+        title = widget.name,
         subtitle = "Settings",
         back = askClose,
     });
@@ -128,7 +298,7 @@ function widget.widgetPage()
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = "HW Extension", w = widget.zone.x, align = CENTER},
-            { type = "label", text = widget.options.Name, w = widget.zone.x, align = CENTER },
+            { type = "label", text = (function() return #settings.controller .. "/" .. controllersOnline; end), w = widget.zone.x, align = CENTER },
         }
         }
     });
@@ -145,18 +315,22 @@ function widget.update()
                 settings = st;
             else
                 resetSettings();
+                changed = true;
             end
         else
             resetSettings();
+            changed = true;
         end
         initialized = true;
     end
-    if lvgl.isFullScreen() then
+    if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.displayPage();
     else
         widget.widgetPage();
     end
-    serialize.save(settings, settingsFilename);
+    if (changed) then
+        serialize.save(settings, settingsFilename);        
+    end
 end
 
 local fsm = loadScript(dir .. "proto.lua")(switchCallback, propCallback);

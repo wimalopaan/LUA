@@ -20,7 +20,6 @@ local function background(widget)
 end
 
 local options = {
-    {"Name", STRING, "Pult"}
 }
   
 local function update(widget, options)
