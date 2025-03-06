@@ -15,7 +15,6 @@ local controllersOnline = 0;
 
 local function switchCallback(controller, switch, on)
     print("switchCB:", controller, switch, on);
-
     for i, c in ipairs(settings.controller) do
         if (c.id == controller) then
             local s = c.switches[switch];
@@ -27,30 +26,42 @@ local function switchCallback(controller, switch, on)
 end
 local function propCallback(controller, prop, value)
     print("propCB:", controller, prop, value);
+    for i, c in ipairs(settings.controller) do
+        if (c.id == controller) then
+            local p = c.props[prop];
+            if (p ~= nil) then
+                setVirtualInput(p, (value - 1024));
+            end
+        end
+    end
 end
 
 local function activateVSwitches()
     for ci, c in ipairs(settings.controller) do
-        if (c ~= nil) then
-            for si, s in ipairs(c.switches) do
-                if (s ~= nil) then
-                    activateVirtualSwitch(s, true);        
-                end
-            end
+        for si, s in ipairs(c.switches) do
+            activateVirtualSwitch(s, true);        
         end        
     end
 end
 
 local function activateVInputs()
+    for ci, c in ipairs(settings.controller) do
+        for pi, p in ipairs(c.props) do
+            activateVirtualInput(p, true);        
+        end        
+    end
 end
 
-local settingsVersion = 7;
+local settingsVersion = 9;
 local function resetSettings() 
     print("resetSettings");
     settings.version = settingsVersion;
     settings.controller = { 
-        { id = 0, name = "Intern", switches = {1, 2, 3, 4, 5},  props = {} },
-        { id = 1, name = "Pult",   switches = {17, 0, 19, 20}, props = {} }
+        { id = 0, name = "Intern", switches = {1, 2, 3, 4, 5},  props = {11, 12, 13, 14} },
+        { id = 1, name = "Pult",   switches = {17, 18, 
+                                                19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+                                                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48
+                                            }, props = {1, 2, 3, 4} }
     };
     activateVSwitches();
     activateVInputs();
@@ -79,12 +90,7 @@ end
 updateFilename();
 
 local function askClose()
-    lvgl.confirm({title = "Exit", message = "Really exit?", 
-                  confirm = (function() 
---                    serialize.save(settings, settingsFilename); 
-                    lvgl.exitFullScreen(); 
-                end),
-                 })
+    lvgl.confirm({title = "Exit", message = "Really exit?", confirm = (function() serialize.save(settings, settingsFilename); lvgl.exitFullScreen(); end),})
 end
 
 local function createSwitchDisplay(c)
@@ -100,6 +106,7 @@ local function createSwitchDisplay(c)
             for i, sw in ipairs(c.switches) do
                 if (sw == swn) then
                     filled = true;
+                    break;
                 end
             end                   
             swlines[#swlines+1] = {type = "rectangle", x = xoffset + (col - 1) * rw, y = (row - 1) * rh, w = rw / 2, h = rh / 2, filled = filled,
@@ -126,8 +133,31 @@ local function createSwitchDisplay(c)
 end
 
 local function createPropDisplay(c)
+    local plines = {};
+    local xoffset = 20
+    local rw = (LCD_W - 2 * xoffset) / 16;
+    local rh = rw;
+    for i = 1, 16 do
+        local filled = false;
+        for _, p in ipairs(c.props) do
+            if (p == i) then
+                filled = true;
+                break;
+            end
+        end                   
+        plines[#plines+1] = {type = "rectangle", x = xoffset + (i - 1) * rw, y = 0, w = rw / 2, h = 2 * rh,
+                             color = (function() if (filled) then return COLOR_THEME_SECONDARY1; else return COLOR_THEME_SECONDARY2; end; end)};    
+        if (filled) then
+            
+            plines[#plines+1] = {type = "rectangle", 
+                                 pos  = (function() local vscaled = rh * (getVirtualInput(i) + 1024) / 1024; return xoffset + (i - 1) * rw + 1, vscaled; end), 
+                                 size = (function() local vscaled = rh * (getVirtualInput(i) + 1024) / 1024; return rw / 2 - 2, 2 * rh - vscaled; end), 
+                                 filled = true, color = COLOR_THEME_SECONDARY1};
+        end
+    end
     local pd = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
         {type = "label", text = "Props"},
+        {type = "box", children = plines}
     }};
     return pd;
 end
@@ -235,21 +265,30 @@ local function switchMapping(controller, iswitch, vswitch)
 end
 
 local function addMappingDialog()
-    local dg = lvgl.dialog({title="Add Mapping", flexFlow=lvgl.FLOW_COLUMN, flexPad=lvgl.PAD_LARGE});
-    local uit = {
-        {type = "setting", title = "Controller", children = {
-            {type = "choice", title = "Controller", x = 100, values = {"a", "b"}};
-        }},
-        {type = "setting", title = "In", children = {
-            {type = "numberEdit", x = 100, min = 1, max = 64, set = (function(v) end),  w = 50 },    
-        }},      
+    local dg = lvgl.dialog({title="Add Mapping", flexFlow=lvgl.FLOW_COLUMN, flexPad=lvgl.PAD_LARGE, children = {
+        {type = "choice", title = "Controller", values = {"a", "b"}};
+        {type = "numberEdit", min = 1, max = 64, set = (function(v) end),  w = 50 },    
         {type = "hline", w = 100, h = 1},
         {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad=lvgl.PAD_LARGE, childen = {
             {type = "button", text = "Add", press = (function() end)},
             {type = "button", text = "Cancel", press = (function() end)}
         }}
-    };
-    dg:build(uit);
+        }
+    });
+    -- local uit = {
+    --     {type = "setting", title = "Controller", children = {
+    --         {type = "choice", title = "Controller", x = 100, values = {"a", "b"}};
+    --     }},
+    --     {type = "setting", title = "In", children = {
+    --         {type = "numberEdit", x = 100, min = 1, max = 64, set = (function(v) end),  w = 50 },    
+    --     }},      
+    --     {type = "hline", w = 100, h = 1},
+    --     {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad=lvgl.PAD_LARGE, childen = {
+    --         {type = "button", text = "Add", press = (function() end)},
+    --         {type = "button", text = "Cancel", press = (function() end)}
+    --     }}
+    -- };
+    -- dg:build(uit);
 end
 
 local function switchMappings()

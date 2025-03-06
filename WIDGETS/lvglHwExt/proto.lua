@@ -11,11 +11,14 @@ local payload = {};
 local vstate = {};
 
 local function decode(controller, type, payload)
---    print("HwExt:decode:", controller, type, payload);
+    print("HwExt:decode:", controller, type, #payload);
     if (vstate[controller] == nil) then
         vstate[controller] = {};
+    end
+    if (vstate[controller][type] == nil) then
         vstate[controller][type] = {};
     end
+
     local lastPayload = vstate[controller][type];
     if (type == 0x00) then
         for i = 1, #payload do
@@ -35,7 +38,11 @@ local function decode(controller, type, payload)
             lastPayload[i] = payload[i];
         end
     elseif (type == 0x01) then
-
+        local np = #payload / 2;
+        for p = 1, np do
+            local pv = payload[2 * (p - 1) + 1] + payload[2 * (p - 1) + 2] * 256;
+            propCb(controller, p, pv);
+        end
     end
 end
 
@@ -58,14 +65,14 @@ local function parse(byte)
             state = 0;
         end
     elseif (state == 2) then -- state: got controller
-        if (byte <= 0x01) then
+        if (byte <= 0x03) then
             type = byte;
             state = 3;
         else 
             state = 0;
         end
     elseif (state == 3) then -- state: got type
-        if (byte < 16) then
+        if (byte < 64) then
             length = byte;
             state = 4;
         else
