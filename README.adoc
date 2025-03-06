@@ -19,9 +19,10 @@ toc::[]
 
 EdgeTx LUA Widget for ELRS MultiSwitch
 
-== Hardware-Extension-Widget
+== Hardware-Extension-Widget `lvglHwExt`
 
 EdgeTx LUA Widget for the `hardware-extension`-protocol.
+(The current version need EdgeTx PR 5885)
 
 == Mixer-Script `crsfch.lua`
 
