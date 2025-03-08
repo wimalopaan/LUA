@@ -333,6 +333,10 @@ function widget.controlPage()
 end
 
 local function createSettingsRow(i, edit_width, maxLen)
+    local filter =  lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
+    if (lvgl.SW_VIRTUAL ~= nil) then
+        filter = filter | lvgl.SW_VIRTUAL;
+    end
     return {
         type = "box",
         flexFlow = lvgl.FLOW_ROW,
@@ -346,12 +350,12 @@ local function createSettingsRow(i, edit_width, maxLen)
             { type = "label", text = " Type:" },
             { type = "choice", title = "Type", values = {"Button", "Toggle", "3-Pos", "Momentary", "Slider"}, get = (function() return settings.buttons[i].type; end), set = (function(t) settings.buttons[i].type = t; end) }, 
             { type = "label", text = " Switch:" },
-            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_VIRTUAL | lvgl.SW_CLEAR, 
+            { type = "switch", filter = filter, 
                 active = (function() if ((settings.buttons[i].type == TYPE_SLIDER) or (settings.buttons[i].type == TYPE_MOMENTARY)) then return false; else return true; end; end), 
                 get = (function() return settings.buttons[i].switch; end), set = (function(s) settings.buttons[i].switch = s; end) },
             { type = "label", text = " Switch2:", 
                 visible = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end) },
-            { type = "switch", filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_VIRTUAL | lvgl.SW_CLEAR, 
+            { type = "switch", filter = filter, 
                 visible = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end),
                 get = (function() return settings.buttons[i].switch2; end), set = (function(s) settings.buttons[i].switch2 = s; end) },
             { type = "label", text = " Source:" },
@@ -435,7 +439,8 @@ function widget.update()
         end
         initialized = true;
     end
-    if lvgl.isFullScreen() then
+    if (lvgl.isFullScreen()) then
+        print("fullscreen")
         widget.switchPage(PAGE_CONTROL);
     else
         widget.widgetPage();
