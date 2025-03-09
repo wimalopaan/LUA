@@ -54,7 +54,7 @@ local function decode(controller, type, payload)
             end
             lastPayload[i] = payload[i];
         end
-    elseif (type == 0x02) then
+    elseif (type == 0x01) then
         local np = #payload;
         for p = 1, np do
             prop8Cb(controller, p, payload[p]);
