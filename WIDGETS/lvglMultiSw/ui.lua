@@ -49,6 +49,7 @@ local state = {};
 
 local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
 local fsm   = loadScript(dir .. "fsm.lua")(crsf);
+local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
 local settingsVersion = 7;
 local function resetSettings() 
@@ -133,7 +134,7 @@ local function readPhysical()
 end
 
 function widget.switchPage(id)
---    print("switchUI", id);
+    print("switchPage", id);
     lvgl.clear()
     if (id == PAGE_CONTROL) then
         widget.controlPage()
@@ -283,6 +284,7 @@ function widget.globalsPage()
 end
 
 function widget.controlPage()
+    print("controlPage", widget);
     lvgl.clear();
     local page = lvgl.page({
         title = widget.name .. "@" .. widget.options.Address .. " : " ..settings.name ,
@@ -329,7 +331,10 @@ function widget.controlPage()
                 {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)} }
         }
     }}};
-    widget.ui = page:build(uit);
+    print("controlPage", page);
+    if (page ~= nil) then
+        widget.ui = page:build(uit);        
+    end
 end
 
 local function createSettingsRow(i, edit_width, maxLen)
@@ -439,8 +444,8 @@ function widget.update()
         end
         initialized = true;
     end
-    if (lvgl.isFullScreen()) then
-        print("fullscreen")
+    print("update", lvgl.isFullScreen(), lvgl.isAppMode());
+    if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.switchPage(PAGE_CONTROL);
     else
         widget.widgetPage();
@@ -457,6 +462,7 @@ end
 function widget.background()
     fsm.tick(configItemCallback);
     readPhysical();
+    shm.encode();
 end
 
 local function fullScreenRefresh()
