@@ -12,6 +12,19 @@ local timeout = 10; -- 100ms
 local sbusEncodedValue = -1024;
 local lastInputs = {0, 0, 0, 0};
 
+-- Encoding:
+-- 2 bits: address
+-- 3 bits: output
+-- 1 bit:  state
+-- in total 6 bits (64 values)
+-- the value-range [-1024, 1024]: 11-bits
+-- we need a left-shift of 5 to use full-range
+-- step size: 2048/64
+-- offset (half-step): (step size) / 2
+-- sbus-range: [172,1812], sbus-delta: 1640
+-- scaling: 1024 / 1620 (to reach [172, 1196], delta: 1024)
+-- on receiver side: rshift of 4 
+
 local function encode(address, switch, on)
     local state = 0;
     if (on) then 
@@ -19,7 +32,7 @@ local function encode(address, switch, on)
     end
     local c = bit32.bor(bit32.lshift(address, 4), bit32.lshift((switch - 1), 1), bit32.band(state, 0x01));
     local v5 = bit32.lshift(c, 5);
-    sbusEncodedValue = ((v5 + (2048 / 64) / 2) * 1024) / 1640 - 1024;
+    sbusEncodedValue = ((v5 + (2048 / 64) / 2) * 1024) / 1640 - 1024 + 0.5;
     print("encode", c, v5, sbusEncodedValue, state);
 end
 
@@ -34,7 +47,7 @@ local function checkChanges(values)
                 if (bit32.band(diff, mask) > 0) then
                     print("changed", i, address, switches, b);
                     local onMask = bit32.band(switches, mask);
-                    encode(address, b, onMask > 0); 
+                    encode(address, b, (onMask > 0)); 
                     lastInputs[i] = bit32.bor(bit32.band(lastInputs[i], bit32.bnot(mask)), onMask);
                     return true;
                 end
