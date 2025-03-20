@@ -53,7 +53,7 @@ EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
 This is a limiter script `vsp.lua` for controlling Voith-Schneider propellers. It incorporates an
 additional correction algorithm. This is neccessary due to the geometry of the fixed rectangular servo configuration.
 
-== Incremental EdgeTx / OpenTx) mixer script
+== Incremental EdgeTx / OpenTx mixer script
 
 The `increm.lua` mixer script implements an incremental channel: an output value that is the integral (sum over time) of 
 the choosen input scaled with some (speed) factor. This sometimes called hydraulic-simulation.
