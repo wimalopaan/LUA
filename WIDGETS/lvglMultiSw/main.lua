@@ -19,6 +19,9 @@ local name = "MultiSwE/L"
 local longname = "MultiSwitch-ELRS/L"
 
 local function create(zone, options, dir)
+    if (lvgl == nil) then
+        return {zone = zone, options = options, name = name};
+    end
     if (dir == nil) then
         dir = "/WIDGETS/lvglMultiSw/";
     end

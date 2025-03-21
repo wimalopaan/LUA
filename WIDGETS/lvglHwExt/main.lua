@@ -15,10 +15,15 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- todo: check for virtual controls
+
 local name = "HwExt/L"
 local longname = "HwExtension/L"
 
 local function create(zone, options, dir)
+    if (lvgl == nil) then
+        return {zone = zone, options = options, name = name};
+    end
     if (dir == nil) then
         dir = "/WIDGETS/lvglHwExt/";
     end
