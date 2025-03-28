@@ -16,11 +16,13 @@
 --
 
 -- todo
--- restore button state when switch page/update
--- fsm.config() instead of diffent functions
--- autoconf fsm
--- control page: column width
--- global page: nicer (rectangle for line heigth and column width, columns)
+--- restore button state when switch page/update
+--- fsm.config() instead of diffent functions
+--- autoconf fsm
+--- control page: column width
+--- global page: nicer (rectangle for line heigth and column width, columns)
+-- done
+--- restore button state when switch page/update
 
 local zone, options, name, dir = ...
 local widget = {}
@@ -170,7 +172,8 @@ local function createButton(i, width)
                  w = width, h = settings.line_height, 
                  color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
                  press = (function() state.buttons[i].value = invert(state.buttons[i].value); fsm.update(); return state.buttons[i].value; end),
-                 active = (function() if (settings.buttons[i].switch > 0) then return false; else return true; end; end)
+                 active = (function() if (settings.buttons[i].switch > 0) then return false; else return true; end; end),
+                 checked = (state.buttons[i].value ~= 0)
             };
     elseif (settings.buttons[i].type == TYPE_MOMENTARY) then
         return { type = "momentaryButton", text = settings.buttons[i].name, 
