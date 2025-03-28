@@ -16,7 +16,6 @@
 --
 
 -- todo
---- restore button state when switch page/update
 --- fsm.config() instead of diffent functions
 --- autoconf fsm
 --- control page: column width
