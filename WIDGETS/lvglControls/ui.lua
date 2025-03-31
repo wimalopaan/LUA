@@ -23,9 +23,7 @@ widget.name = name;
 
 local TYPE_BUTTON    = 1;
 local TYPE_TOGGLE    = 2;
-local TYPE_3POS      = 3;
-local TYPE_MOMENTARY = 4;
-local TYPE_SLIDER    = 5;
+local TYPE_MOMENTARY = 3;
 
 local serialize = loadScript(dir .. "tableser.lua")();
 
@@ -50,7 +48,7 @@ end
 local settings = {};
 local state = {};
 local settingsFilename = dir .. model.getInfo().name .. "_" .. widget.options.Name .. ".lua";
-local settingsVersion = 14;
+local settingsVersion = 16;
 
 local function getVSwitch(i)
     if (hasVirtualInputs) then
@@ -105,6 +103,15 @@ local function buttonToggle(i)
     return 0; 
 end
 
+local function buttonSet(i, v)
+    state.buttons[i] = v; 
+    setVSwitch(settings.buttons[i].vs, state.buttons[i]); 
+    if (state.buttons[i]) then 
+        return 1; 
+    end; 
+    return 0; 
+end
+
 local function saveSettings() 
     serialize.save(settings, settingsFilename);
 end
@@ -137,6 +144,7 @@ local function resetSettings()
     for i = 1, settings.numberOfButtons do
         resetButton(i);
     end
+    settings.momentaryButton_radius = 20;
 end
 resetSettings();
 
@@ -169,11 +177,28 @@ local function createSliders()
 end
 
 local function createButton(i)
-    return {type = "button", text = settings.buttons[i].name, w = settings.buttons[i].width,
+    if (settings.buttons[i].type == TYPE_BUTTON) then
+        return {type = "button", text = settings.buttons[i].name, w = settings.buttons[i].width,
             color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
             checked = state.buttons[i],
             press = (function() return buttonToggle(i); end),
-};
+        };
+    elseif (settings.buttons[i].type == TYPE_MOMENTARY) then
+        return { type = "momentaryButton", text = settings.buttons[i].name, 
+        w = settings.buttons[i].width, 
+        cornerRadius = settings.momentaryButton_radius,
+        color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
+        press = (function() buttonSet(i, true); end),
+        release = (function() buttonSet(i, false); end)
+    }
+    elseif (settings.buttons[i].type == TYPE_TOGGLE) then
+        return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+               {type = "label", text = settings.buttons[i].name, w = settings.buttons[i].width / 2},
+               {type = "toggle", get = (function() if (state.buttons[i]) then return 1; else return 0; end; end), 
+                                 set = (function(v) if (v > 0) then buttonSet(i, true); else buttonSet(i, false); end; end), 
+                               w = settings.buttons[i].width / 2, color = settings.buttons[i].color }
+        }};
+    end
 end
 
 local function createButtons(row)
@@ -273,6 +298,8 @@ local function createButtonSetting(i)
     return { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             {type = "label", text = "Name: "},
             {type = "textEdit", value = settings.buttons[i].name, set = (function(v) settings.buttons[i].name = v; end), w = 100},
+            {type = "label", text = " Type:" },
+            {type = "choice", title = "Type", values = {"Button", "Toggle", "Momentary"}, get = (function() return settings.buttons[i].type; end), set = (function(t) settings.buttons[i].type = t; end) }, 
             {type = "label", text = "Width: "},
             {type = "numberEdit", min = wmin , max = wmax, w = 60, get = (function() return settings.buttons[i].width; end), set = (function(v) settings.buttons[i].width = v; end) }, 
             { type = "label", text = " Color:" },
@@ -332,7 +359,7 @@ function widget.globalsPage()
         back = (function() askClose(); end),
     });
     local uit = {
-        {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+        {type = "box", flexFlow = lvgl.FLOW_COLUMN, w = widget.zone.w, children = {
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                 {type = "label", text = "Number of Sliders: "},
                 {type = "numberEdit", min = 1, max = 8, w = 40, 
@@ -369,6 +396,10 @@ function widget.globalsPage()
                         active = (function() return hasVirtualInputs; end)} 
                 }
             },
+            {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+                {type = "label", text = "Radius momentary Button: "},
+                {type = "numberEdit", min = 10, max = 30, w = 40, get = (function() return settings.momentaryButton_radius; end), set = (function(v) settings.momentaryButton_radius = v; end) } 
+            }},
             {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
             {type = "hline", w = 100, h = 1},
             {type = "box", flexFlow = lvgl.FLOW_ROW, children = {

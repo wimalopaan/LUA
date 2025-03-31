@@ -483,9 +483,6 @@ local function fullScreenRefresh()
 end
 
 function widget.refresh(event, touchState)
-    if lvgl == nil then
-        lcd.drawText(widget.zone.x, widget.zone.y, "Lvgl support required", COLOR_THEME_WARNING)
-    end
     if (lvgl.isFullScreen()) then
         fullScreenRefresh();
     end

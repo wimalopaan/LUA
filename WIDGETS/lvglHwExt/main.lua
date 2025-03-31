@@ -20,14 +20,32 @@
 local name = "HwExt/L"
 local longname = "HwExtension/L"
 
+local hasVirtualInputs = (getVirtualSwitch ~= nil);
+
 local function create(zone, options, dir)
     if (lvgl == nil) then
-        return {zone = zone, options = options, name = name};
+        return {zone = zone, options = options, name = name, 
+                update = (function() end), background = (function() end), 
+                refresh = (function() 
+                    lcd.drawText(zone.x, zone.y, "Lvgl support required", COLOR_THEME_WARNING)
+                end)};
     end
     if (dir == nil) then
         dir = "/WIDGETS/lvglHwExt/";
     end
-    return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
+    if (hasVirtualInputs) then
+        return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
+    else 
+        return {zone = zone, options = options, name = name, 
+                update = (function() 
+                    lvgl.clear();
+                    lvgl.build({{type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+                                                {type = "label", text = "VControls support needed", w = zone.x, align = CENTER},
+                                            }}});
+                    end), 
+                background = (function() end), 
+                refresh = (function() end)};
+    end    
 end
 
 local function refresh(widget, event, touchState)
@@ -35,20 +53,13 @@ local function refresh(widget, event, touchState)
 end
 
 local function background(widget)
-    if (lvgl == nil) then 
-        return;
-    end
     widget.background();
 end
 
-local options = {
-}
+local options = {}
   
 local function update(widget, options)
     widget.options = options;
-    if (lvgl == nil) then 
-        return;
-    end
     widget.update();
 end
 
