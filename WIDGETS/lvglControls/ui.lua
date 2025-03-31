@@ -193,10 +193,11 @@ local function createButton(i)
     }
     elseif (settings.buttons[i].type == TYPE_TOGGLE) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-               {type = "label", text = settings.buttons[i].name, w = settings.buttons[i].width / 2},
+               {type = "label", text = settings.buttons[i].name, w = settings.buttons[i].width / 2,
+                                color = settings.buttons[i].textColor, font = settings.buttons[i].font},
                {type = "toggle", get = (function() if (state.buttons[i]) then return 1; else return 0; end; end), 
                                  set = (function(v) if (v > 0) then buttonSet(i, true); else buttonSet(i, false); end; end), 
-                               w = settings.buttons[i].width / 2, color = settings.buttons[i].color }
+                                 w = settings.buttons[i].width / 2, color = settings.buttons[i].color }
         }};
     end
 end
