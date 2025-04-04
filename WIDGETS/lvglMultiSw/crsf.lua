@@ -66,7 +66,7 @@ local function computeState2()
     local s = 0;
     for i = 1, 8 do
         s = s * 2;
-        if (state.buttons[i].value > 0) then
+        if (state.buttons[8 - i + 1].value > 0) then
             s = s + 1;
         end
     end
@@ -76,9 +76,9 @@ local function computeState4()
     local s = 0;
     for i = 1, 8 do
         s = s * 4;
-        if (state.buttons[i].value == 1) then
+        if (state.buttons[8 - i + 1].value == 1) then
             s = s + 1;
-        elseif (state.buttons[i].value == 2) then
+        elseif (state.buttons[8 - i + 1].value == 2) then
             s = s + 2;
         end
     end
