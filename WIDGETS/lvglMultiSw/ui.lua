@@ -16,11 +16,15 @@
 --
 
 -- todo
---- fsm.config() instead of diffent functions
+--- display version number (storage version)
+--- split UI in different files (control, settings, global)
+--- fsm.config() instead of different functions
 --- autoconf fsm
 --- control page: column width
 --- global page: nicer (rectangle for line heigth and column width, columns)
+
 -- done
+--- cleanup settings page 
 --- restore button state when switch page/update
 
 local zone, options, name, dir = ...
