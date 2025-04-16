@@ -16,6 +16,7 @@
 --
 
 -- todo
+--- images on buttons
 --- display version number (storage version)
 --- split UI in different files (control, settings, global)
 --- fsm.config() instead of different functions
