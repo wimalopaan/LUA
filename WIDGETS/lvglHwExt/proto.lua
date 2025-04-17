@@ -23,18 +23,30 @@ local length = -1;
 local payloadsum = 0;
 local msgcontroller = 0;
 local bytesTotal = 0;
+local packagesController = {};
 local payload = {};
-
 local vstate = {};
+
+local function getPackages() 
+    local old = packagesController;
+    packagesController = {};
+    for i, c in pairs(old) do
+        packagesController[i] = 0;
+    end
+    return old;
+end
 
 local function decode(controller, type, payload)
     print("HwExt:decode:", controller, type, #payload);
     if (vstate[controller] == nil) then
+        packagesController[controller] = 0;
         vstate[controller] = {};
     end
     if (vstate[controller][type] == nil) then
         vstate[controller][type] = {};
     end
+
+    packagesController[controller] = packagesController[controller] + 1;
 
     local lastPayload = vstate[controller][type];
     if (type == 0x00) then
@@ -127,4 +139,4 @@ local function process()
     end
 end
 
-return {process = process};
+return {process = process, getPackages = getPackages};

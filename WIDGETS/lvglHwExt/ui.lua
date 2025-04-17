@@ -26,7 +26,11 @@ local serialize = loadScript(dir .. "tableser.lua")();
 widget.ui = nil;
 
 local settings = {}
-local controllersOnline = 0;
+local controllersState = {
+    online = 0,
+    timeout = 50,
+    counter = 0
+};
 
 local function switchCallback(controller, switch, on)
     print("switchCB:", controller, switch, on);
@@ -438,7 +442,7 @@ function widget.widgetPage()
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
-            { type = "label", text = (function() return #settings.controller .. "/" .. controllersOnline; end), w = widget.zone.x, align = CENTER },
+            { type = "label", text = (function() return #settings.controller .. "/" .. controllersState.online; end), w = widget.zone.x, align = CENTER },
         }
         }
     });
@@ -477,6 +481,16 @@ local fsm = loadScript(dir .. "proto.lua")(switchCallback, propCallback, prop8Ca
 
 function widget.background()
     fsm.process();
+    controllersState.counter = controllersState.counter + 1;
+    if (controllersState.counter > controllersState.timeout) then
+        controllersState.counter = 0;
+        controllersState.online = 0;
+        for i, p in pairs(fsm.getPackages()) do
+            if (p > 10) then
+                controllersState.online = controllersState.online + 1;
+            end
+        end
+    end
 end
 
 local function fullScreenRefresh()
