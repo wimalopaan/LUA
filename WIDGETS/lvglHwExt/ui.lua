@@ -29,7 +29,8 @@ local settings = {}
 local controllersState = {
     online = 0,
     timeout = 50,
-    counter = 0
+    counter = 0,
+    goodPackages = 10
 };
 
 local function switchCallback(controller, switch, on)
@@ -486,7 +487,7 @@ function widget.background()
         controllersState.counter = 0;
         controllersState.online = 0;
         for i, p in pairs(fsm.getPackages()) do
-            if (p > 10) then
+            if (p > controllersState.goodPackages) then
                 controllersState.online = controllersState.online + 1;
             end
         end
