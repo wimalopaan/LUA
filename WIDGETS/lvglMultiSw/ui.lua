@@ -57,7 +57,7 @@ local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
 local fsm   = loadScript(dir .. "fsm.lua")(crsf);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
-local settingsVersion = 9;
+local settingsVersion = 10;
 local function resetSettings() 
 --    print("reset settings")
     settings.version = settingsVersion;
@@ -69,7 +69,7 @@ local function resetSettings()
     state.buttons = {};
     for i = 1, 8 do
         settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
-                                activation_switch = 0, external_switch = 0,
+                                activation_switch = 0, external_switch = 0, image = "",
                                 color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
         state.buttons[i] = { value = 0 };
     end
@@ -189,6 +189,12 @@ local function isSwitchActive(i)
 end
 
 local function createButton(i, width)
+    local ichild = {};
+    if (settings.buttons[i].image ~= "") then
+        ichild = {{ type = "image", file = "/IMAGES/" .. settings.buttons[i].image, x = 0, y = -5, 
+                                                                                    w = settings.line_height, 
+                                                                                    h = settings.line_height}};        
+    end
     if (settings.buttons[i].type == TYPE_BUTTON) then
         return { type = "button", name = "b" .. i, text = (function() 
                     local sw = settings.buttons[i].switch * settings.show_physical;
@@ -202,7 +208,8 @@ local function createButton(i, width)
                  color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
                  press = (function() state.buttons[i].value = invert(state.buttons[i].value); updateButton(i); return state.buttons[i].value; end),
                  active = (function() return isSwitchActive(i); end),
-                 checked = (state.buttons[i].value ~= 0)
+                 checked = (state.buttons[i].value ~= 0),
+                 children = ichild
             };
     elseif (settings.buttons[i].type == TYPE_MOMENTARY) then
         return { type = "momentaryButton", text = settings.buttons[i].name, 
@@ -422,6 +429,12 @@ local function createSettingsDetails(i, edit_width)
                         { type = "label", text = " Font:" },
                         { type = "font", get = (function() return settings.buttons[i].font; end),
                                         set = (function(v) settings.buttons[i].font = v; end), w = 2 * edit_width / 3 },                                     
+                    }},
+                    { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+                        { type = "label", text = " Image:" },
+                        { type = "file", title = "Image", folder = "/IMAGES",
+                                get = (function() return settings.buttons[i].image; end),
+                                set = (function(v) settings.buttons[i].image = v; end) },
                     }},
                     }
                 }};
