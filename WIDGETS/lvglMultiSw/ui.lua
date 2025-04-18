@@ -16,7 +16,6 @@
 --
 
 -- todo
---- images on buttons
 --- display version number (storage version)
 --- split UI in different files (control, settings, global)
 --- fsm.config() instead of different functions
@@ -25,6 +24,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- images on buttons
 --- cleanup settings page 
 --- restore button state when switch page/update
 
