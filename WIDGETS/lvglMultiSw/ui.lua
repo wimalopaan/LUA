@@ -16,11 +16,13 @@
 --
 
 -- todo
+--- images on non-buttons
+--- text placing if images are used
 --- display version number (storage version)
+--- control page: column width
 --- split UI in different files (control, settings, global)
 --- fsm.config() instead of different functions
 --- autoconf fsm
---- control page: column width
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
@@ -57,10 +59,11 @@ local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
 local fsm   = loadScript(dir .. "fsm.lua")(crsf);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
-local settingsVersion = 10;
+local settingsVersion = 11;
 local function resetSettings() 
 --    print("reset settings")
     settings.version = settingsVersion;
+    settings.imagesdir = "/IMAGES/";
     settings.name = "Beleuchtung";
     settings.line_height = 45;
     settings.momentaryButton_radius = 20;
@@ -191,7 +194,7 @@ end
 local function createButton(i, width)
     local ichild = {};
     if (settings.buttons[i].image ~= "") then
-        ichild = {{ type = "image", file = "/IMAGES/" .. settings.buttons[i].image, x = 0, y = -5, 
+        ichild = {{ type = "image", file = settings.imagesdir .. settings.buttons[i].image, x = 0, y = -5, 
                                                                                     w = settings.line_height, 
                                                                                     h = settings.line_height}};        
     end
@@ -217,7 +220,8 @@ local function createButton(i, width)
         color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
         press = (function() state.buttons[i].value = 1; updateButton(i); end),
         release = (function() state.buttons[i].value = 0; updateButton(i); end),
-        active = (function() return isSwitchActive(i); end)
+        active = (function() return isSwitchActive(i); end),
+        children = ichild
     };
     elseif (settings.buttons[i].type == TYPE_3POS) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
@@ -248,7 +252,8 @@ local function createButton(i, width)
                     return settings.buttons[i].name;
                 end
              end)(), 
-              w = width / 2, x = 0, font = settings.buttons[i].font },
+              w = width / 2, x = 0, font = settings.buttons[i].font, 
+            },
             { type = "toggle", get = (function() if (state.buttons[i].value ~= 0) then return 1; else return 0; end; end), 
                                set = (function(v) state.buttons[i].value = v; updateButton(i); end), w = width / 2 ,
                                active = (function() return isSwitchActive(i); end),
@@ -434,7 +439,9 @@ local function createSettingsDetails(i, edit_width)
                         { type = "label", text = " Image:" },
                         { type = "file", title = "Image", folder = "/IMAGES",
                                 get = (function() return settings.buttons[i].image; end),
-                                set = (function(v) settings.buttons[i].image = v; end) },
+                                set = (function(v) settings.buttons[i].image = v; end), 
+                                active = (function() return (settings.buttons[i].type == TYPE_BUTTON) or (settings.buttons[i].type == TYPE_MOMENTARY) end)
+                        },
                     }},
                     }
                 }};
