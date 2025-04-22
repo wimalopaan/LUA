@@ -1,4 +1,11 @@
-local VERSION = "V1.3"
+local VERSION = "V1.4"
+
+local appid = 6000;
+local appid_high = bit32.rshift(appid, 8);
+local appid_low  = bit32.band(appid, 0xff);
+
+local appCombTelem = 0x00;
+local appDevInfo   = 0x01;
 
 local onSimu = false;
 local _, rv = getVersion()
@@ -39,7 +46,10 @@ CRSF_SUBCMD_CC_ADATA        = 0x01;
 CRSF_SUBCMD_CC_ACHUNK       = 0x02;
 CRSF_SUBCMD_CC_ACHANNEL     = 0x03;
 CRSF_SUBCMD_SWITCH_SET      = 0x01;
-CRSF_SUBCMD_PROP_SET        = 0x02;
+CRSF_SUBCMD_SWITCH_PROP_SET = 0x02;
+CRSF_SUBCMD_SWITCH_REQ_T    = 0x03;
+CRSF_SUBCMD_SWITCH_REG_TI   = 0x04;
+CRSF_SUBCMD_SWITCH_REG_CI   = 0x05;
 CRSF_SUBCMD_SCHOTTEL_RESET  = 0x01;
 
 local adr = CRSF_ADDRESS_CONTROLLER; -- default value
@@ -64,15 +74,38 @@ function()
     gui.showPrompt(confirmPrompt);
 end);
 
-local function create(zone, options)
+local function create(zone, options, id)
     return {
         zone = zone,
-        options = options
+        options = options,
+        widget_id = id
     };
 end
 
+local function installFilter(widget_id)
+    if (crossfireTelemetryRemovePrivateQueue ~= nil) then
+      if (widget_id ~= nil) then
+        print("remove filter id:", widget_id);
+        crossfireTelemetryRemovePrivateQueue(widget_id);
+      end
+    end 
+    if (crossfireTelemetryCreatePrivateQueue ~= nil) then
+      if (widget_id ~= nil) then
+        print("filter: appid h: ", appid_high, "low:", appid_low, "id:", widget_id);
+        local f = {0, 0x80, 0, 0, appid_high, appid_low};
+        privateQueue = crossfireTelemetryCreatePrivateQueue(widget_id, f);
+        if (privateQueue == -1) then
+          print("filter exists", widget_id);
+        elseif (privateQueue == -2) then
+          print("no more filters", widget_id);
+        end
+      end      
+    end 
+  end
+  
 local function update(widget, options)
     widget.options = options;
+    installFilter(widget.widget_id); 
 end
 
 local function drawGauge(widget, side, steer, throttle, actual, offset, alarm)
@@ -260,52 +293,59 @@ function refresh(widget, event, touchState)
     refreshCounter = refreshCounter + 1;
     lcd.clear();
 
-    local command, data = crossfireTelemetryPop();
+    local command = 0;
+    local data = nil;
+    if (crossfireTelemetryPopPrivate ~= nil) then
+      command, data = crossfireTelemetryPopPrivate(widget.widget_id);
+    else
+      command, data = crossfireTelemetryPop();
+    end
     local app_id = 0;
     if (command == 0x80 or command == 0x7F) and data ~= nil then
         if #data >= 20 then 
             local dest = data[1]; 
             adr = data[2];
             app_id = bit32.lshift(data[3], 8) + data[4];
-            if (app_id == 6000) then
+            local ftype = data[5]; -- type: 0x01, 0x02
+            if (app_id == appid) then
                 frameCounter = frameCounter + 1;
-                steer1  = bit32.lshift(data[5], 8) + data[6];
-                power1  = bit32.lshift(data[7], 8) + data[8];
-                actual1 = bit32.lshift(data[9], 8) + data[10];
-                curr1   = bit32.lshift(data[11], 8) + data[12] * 0.01;                    
-                rpm1    = bit32.lshift(data[13], 8) + data[14];
-                steer2  = bit32.lshift(data[15], 8) + data[16];                    
-                power2  = bit32.lshift(data[17], 8) + data[18];
-                actual2 = bit32.lshift(data[19], 8) + data[20];                    
-                curr2   = bit32.lshift(data[21], 8) + data[22] * 0.01;
-                rpm2    = bit32.lshift(data[23], 8) + data[24];                    
-                turns1  = data[25]; 
-                turns2  = data[26];
-                flags   = data[27];
-            end
-            if (app_id == 6001) then
-                hasInfoFrame = true;
-                frameCounter = frameCounter + 1;
-                s1.srv.fw.maj = data[5];
-                s1.srv.fw.min = data[6];
-                s1.srv.hw.maj = data[7];
-                s1.srv.hw.min = data[8];
-                s2.srv.fw.maj = data[9];
-                s2.srv.fw.min = data[10];
-                s2.srv.hw.maj = data[11];
-                s2.srv.hw.min = data[12];
-
-                s1.esc.fw.maj = data[13];
-                s1.esc.fw.min = data[14];
-                s1.esc.hw.maj = data[16];
-                s1.esc.hw.min = data[16];
-                s2.esc.fw.maj = data[17];
-                s2.esc.fw.min = data[18];
-                s2.esc.hw.maj = data[19];
-                s2.esc.hw.min = data[20];
-
-                sw_remote = data[21];
-                hw_remote = data[22];
+                if (ftype == appCombTelem) then
+                    steer1  = bit32.lshift(data[6], 8) + data[7];
+                    power1  = bit32.lshift(data[8], 8) + data[9];
+                    actual1 = bit32.lshift(data[10], 8) + data[11];
+                    curr1   = bit32.lshift(data[12], 8) + data[13] * 0.01;                    
+                    rpm1    = bit32.lshift(data[14], 8) + data[15];
+                    steer2  = bit32.lshift(data[16], 8) + data[17];                    
+                    power2  = bit32.lshift(data[18], 8) + data[19];
+                    actual2 = bit32.lshift(data[20], 8) + data[21];                    
+                    curr2   = bit32.lshift(data[22], 8) + data[23] * 0.01;
+                    rpm2    = bit32.lshift(data[24], 8) + data[25];                    
+                    turns1  = data[26]; 
+                    turns2  = data[27];
+                    flags   = data[28];                        
+                elseif (ftype == appDevInfo) then
+                    hasInfoFrame = true;
+                    s1.srv.fw.maj = data[6];
+                    s1.srv.fw.min = data[7];
+                    s1.srv.hw.maj = data[8];
+                    s1.srv.hw.min = data[9];
+                    s2.srv.fw.maj = data[10];
+                    s2.srv.fw.min = data[11];
+                    s2.srv.hw.maj = data[12];
+                    s2.srv.hw.min = data[13];
+    
+                    s1.esc.fw.maj = data[14];
+                    s1.esc.fw.min = data[15];
+                    s1.esc.hw.maj = data[16];
+                    s1.esc.hw.min = data[17];
+                    s2.esc.fw.maj = data[18];
+                    s2.esc.fw.min = data[19];
+                    s2.esc.hw.maj = data[20];
+                    s2.esc.hw.min = data[21];
+    
+                    sw_remote = data[22];
+                    hw_remote = data[23];
+                end
             end
         end
     end
