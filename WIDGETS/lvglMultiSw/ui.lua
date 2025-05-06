@@ -113,7 +113,7 @@ local function resetButtons()
     for i = 1, (settings.rows * settings.columns) do
         settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
                                 activation_switch = 0, external_switch = 0, image = "",
-                                output = i % 8, address = widget.options.Address,
+                                output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
                                 color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
     end
     updateAddressButtonLookup();
