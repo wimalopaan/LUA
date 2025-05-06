@@ -38,7 +38,10 @@ local CRSF_SUBCMD_SWITCH_REQ_T    = 0x03;
 local CRSF_SUBCMD_SWITCH_REQ_TI   = 0x04;
 local CRSF_SUBCMD_SWITCH_REQ_CI   = 0x05; -- request config item
 local CRSF_SUBCMD_SWITCH_REQ_DI   = 0x06; -- request device info
-local CRSF_SUBCMD_SWITCH_SET4     = 0x07; -- 4-state switches
+local CRSF_SUBCMD_SWITCH_SET4     = 0x07; -- 4-state switches (8 switches) 2bytes payload
+local CRSF_SUBCMD_SWITCH_SET64    = 0x08; -- 64 x 4-state switches (8 groups of 8 switches) 3bytes payload
+local CRSF_SUBCMD_SWITCH_SET4M    = 0x09; -- 4-state switches (8 switches) 2bytes payload, multiple addresses
+local CRSF_SUBCMD_SWITCH_INTERMOD = 0x10; -- intermodule command
 local CRSF_SUBCMD_SCHOTTEL_RESET  = 0x01;
 
 local ARDUPILOT_SCHOTTEL_APPID    = 6000;
@@ -62,6 +65,16 @@ if string.sub(rv, -5) == "-simu" then
     crossfireTelemetryPopPrivate = t.crossfireTelemetryPopPrivate;
   end
 end
+local function switchProtocol(proto)
+  print("switchProtocol", proto);
+  if (proto == 1) then
+    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
+  elseif (proto == 2) then
+    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4M;
+  else
+    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
+  end 
+end
 local function computeState2()
     local s = 0;
     for i = 1, 8 do
@@ -84,30 +97,67 @@ local function computeState4()
     end
     return s;
 end
+local function computeState4M(buttons)
+  local s = 0;
+  for _, btn in ipairs(buttons) do
+    print("button: ", btn, #state.buttons);
+    local outnr = state.buttons[btn].output - 1;
+    if (state.buttons[btn].value == 1) then
+      s = s + bit32.lshift(1, 2 * outnr);
+    elseif (state.buttons[btn].value == 2) then
+      s = s + bit32.lshift(1, 2 * outnr + 1);
+    end
+  end
+  return s;
+end
+local function sendSet()
+  local state2 = computeState2();
+  local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
+                       widget.options.Address, state2 };
+  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+end
+local function sendSet4()
+  local state4 = computeState4();
+  local state_high = bit32.rshift(state4, 8);
+  local state_low = bit32.band(state4, 0xff);
+  local payloadOut = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
+                      widget.options.Address, state_high, state_low };
+  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+end
+local function sendSet4M()
+  -- [N, A1, {H1, L1}, A2, {H2, L2}]
+  local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
+  for adr, buttons in pairs(state.addresses) do
+    print("adr:", adr, #buttons);
+    payload[5] = payload[5] + 1;
+    payload[#payload+1] = adr;
+    local state4m = computeState4M(buttons);
+    local state_high = bit32.rshift(state4m, 8);
+    local state_low = bit32.band(state4m, 0xff);
+    payload[#payload+1] = state_high;
+    payload[#payload+1] = state_low;
+  end
+  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
+end
 local function send()
+  print("crsf send:");
     local ret = false;
     if (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET) then
-        local state2 = computeState2(state);
-        local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
-                             widget.options.Address, state2 };
-        ret = crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+        ret = sendSet();
     elseif (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET4) then
-        local state4 = computeState4(state);
-        local state_high = bit32.rshift(state4, 8);
-        local state_low = bit32.band(state4, 0xff);
-        local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
-        widget.options.Address, state_high, state_low };
-        ret = crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
+        ret = sendSet4();
+    elseif (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET4M) then
+        ret = sendSet4M();
     end
     if (ret == nil) then ret = true; end;
-    print("senddata adr:", widget.options.Address, ret);
+--    print("senddata adr:", widget.options.Address, ret);
     return ret;
 end
 local function sendProp(channel, value)
-      --print("sendprop adr:", widget.options.Address, channel, value);
-      local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
-                           widget.options.Address, channel, value };
-      crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
+    --print("sendprop adr:", widget.options.Address, channel, value);
+    local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
+                          widget.options.Address, channel, value };
+    crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end    
 
 local function requestConfigItem(nr)
@@ -167,6 +217,7 @@ end
   
 return {send = send, 
         sendProp = sendProp, 
+        switchProtocol = switchProtocol,
         requestConfigItem = requestConfigItem, 
         readItem = readItem, 
         requestDeviceInfo = requestDeviceInfo };

@@ -13,7 +13,8 @@
 --
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
---
+
+-- for todo-list: see ui.lua
 
 local name = "MultiSwE/L"
 local longname = "MultiSwitch-ELRS/L"
@@ -43,9 +44,9 @@ local options = {
     { "Address",  VALUE, 0, 0, 255 },
     { "Intervall",  VALUE, 100, 10, 100 },
     { "Autoconf", BOOL,  0 },
+--    { "Protocol", CHOICE, 2, { "Set", "Set4", "Set4M", "Set64", "Set64/4"}},
     { "ShmEncoding", BOOL,  0 },
     { "ShmVar",  VALUE, 1, 1, 16 },
---    { "File", FILE, model.getInfo().name .. ".lua", "/WIDGETS/" .. dir};
 }
   
 local function update(widget, options)

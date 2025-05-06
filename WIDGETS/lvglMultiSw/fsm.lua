@@ -56,7 +56,7 @@ end
 
 local function tick(configCallback) 
   local oldstate = state;
-  onTimeout(crsf.send);
+  onTimeout(update);
   if (useAutoconf == 0) then
     return;
   end
