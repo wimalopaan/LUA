@@ -16,24 +16,22 @@
 --
 
 -- todo
---- flexible layout: column / row count
---- per-button: address/output 
---- indicator, if button has different address as widget 
---- new SET4M protocol
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- split into parts usable for simpler telemetry script on b&w radios
 --- Set64 protocol
---- option for choosing protocol
 --- images on non-buttons
 --- text placing if images are used
---- display version number (storage version)
---- control page: column width
 --- split UI in different files (control, settings, global)
 --- fsm.config() instead of different functions
 --- autoconf fsm
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- display version number (storage version)
+--- flexible layout: column / row count
+--- per-button: address/output 
+--- indicator, if button has different address as widget 
+--- new SET4M protocol
 --- images on buttons
 --- cleanup settings page 
 --- restore button state when switch page/update
