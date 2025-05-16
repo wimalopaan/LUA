@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local crsf = ... 
+local crsf, sport = ... 
 
 local state = 0;    
 local actual_item = 0;
@@ -45,6 +45,9 @@ end
 local function update()
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
+    end
+    if (sport.send() == true) then
+      lastTimeSend = getTime();
     end
 end
 local function onTimeout(f)

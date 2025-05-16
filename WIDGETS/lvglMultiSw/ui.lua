@@ -62,11 +62,12 @@ local settings = {}
 local state = {};
 
 local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
-local fsm   = loadScript(dir .. "fsm.lua")(crsf);
+local sport = loadScript(dir .. "sport.lua")(state, widget, dir);
+local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
-local version = 3;
-local settingsVersion = 16;
+local version = 4;
+local settingsVersion = 17;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
 

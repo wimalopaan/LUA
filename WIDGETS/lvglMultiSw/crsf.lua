@@ -75,6 +75,7 @@ local function switchProtocol(proto)
     setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
   end 
 end
+-- fix: use output-value instead of i
 local function computeState2()
     local s = 0;
     for i = 1, 8 do
@@ -85,6 +86,7 @@ local function computeState2()
     end
     return s;
 end
+-- fix: use output-value instead of i
 local function computeState4()
     local s = 0;
     for i = 1, 8 do
