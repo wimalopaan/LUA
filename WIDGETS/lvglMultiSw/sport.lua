@@ -24,7 +24,11 @@
 
 local state, widget, dir = ... 
 
--- todo: move to util.lua
+-- todo: 
+-- allow up to 8 different addresses
+--- send upto 8 packages in sequence?
+
+-- move to util.lua
 local function computeState4()
     local s = 0;
     for i = 1, 8 do

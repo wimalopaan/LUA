@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local crsf, sport = ... 
+local crsf, sport, widget = ... 
 
 local state = 0;    
 local actual_item = 0;
@@ -43,12 +43,16 @@ local function sendEvent(e)
     event = e;
 end
 local function update()
+  if (widget.options.CRSF == 1) then
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
-    end
+    end    
+  end  
+  if (widget.options.SPort == 1) then
     if (sport.send() == true) then
       lastTimeSend = getTime();
-    end
+    end    
+  end
 end
 local function onTimeout(f)
     local t = getTime();

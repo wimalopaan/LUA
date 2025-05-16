@@ -16,6 +16,7 @@
 --
 
 -- todo
+--- S.Port queue for multiple addresses
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- split into parts usable for simpler telemetry script on b&w radios
 --- Set64 protocol
@@ -27,6 +28,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- Enabling Options: SHM, S.Port, CRSF
+--- S.Port 
 --- display version number (storage version)
 --- flexible layout: column / row count
 --- per-button: address/output 
@@ -63,7 +66,7 @@ local state = {};
 
 local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
 local sport = loadScript(dir .. "sport.lua")(state, widget, dir);
-local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport);
+local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport, widget);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
 local version = 4;
