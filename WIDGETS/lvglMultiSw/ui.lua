@@ -15,8 +15,13 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- bugs
+--- state update for sbus encoding
+
 -- todo
---- S.Port queue for multiple addresses
+--- don't duplicate settings into state
+--- timeout for SPort sending (WM)?
+--- S.Port queue for multiple addresses / do WM like ACW
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- split into parts usable for simpler telemetry script on b&w radios
 --- Set64 protocol
@@ -28,6 +33,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- A.Cwalina S.port proto 
+--- switching address causes nil access
 --- Enabling Options: SHM, S.Port, CRSF
 --- S.Port 
 --- display version number (storage version)
@@ -61,7 +68,8 @@ local TYPE_3POS      = 3;
 local TYPE_MOMENTARY = 4;
 local TYPE_SLIDER    = 5;
 
-local settings = {}
+widget.settings = {};
+local settings = {};
 local state = {};
 
 local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
@@ -69,8 +77,8 @@ local sport = loadScript(dir .. "sport.lua")(state, widget, dir);
 local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport, widget);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
-local version = 4;
-local settingsVersion = 17;
+local version = 5;
+local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
 
@@ -97,6 +105,12 @@ local function updateAddressButtonLookup()
             state.addresses[btn.address][#state.addresses[btn.address] + 1] = i;
         end
        state.buttons[i].output = settings.buttons[i].output;
+       state.buttons[i].address = settings.buttons[i].address;
+       state.buttons[i].sport = {
+        pwm_on = settings.buttons[i].sport.pwm_on;
+        type = settings.buttons[i].sport.type;
+        options = settings.buttons[i].sport.options;
+       };
     end
     local count = 0; 
     for _ in pairs(state.addresses) do
@@ -116,6 +130,7 @@ local function resetButtons()
         settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
                                 activation_switch = 0, external_switch = 0, image = "",
                                 output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
+                                sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
                                 color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
     end
     updateAddressButtonLookup();
@@ -243,6 +258,7 @@ local function isSwitchActive(i)
 end
 
 local function createButton(i, width)
+    print("createButton");
     local ichild = {};
     if (settings.buttons[i].image ~= "") then
         ichild = {{ type = "image", file = settings.imagesdir .. settings.buttons[i].image, x = 0, y = -5, 
@@ -503,7 +519,17 @@ local function createSettingsDetails(i, edit_width)
                                 active = (function() return (settings.buttons[i].type == TYPE_BUTTON) or (settings.buttons[i].type == TYPE_MOMENTARY) end)
                         },
                     }},
-                    }
+                    { type = "box", flexFlow = lvgl.FLOW_ROW, children = (function() 
+                        if (widget.options.SPortProto == 2) then
+                            return {
+                                {type = "label", text = "SPort(ACW) pwm:"},
+                                {type = "numberEdit", min = 0, max = 255, w = 60, get = (function() return settings.buttons[i].sport.pwm_on; end), 
+                                                                                  set = (function(v) settings.buttons[i].sport_pwm_on = v; end)},};
+                        else
+                            return {};
+                        end
+                        end)()
+                    }}
                 }};
     uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
@@ -590,16 +616,15 @@ function widget.update()
             if (isValidSettingsTable(st)) then
                 settings = st;
                 updateAddressButtonLookup();
-                print("***** file read", #settings.buttons);
             else
                 resetSettings();
                 changed = true;
             end
-        else 
+        else -- no file
             resetSettings();
             changed = true;
         end
-        resetState();
+        updateAddressButtonLookup();
         initialized = true;
     end
     titleString = widget.name .. "@" .. widget.options.Address .. " : " .. settings.name .. "  " ..versionString;

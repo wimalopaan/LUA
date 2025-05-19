@@ -51,6 +51,7 @@ local options = {
     { "SPort", BOOL,  0 },
     { "SPortPhy", VALUE, 0, 0, 0x1b}, 
     { "SPortApp", VALUE, 0x51, 0, 255}, -- upper 8-bit (lower 8-bit: instance = address) 
+    { "SPortProto", CHOICE, 1, { "WM", "ACW"}},
 }
   
 local function update(widget, options)

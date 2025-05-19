@@ -44,13 +44,48 @@ local function computeState4()
     return s;
 end
 
+local lastState = {buttons = {}};
+
+local function checkState(callback)
+  for i = 1, 8 do
+    if (state.buttons[i] ~= nil) then
+      if (lastState.buttons[i] == nil) then
+        lastState.buttons[i] = {value = 0};
+      end
+      if (state.buttons[i].value ~= lastState.buttons[i].value) then
+        lastState.buttons[i].value = state.buttons[i].value;
+        return callback(i);
+      end
+    end      
+  end
+end
+
 local function send()
+  if (widget.options.SPortProto <= 1) then
     local value = computeState4();
     local physicalId = widget.options.SPortPhy;
     local primId = 0x31; -- write command without read
     local dataId = (widget.options.SPortApp * 256) + widget.options.Address;
-    print("sport send", physicalId, primId, dataId, value);
-    return sportTelemetryPush(physicalId, primId, dataId, value);
+    print("sport send WM", physicalId, primId, dataId, value);
+    return sportTelemetryPush(physicalId, primId, dataId, value);    
+  elseif (widget.options.SPortProto == 2) then
+    return checkState((function(i) 
+      local physicalId = 0x1b;
+      local primId = 0x10; -- data
+      local dataId = 0xac00;
+      local type = state.buttons[i].sport.type; 
+      local option = state.buttons[i].sport.options;
+      local switch = state.buttons[i].output + (state.buttons[i].address * 8);
+      local pwm = 0x00;
+      if (state.buttons[i].value > 0) then
+        pwm = state.buttons[i].sport.pwm_on;
+      end
+      local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
+      print("sport send ACW", physicalId, primId, dataId, value);
+      return sportTelemetryPush(physicalId, primId, dataId, value);    
+    end));
+  end
+  return true;
 end
 
 return {send = send};
