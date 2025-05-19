@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local state, widget, dir = ... 
+local state, widget, dir, util = ... 
 
 local CRSF_ADDRESS_CONTROLLER     = 0xC8;
 local CRSF_ADDRESS_TRANSMITTER    = 0xEA;

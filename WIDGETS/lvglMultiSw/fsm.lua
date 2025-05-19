@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local crsf, sport, widget = ... 
+local crsf, sport, widget, util = ... 
 
 local state = 0;    
 local actual_item = 0;

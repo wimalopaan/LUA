@@ -52,9 +52,6 @@ widget.options = options;
 widget.zone = zone;
 widget.name = name;
 
-local serialize = loadScript(dir .. "tableser.lua")();
-local util      = loadScript(dir .. "util.lua")();
-
 local PAGE_CONTROL  = 1;
 local PAGE_SETTINGS = 2;
 local PAGE_GLOBALS  = 3;
@@ -71,10 +68,13 @@ local TYPE_SLIDER    = 5;
 widget.settings = {};
 local state = {};
 
-local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
-local sport = loadScript(dir .. "sport.lua")(state, widget, dir);
-local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport, widget);
-local shm   = loadScript(dir .. "shm.lua")(widget, state);
+local serialize = loadScript(dir .. "tableser.lua")();
+local util      = loadScript(dir .. "util.lua")();
+local crsf      = loadScript(dir .. "crsf.lua")(state, widget, dir, util);
+local sport     = loadScript(dir .. "sport.lua")(state, widget, dir, util);
+local fsm       = loadScript(dir .. "fsm.lua")(crsf, sport, widget, util);
+local shm       = loadScript(dir .. "shm.lua")(widget, state, util);
+
 
 local version = 6;
 local settingsVersion = 18;

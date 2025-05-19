@@ -22,7 +22,7 @@
 -- sending 0x31 (write) should be done only in disabled state of the sensor
 -- this is normally done by sending 0x21 (0x20 activates the sensor) 
 
-local state, widget, dir = ... 
+local state, widget, dir, util = ... 
 
 -- todo: 
 -- allow up to 8 different addresses
@@ -47,7 +47,7 @@ end
 local lastState = {buttons = {}};
 
 local function checkState(callback)
-  for i = 1, 8 do
+  for i = 1, (widget.settings.rows * widget.settings.columns) do
     if (state.buttons[i] ~= nil) then
       if (lastState.buttons[i] == nil) then
         lastState.buttons[i] = {value = 0};
