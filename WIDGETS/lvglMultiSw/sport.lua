@@ -51,6 +51,7 @@ local function checkState(callback)
     if (state.buttons[i] ~= nil) then
       if (lastState.buttons[i] == nil) then
         lastState.buttons[i] = {value = 0};
+        return callback(i);
       end
       if (state.buttons[i].value ~= lastState.buttons[i].value) then
         lastState.buttons[i].value = state.buttons[i].value;
@@ -73,12 +74,12 @@ local function send()
       local physicalId = 0x1b;
       local primId = 0x10; -- data
       local dataId = 0xac00;
-      local type = state.buttons[i].sport.type; 
-      local option = state.buttons[i].sport.options;
-      local switch = state.buttons[i].output + (state.buttons[i].address * 8);
+      local type = widget.settings.buttons[i].sport.type; 
+      local option = widget.settings.buttons[i].sport.options;
+      local switch = widget.settings.buttons[i].output + (widget.settings.buttons[i].address * 8);
       local pwm = 0x00;
       if (state.buttons[i].value > 0) then
-        pwm = state.buttons[i].sport.pwm_on;
+        pwm = widget.settings.buttons[i].sport.pwm_on;
       end
       local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
       print("sport send ACW", physicalId, primId, dataId, value);

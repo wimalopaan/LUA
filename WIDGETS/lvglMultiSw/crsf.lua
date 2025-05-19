@@ -105,8 +105,8 @@ local function computeState4M(buttons)
   local s = 0;
   for _, btn in ipairs(buttons) do
     print("button: ", btn, #state.buttons, state.buttons[btn]);
-    if (state.buttons[btn].output ~= nil) then
-      local outnr = state.buttons[btn].output - 1;
+    if (widget.settings.buttons[btn].output ~= nil) then
+      local outnr = widget.settings.buttons[btn].output - 1;
       if (state.buttons[btn].value == 1) then
         s = s + bit32.lshift(1, 2 * outnr);
       elseif (state.buttons[btn].value == 2) then

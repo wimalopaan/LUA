@@ -19,8 +19,6 @@
 --- state update for sbus encoding
 
 -- todo
---- don't duplicate settings into state
---- timeout for SPort sending (WM)?
 --- S.Port queue for multiple addresses / do WM like ACW
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- split into parts usable for simpler telemetry script on b&w radios
@@ -33,6 +31,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- timeout for SPort sending (WM) -> ok on radio
+--- don't duplicate settings into state
 --- A.Cwalina S.port proto 
 --- switching address causes nil access
 --- Enabling Options: SHM, S.Port, CRSF
@@ -69,7 +69,6 @@ local TYPE_MOMENTARY = 4;
 local TYPE_SLIDER    = 5;
 
 widget.settings = {};
-local settings = {};
 local state = {};
 
 local crsf  = loadScript(dir .. "crsf.lua")(state, widget, dir);
@@ -77,7 +76,7 @@ local sport = loadScript(dir .. "sport.lua")(state, widget, dir);
 local fsm   = loadScript(dir .. "fsm.lua")(crsf, sport, widget);
 local shm   = loadScript(dir .. "shm.lua")(widget, state);
 
-local version = 5;
+local version = 6;
 local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
@@ -86,31 +85,24 @@ local settingsFilename = nil;
 
 local function saveSettings() 
     if (settingsFilename ~= nil) then
-        serialize.save(settings, settingsFilename);        
+        serialize.save(widget.settings, settingsFilename);        
     end
 end
 local function resetState() 
-    for i = 1, (settings.rows * settings.columns) do
+    for i = 1, (widget.settings.rows * widget.settings.columns) do
         state.buttons[i] = { value = 0 };
     end
 end
 local function updateAddressButtonLookup()
-    print("updateAddressButtonLookup", #settings.buttons);
+    print("updateAddressButtonLookup", #widget.settings.buttons);
     resetState();
     state.addresses = {};
-    for i, btn in ipairs(settings.buttons) do
+    for i, btn in ipairs(widget.settings.buttons) do
         if (state.addresses[btn.address] == nil) then
             state.addresses[btn.address] = {i};
         else
             state.addresses[btn.address][#state.addresses[btn.address] + 1] = i;
         end
-       state.buttons[i].output = settings.buttons[i].output;
-       state.buttons[i].address = settings.buttons[i].address;
-       state.buttons[i].sport = {
-        pwm_on = settings.buttons[i].sport.pwm_on;
-        type = settings.buttons[i].sport.type;
-        options = settings.buttons[i].sport.options;
-       };
     end
     local count = 0; 
     for _ in pairs(state.addresses) do
@@ -124,10 +116,10 @@ local function updateAddressButtonLookup()
     end
 end
 local function resetButtons()
-    settings.buttons = {};
+    widget.settings.buttons = {};
     state.buttons = {};
-    for i = 1, (settings.rows * settings.columns) do
-        settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
+    for i = 1, (widget.settings.rows * widget.settings.columns) do
+        widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
                                 activation_switch = 0, external_switch = 0, image = "",
                                 output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
                                 sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
@@ -137,14 +129,14 @@ local function resetButtons()
     saveSettings();
 end
 local function resetSettings() 
-    settings.version = settingsVersion;
-    settings.imagesdir = "/IMAGES/";
-    settings.name = "Beleuchtung";
-    settings.line_height = 45;
-    settings.momentaryButton_radius = 20;
-    settings.show_physical = 1;
-    settings.rows = 4;
-    settings.columns = 2;
+    widget.settings.version = settingsVersion;
+    widget.settings.imagesdir = "/IMAGES/";
+    widget.settings.name = "Beleuchtung";
+    widget.settings.line_height = 45;
+    widget.settings.momentaryButton_radius = 20;
+    widget.settings.show_physical = 1;
+    widget.settings.rows = 4;
+    widget.settings.columns = 2;
     resetButtons();
 end
 resetSettings();
@@ -182,7 +174,7 @@ local function setButton(btnstate, v, v2)
 end
 
 local function readPhysical() 
-    for i, btn in ipairs(settings.buttons) do
+    for i, btn in ipairs(widget.settings.buttons) do
         local btnstate = state.buttons[i];
         if (btn.type == TYPE_SLIDER) then
             if (btn.source > 0) then
@@ -235,8 +227,8 @@ end
 
 local function updateButton(i)
     fsm.update();
-    if (settings.buttons[i].external_switch > 0) then
-        local lsname = getSwitchName(settings.buttons[i].external_switch);
+    if (widget.settings.buttons[i].external_switch > 0) then
+        local lsname = getSwitchName(widget.settings.buttons[i].external_switch);
         local lsnumber = string.sub(lsname, 2, 3);
         local lsn = tonumber(lsnumber) - 1;
 --        print("LS: ", lsname, state.buttons[i].value, lsnumber, lsn, (state.buttons[i].value > 0));
@@ -245,9 +237,9 @@ local function updateButton(i)
 end
 
 local function isSwitchActive(i)
-    local possible_active = (settings.buttons[i].activation_switch == 0) or getSwitchValue(settings.buttons[i].activation_switch);
+    local possible_active = (widget.settings.buttons[i].activation_switch == 0) or getSwitchValue(widget.settings.buttons[i].activation_switch);
     if (possible_active) then
-        if (settings.buttons[i].switch > 0) then 
+        if (widget.settings.buttons[i].switch > 0) then 
             return false; 
         else 
             return true; 
@@ -260,87 +252,87 @@ end
 local function createButton(i, width)
     print("createButton");
     local ichild = {};
-    if (settings.buttons[i].image ~= "") then
-        ichild = {{ type = "image", file = settings.imagesdir .. settings.buttons[i].image, x = 0, y = -5, 
-                                                                                    w = settings.line_height, 
-                                                                                    h = settings.line_height}};        
+    if (widget.settings.buttons[i].image ~= "") then
+        ichild = {{ type = "image", file = widget.settings.imagesdir .. widget.settings.buttons[i].image, x = 0, y = -5, 
+                                                                                    w = widget.settings.line_height, 
+                                                                                    h = widget.settings.line_height}};        
     end
-    if (settings.buttons[i].type == TYPE_BUTTON) then
+    if (widget.settings.buttons[i].type == TYPE_BUTTON) then
         return { type = "button", name = "b" .. i, text = (function() 
-                    local sw = settings.buttons[i].switch * settings.show_physical;
+                    local sw = widget.settings.buttons[i].switch * widget.settings.show_physical;
                     if (sw > 0) then
-                        return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                        return widget.settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
                     else
-                        return settings.buttons[i].name;
+                        return widget.settings.buttons[i].name;
                     end
                  end)(), 
-                 w = width, h = settings.line_height, 
-                 color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
+                 w = width, h = widget.settings.line_height, 
+                 color = widget.settings.buttons[i].color, textColor = widget.settings.buttons[i].textColor, font = widget.settings.buttons[i].font,
                  press = (function() state.buttons[i].value = invert(state.buttons[i].value); updateButton(i); return state.buttons[i].value; end),
                  active = (function() return isSwitchActive(i); end),
                  checked = (state.buttons[i].value ~= 0),
                  children = ichild
             };
-    elseif (settings.buttons[i].type == TYPE_MOMENTARY) then
-        return { type = "momentaryButton", text = settings.buttons[i].name, 
-        w = width, h = settings.line_height, cornerRadius = settings.momentaryButton_radius,
-        color = settings.buttons[i].color, textColor = settings.buttons[i].textColor, font = settings.buttons[i].font,
+    elseif (widget.settings.buttons[i].type == TYPE_MOMENTARY) then
+        return { type = "momentaryButton", text = widget.settings.buttons[i].name, 
+        w = width, h = widget.settings.line_height, cornerRadius = widget.settings.momentaryButton_radius,
+        color = widget.settings.buttons[i].color, textColor = widget.settings.buttons[i].textColor, font = widget.settings.buttons[i].font,
         press = (function() state.buttons[i].value = 1; updateButton(i); end),
         release = (function() state.buttons[i].value = 0; updateButton(i); end),
         active = (function() return isSwitchActive(i); end),
         children = ichild
     };
-    elseif (settings.buttons[i].type == TYPE_3POS) then
+    elseif (widget.settings.buttons[i].type == TYPE_3POS) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             { type = "label", text = (function() 
-                local sw = settings.buttons[i].switch * settings.show_physical;
-                local sw2 = settings.buttons[i].switch2;
+                local sw = widget.settings.buttons[i].switch * widget.settings.show_physical;
+                local sw2 = widget.settings.buttons[i].switch2;
                 if (sw > 0) then
-                    return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. "|" .. getSwitchName(sw2) .. ")";
+                    return widget.settings.buttons[i].name .. " (" .. getSwitchName(sw) .. "|" .. getSwitchName(sw2) .. ")";
                 else
-                    return settings.buttons[i].name;
+                    return widget.settings.buttons[i].name;
                 end
              end)(), 
-              w = width / 2, font = settings.buttons[i].font},
+              w = width / 2, font = widget.settings.buttons[i].font},
             { type = "slider", min = -1, max = 1, 
                                 get = (function() local v = state.buttons[i].value; if (v <= 1) then return v; else return -1; end; end), 
                                 set = (function(v) if (v == -1) then state.buttons[i].value = 2; else state.buttons[i].value = v; end; updateButton(i); end), 
                                 active = (function() return isSwitchActive(i); end),
-                                w = width / 2, color = settings.buttons[i].color, 
+                                w = width / 2, color = widget.settings.buttons[i].color, 
                             }
         }};
-    elseif (settings.buttons[i].type == TYPE_TOGGLE) then
+    elseif (widget.settings.buttons[i].type == TYPE_TOGGLE) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, x = 0, w = width, children = {
             { type = "label", text = (function() 
-                local sw = settings.buttons[i].switch * settings.show_physical;
+                local sw = widget.settings.buttons[i].switch * widget.settings.show_physical;
                 if (sw > 0) then
-                    return settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                    return widget.settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
                 else
-                    return settings.buttons[i].name;
+                    return widget.settings.buttons[i].name;
                 end
              end)(), 
-              w = width / 2, x = 0, font = settings.buttons[i].font, 
+              w = width / 2, x = 0, font = widget.settings.buttons[i].font, 
             },
             { type = "toggle", get = (function() if (state.buttons[i].value ~= 0) then return 1; else return 0; end; end), 
                                set = (function(v) state.buttons[i].value = v; updateButton(i); end), w = width / 2 ,
                                active = (function() return isSwitchActive(i); end),
-                               color = settings.buttons[i].color }
+                               color = widget.settings.buttons[i].color }
         }};
-    elseif (settings.buttons[i].type == TYPE_SLIDER) then
+    elseif (widget.settings.buttons[i].type == TYPE_SLIDER) then
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             { type = "label", text = (function() 
-                local so = settings.buttons[i].source * settings.show_physical;
+                local so = widget.settings.buttons[i].source * widget.settings.show_physical;
                 if (so > 0) then
-                    return settings.buttons[i].name .. " (" .. getSourceName(so) .. ")";
+                    return widget.settings.buttons[i].name .. " (" .. getSourceName(so) .. ")";
                 else
-                    return settings.buttons[i].name;
+                    return widget.settings.buttons[i].name;
                 end
              end)(), 
-              w = width / 3, font = settings.buttons[i].font},
+              w = width / 3, font = widget.settings.buttons[i].font},
             { type = "slider", min = -100, max = 100, get = (function() return state.buttons[i].value; end),
                                                       set = (function(v) state.buttons[i].value = v; crsf.sendProp(i, v); end), w = (2 * width) / 3,
-                                                      active = (function() if (settings.buttons[i].source > 0) then return false; else return true; end; end),
-                                                      color = settings.buttons[i].color
+                                                      active = (function() if (widget.settings.buttons[i].source > 0) then return false; else return true; end; end),
+                                                      color = widget.settings.buttons[i].color
                                                     }
         }};
     end
@@ -365,33 +357,33 @@ function widget.globalsPage()
             children = {
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Widget-Name: "},
-                    {type = "textEdit", value = settings.name, w = 150, maxLen = 16, set = (function(s) settings.name = s; end) } 
+                    {type = "textEdit", value = widget.settings.name, w = 150, maxLen = 16, set = (function(s) widget.settings.name = s; end) } 
                 }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Line Height: "},
-                    {type = "numberEdit", min = 30, max = 60, w = 40, get = (function() return settings.line_height; end), set = (function(v) settings.line_height = v; end) }, 
+                    {type = "numberEdit", min = 30, max = 60, w = 40, get = (function() return widget.settings.line_height; end), set = (function(v) widget.settings.line_height = v; end) }, 
                     {type = "label", text = "Radius momentary Button: "},
-                    {type = "numberEdit", min = 10, max = 30, w = 40, get = (function() return settings.momentaryButton_radius; end), set = (function(v) settings.momentaryButton_radius = v; end) } 
+                    {type = "numberEdit", min = 10, max = 30, w = 40, get = (function() return widget.settings.momentaryButton_radius; end), set = (function(v) widget.settings.momentaryButton_radius = v; end) } 
                 }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Show physical names: "},
-                    {type = "toggle", get = (function() return settings.show_physical; end), 
-                                      set = (function(v) settings.show_physical = v; end) }
+                    {type = "toggle", get = (function() return widget.settings.show_physical; end), 
+                                      set = (function(v) widget.settings.show_physical = v; end) }
                 }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Rows: "},
-                    {type = "numberEdit", min = 1, max = 16, w = 40, get = (function() return settings.rows; end), 
+                    {type = "numberEdit", min = 1, max = 16, w = 40, get = (function() return widget.settings.rows; end), 
                      set = (function(v) 
                         lvgl.confirm({title="Exit", message="Confirm resets all settings!", confirm = (function() 
-                            settings.rows = v; 
+                            widget.settings.rows = v; 
                             resetButtons();
                         end) })
                     end)}, 
                     {type = "label", text = "Columns: "},
-                    {type = "numberEdit", min = 1, max = 4, w = 40, get = (function() return settings.columns; end), 
+                    {type = "numberEdit", min = 1, max = 4, w = 40, get = (function() return widget.settings.columns; end), 
                      set = (function(v) 
                         lvgl.confirm({title="Exit", message="Confirm resets all settings!", confirm = (function() 
-                            settings.columns = v; 
+                            widget.settings.columns = v; 
                             resetButtons();
                         end) })
                     end) } 
@@ -415,14 +407,14 @@ function widget.controlPage()
         back = (function() askClose(); end),
     });
 
-    local column_width = widget.zone.w / settings.columns - 10;
-    local button_width = widget.zone.w / settings.columns - 40;
+    local column_width = widget.zone.w / widget.settings.columns - 10;
+    local button_width = widget.zone.w / widget.settings.columns - 40;
 
     local columns = {};
-    for c = 1, settings.columns do
+    for c = 1, widget.settings.columns do
         columns[c] = {};
-        for r = 1, settings.rows do
-            columns[c][r] = createButton(r + (c - 1) * settings.rows, button_width);
+        for r = 1, widget.settings.rows do
+            columns[c][r] = createButton(r + (c - 1) * widget.settings.rows, button_width);
         end
     end
 
@@ -432,7 +424,7 @@ function widget.controlPage()
             flexFlow = lvgl.FLOW_ROW,
             children = (function() 
                 local cols = {};
-                for c = 1, settings.columns do
+                for c = 1, widget.settings.columns do
                     cols[c] = {type = "box", w = column_width, flexFlow = lvgl.FLOW_COLUMN, flexPad = lvgl.PAD_LARGE, children = columns[c],};
                 end
                 return cols;
@@ -467,64 +459,64 @@ local function createSettingsDetails(i, edit_width)
     local uit = {{type = "box", flexFlow = lvgl.FLOW_COLUMN, w = widget.zone.w, children = {
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Visible:" },
-                        { type = "toggle", get = (function() return settings.buttons[i].visible; end),
-                                           set = (function(v) settings.buttons[i].visible = v; end) },
+                        { type = "toggle", get = (function() return widget.settings.buttons[i].visible; end),
+                                           set = (function(v) widget.settings.buttons[i].visible = v; end) },
                         { type = "label", text = " Activation:"},
                         { type = "switch", filter = filter, 
-                            get = (function() return settings.buttons[i].activation_switch; end), set = (function(s) settings.buttons[i].activation_switch = s; end) },
+                            get = (function() return widget.settings.buttons[i].activation_switch; end), set = (function(s) widget.settings.buttons[i].activation_switch = s; end) },
                         { type = "label", text = " Set LS:"},
                         { type = "switch", filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR, 
-                            active = (function() return (settings.buttons[i].switch == 0); end),
-                            get = (function() return settings.buttons[i].external_switch; end), set = (function(s) settings.buttons[i].external_switch = s; end) },
+                            active = (function() return (widget.settings.buttons[i].switch == 0); end),
+                            get = (function() return widget.settings.buttons[i].external_switch; end), set = (function(s) widget.settings.buttons[i].external_switch = s; end) },
                         }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Switch:"},
                         { type = "switch", filter = filter, 
-                            active = (function() if ((settings.buttons[i].type == TYPE_SLIDER) or (settings.buttons[i].type == TYPE_MOMENTARY)) then return false; else return true; end; end), 
-                            get = (function() return settings.buttons[i].switch; end), set = (function(s) settings.buttons[i].switch = s; end) },
+                            active = (function() if ((widget.settings.buttons[i].type == TYPE_SLIDER) or (widget.settings.buttons[i].type == TYPE_MOMENTARY)) then return false; else return true; end; end), 
+                            get = (function() return widget.settings.buttons[i].switch; end), set = (function(s) widget.settings.buttons[i].switch = s; end) },
                         { type = "label", text = " Switch2:", 
-                            active = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end) },
+                            active = (function() if (widget.settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end) },
                         { type = "switch", filter = filter, 
-                            active = (function() if (settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end),
-                            get = (function() return settings.buttons[i].switch2; end), set = (function(s) settings.buttons[i].switch2 = s; end) },
+                            active = (function() if (widget.settings.buttons[i].type == TYPE_3POS) then return true; else return false; end; end),
+                            get = (function() return widget.settings.buttons[i].switch2; end), set = (function(s) widget.settings.buttons[i].switch2 = s; end) },
                         { type = "label", text = " Source:" },
-                        { type = "source", active = (function() if (settings.buttons[i].type ~= TYPE_SLIDER) then return false; else return true; end; end), 
-                                            get = (function() return settings.buttons[i].source; end), 
-                                            set = (function(s) settings.buttons[i].source = s; end) },
+                        { type = "source", active = (function() if (widget.settings.buttons[i].type ~= TYPE_SLIDER) then return false; else return true; end; end), 
+                                            get = (function() return widget.settings.buttons[i].source; end), 
+                                            set = (function(s) widget.settings.buttons[i].source = s; end) },
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-                            {type = "label", text = "Address:", color = (function() if (settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end)},
-                            {type = "numberEdit", min = 0, max = 255, w = 60, get = (function() return settings.buttons[i].address; end), 
-                                                                              set = (function(v) settings.buttons[i].address = v; updateAddressButtonLookup(); end) }, 
+                            {type = "label", text = "Address:", color = (function() if (widget.settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end)},
+                            {type = "numberEdit", min = 0, max = 255, w = 60, get = (function() return widget.settings.buttons[i].address; end), 
+                                                                              set = (function(v) widget.settings.buttons[i].address = v; updateAddressButtonLookup(); end) }, 
                             {type = "label", text = "Output:"},
-                            {type = "numberEdit", min = 1, max = 8, w = 40, get = (function() return settings.buttons[i].output; end), 
-                                                                              set = (function(v) settings.buttons[i].output = v; updateAddressButtonLookup(); end) }, 
+                            {type = "numberEdit", min = 1, max = 8, w = 40, get = (function() return widget.settings.buttons[i].output; end), 
+                                                                              set = (function(v) widget.settings.buttons[i].output = v; updateAddressButtonLookup(); end) }, 
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Color:" },
-                        { type = "color", get = (function() return settings.buttons[i].color; end),
-                                            set = (function(v) settings.buttons[i].color = v; end) },
+                        { type = "color", get = (function() return widget.settings.buttons[i].color; end),
+                                            set = (function(v) widget.settings.buttons[i].color = v; end) },
                         { type = "label", text = " TextColor:" },
-                        { type = "color", get = (function() return settings.buttons[i].textColor; end),
-                                            set = (function(v) settings.buttons[i].textColor = v; end) },                                     
+                        { type = "color", get = (function() return widget.settings.buttons[i].textColor; end),
+                                            set = (function(v) widget.settings.buttons[i].textColor = v; end) },                                     
                         { type = "label", text = " Font:" },
-                        { type = "font", get = (function() return settings.buttons[i].font; end),
-                                        set = (function(v) settings.buttons[i].font = v; end), w = 2 * edit_width / 3 },                                     
+                        { type = "font", get = (function() return widget.settings.buttons[i].font; end),
+                                        set = (function(v) widget.settings.buttons[i].font = v; end), w = 2 * edit_width / 3 },                                     
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Image:" },
                         { type = "file", title = "Image", folder = "/IMAGES",
-                                get = (function() return settings.buttons[i].image; end),
-                                set = (function(v) settings.buttons[i].image = v; end), 
-                                active = (function() return (settings.buttons[i].type == TYPE_BUTTON) or (settings.buttons[i].type == TYPE_MOMENTARY) end)
+                                get = (function() return widget.settings.buttons[i].image; end),
+                                set = (function(v) widget.settings.buttons[i].image = v; end), 
+                                active = (function() return (widget.settings.buttons[i].type == TYPE_BUTTON) or (widget.settings.buttons[i].type == TYPE_MOMENTARY) end)
                         },
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = (function() 
                         if (widget.options.SPortProto == 2) then
                             return {
                                 {type = "label", text = "SPort(ACW) pwm:"},
-                                {type = "numberEdit", min = 0, max = 255, w = 60, get = (function() return settings.buttons[i].sport.pwm_on; end), 
-                                                                                  set = (function(v) settings.buttons[i].sport_pwm_on = v; end)},};
+                                {type = "numberEdit", min = 0, max = 255, w = 60, get = (function() return widget.settings.buttons[i].sport.pwm_on; end), 
+                                                                                  set = (function(v) widget.settings.buttons[i].sport.pwm_on = v; end)},};
                         else
                             return {};
                         end
@@ -551,11 +543,11 @@ local function createSettingsRow(i, edit_width, maxLen)
         children = {
             {type = "label", text = "Output " .. i, font = BOLD },
             {type = "label", text = " Name:"},
-            {type = "textEdit", value = settings.buttons[i].name, w = edit_width, maxLen = maxLen, set = (function(s) settings.buttons[i].name = s; end) },
+            {type = "textEdit", value = widget.settings.buttons[i].name, w = edit_width, maxLen = maxLen, set = (function(s) widget.settings.buttons[i].name = s; end) },
             {type = "label", text = " Type:" },
             {type = "choice", title = "Type", values = {"Button", "Toggle", "3Pos", "Momentary", "Slider"}, w = edit_width,
-                               get = (function() return settings.buttons[i].type; end), set = (function(t) settings.buttons[i].type = t; end) }, 
-            {type = "button", text = "Details", textColor = (function() if (settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end), 
+                               get = (function() return widget.settings.buttons[i].type; end), set = (function(t) widget.settings.buttons[i].type = t; end) }, 
+            {type = "button", text = "Details", textColor = (function() if (widget.settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end), 
                 press = (function() createSettingsDetails(i, edit_width); end)},
         }
     };
@@ -563,7 +555,7 @@ end
 
 local function createSettingsRows(edit_width, maxLen)
     local children = {};
-    for i = 1, (settings.rows * settings.columns) do
+    for i = 1, (widget.settings.rows * widget.settings.columns) do
         children[i] = createSettingsRow(i, edit_width, maxLen);
     end
     return children;
@@ -599,7 +591,7 @@ function widget.widgetPage()
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
-            { type = "label", text = settings.name .. "@" .. widget.options.Address, w = widget.zone.x, align = CENTER }, }
+            { type = "label", text = widget.settings.name .. "@" .. widget.options.Address, w = widget.zone.x, align = CENTER }, }
         }
     });
 end
@@ -614,7 +606,7 @@ function widget.update()
         local st = serialize.load(settingsFilename);
         if (st ~= nil) then
             if (isValidSettingsTable(st)) then
-                settings = st;
+                widget.settings = st;
                 updateAddressButtonLookup();
             else
                 resetSettings();
@@ -627,7 +619,7 @@ function widget.update()
         updateAddressButtonLookup();
         initialized = true;
     end
-    titleString = widget.name .. "@" .. widget.options.Address .. " : " .. settings.name .. "  " ..versionString;
+    titleString = widget.name .. "@" .. widget.options.Address .. " : " .. widget.settings.name .. "  " ..versionString;
     if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.switchPage(PAGE_CONTROL);
     else
