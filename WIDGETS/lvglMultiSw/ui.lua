@@ -76,7 +76,7 @@ local fsm       = loadScript(dir .. "fsm.lua")(crsf, sport, widget, util);
 local shm       = loadScript(dir .. "shm.lua")(widget, state, util);
 
 
-local version = 6;
+local version = 7;
 local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
@@ -607,7 +607,7 @@ function widget.update()
         if (st ~= nil) then
             if (isValidSettingsTable(st)) then
                 widget.settings = st;
-                updateAddressButtonLookup();
+--                updateAddressButtonLookup();
             else
                 resetSettings();
                 changed = true;
@@ -616,9 +616,10 @@ function widget.update()
             resetSettings();
             changed = true;
         end
-        updateAddressButtonLookup();
+--        updateAddressButtonLookup();
         initialized = true;
     end
+    updateAddressButtonLookup();
     titleString = widget.name .. "@" .. widget.options.Address .. " : " .. widget.settings.name .. "  " ..versionString;
     if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.switchPage(PAGE_CONTROL);
