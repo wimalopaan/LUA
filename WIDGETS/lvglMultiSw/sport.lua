@@ -69,11 +69,27 @@ local function send()
     local dataId = (widget.options.SPortApp * 256) + widget.options.Address;
     print("sport send WM", physicalId, primId, dataId, value);
     return sportTelemetryPush(physicalId, primId, dataId, value);    
-  elseif (widget.options.SPortProto == 2) then
+  elseif (widget.options.SPortProto == 2) then -- protocol version 1.5
     return checkState((function(i) 
       local physicalId = 0x1b;
       local primId = 0x10; -- data
       local dataId = 0xac00;
+      local type = widget.settings.buttons[i].sport.type; 
+      local option = widget.settings.buttons[i].sport.options;
+      local switch = widget.settings.buttons[i].output + (widget.settings.buttons[i].address * 8);
+      local pwm = 0x00;
+      if (state.buttons[i].value > 0) then
+        pwm = widget.settings.buttons[i].sport.pwm_on;
+      end
+      local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
+      print("sport send ACW", physicalId, primId, dataId, value);
+      return sportTelemetryPush(physicalId, primId, dataId, value);    
+    end));
+  elseif (widget.options.SPortProto == 3) then -- protocol version 1.4
+    return checkState((function(i) 
+      local physicalId = 0x1b;
+      local primId = 0x10; -- data
+      local dataId = 0xfa07;
       local type = widget.settings.buttons[i].sport.type; 
       local option = widget.settings.buttons[i].sport.options;
       local switch = widget.settings.buttons[i].output + (widget.settings.buttons[i].address * 8);
