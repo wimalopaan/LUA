@@ -76,7 +76,7 @@ local fsm       = loadScript(dir .. "fsm.lua")(crsf, sport, widget, util);
 local shm       = loadScript(dir .. "shm.lua")(widget, state, util);
 
 
-local version = 7;
+local version = 8;
 local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
