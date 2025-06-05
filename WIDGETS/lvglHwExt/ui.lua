@@ -21,7 +21,7 @@ widget.options = options;
 widget.zone = zone;
 widget.name = name;
 
-local serialize = loadScript(dir .. "tableser.lua")();
+local serialize = loadScript(dir .. "tableser.lua", "btd")();
 
 widget.ui = nil;
 
@@ -478,7 +478,7 @@ function widget.update()
     end
 end
 
-local fsm = loadScript(dir .. "proto.lua")(switchCallback, propCallback, prop8Callback);
+local fsm = loadScript(dir .. "proto.lua", "btd")(switchCallback, propCallback, prop8Callback);
 
 function widget.background()
     fsm.process();

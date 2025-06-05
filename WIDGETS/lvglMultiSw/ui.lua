@@ -68,12 +68,12 @@ local TYPE_SLIDER    = 5;
 widget.settings = {};
 local state = {};
 
-local serialize = loadScript(dir .. "tableser.lua")();
-local util      = loadScript(dir .. "util.lua")();
-local crsf      = loadScript(dir .. "crsf.lua")(state, widget, dir, util);
-local sport     = loadScript(dir .. "sport.lua")(state, widget, dir, util);
-local fsm       = loadScript(dir .. "fsm.lua")(crsf, sport, widget, util);
-local shm       = loadScript(dir .. "shm.lua")(widget, state, util);
+local serialize = loadScript(dir .. "tableser.lua", "btd")();
+local util      = loadScript(dir .. "util.lua", "btd")();
+local crsf      = loadScript(dir .. "crsf.lua", "btd")(state, widget, dir, util);
+local sport     = loadScript(dir .. "sport.lua", "btd")(state, widget, dir, util);
+local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util);
+local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 
 local version = 8;

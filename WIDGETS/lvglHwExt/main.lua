@@ -15,7 +15,10 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
--- todo: check for virtual controls
+-- todo: 
+
+-- done:
+--- check for virtual controls
 
 local name = "HwExt/L"
 local longname = "HwExtension/L"
@@ -34,7 +37,7 @@ local function create(zone, options, dir)
         dir = "/WIDGETS/lvglHwExt/";
     end
     if (hasVirtualInputs) then
-        return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
+        return loadScript(dir .. "ui.lua", "btd")(zone, options, longname, dir);
     else 
         return {zone = zone, options = options, name = name, 
                 update = (function() 

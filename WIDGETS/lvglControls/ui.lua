@@ -25,7 +25,7 @@ local TYPE_BUTTON    = 1;
 local TYPE_TOGGLE    = 2;
 local TYPE_MOMENTARY = 3;
 
-local serialize = loadScript(dir .. "tableser.lua")();
+local serialize = loadScript(dir .. "tableser.lua", "btd")();
 
 widget.ui = nil;
 

@@ -26,7 +26,7 @@ local function create(zone, options, dir)
     if (dir == nil) then
         dir = "/WIDGETS/lvglMultiSw/";
     end
-    return loadScript(dir .. "ui.lua")(zone, options, longname, dir);
+    return loadScript(dir .. "ui.lua", "btd")(zone, options, longname, dir);
 end
 
 local function refresh(widget, event, touchState)
