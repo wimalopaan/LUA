@@ -21,7 +21,7 @@ EdgeTx LUA Widget for ELRS MultiSwitch
 
 == MultiSwitch b&w telemetry script
 
-Telemetry script for B&W radios (like <<lvglmsw>>)
+Telemetry script `mulsw2.lua` (and folder `MULSW2`) for B&W radios (like <<lvglmsw>>)
 
 == Hardware-Extension-Widget `lvglHwExt`
 
