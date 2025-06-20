@@ -15,9 +15,13 @@ Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
 
 toc::[]
 
-== MultiSwitch-Widget
+== MultiSwitch-Widget (outdated)
 
 EdgeTx LUA Widget for ELRS MultiSwitch
+
+== MultiSwitch b&w telemetry script
+
+Telemetry script for B&W radios (like <<lvglmsw>>)
 
 == Hardware-Extension-Widget `lvglHwExt`
 
@@ -29,6 +33,7 @@ EdgeTx LUA Widget for the `hardware-extension`-protocol.
 EdgeTx mixer script `crsfch.lua`.
 Sends additional channels (up to 32) to FC
 
+[[lvglmsw]]
 == LVGL MultiSwitch Widget `lvglMultiSW`
 
 New widget for the MultiSwitch-E32 based on LVGL UI controls.
