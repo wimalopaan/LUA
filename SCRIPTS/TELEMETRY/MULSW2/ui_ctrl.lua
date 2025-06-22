@@ -32,6 +32,7 @@ local function init()
                                             end
                                             uilib.update();
                                         end),
+                                        active = (function() if (uilib.global.settings.buttons[i].switch == uilib.switchIndexNone) then return true; end return false; end),
                                         state = (function() return uilib.global.state.buttons[i].value; end),
                                         switch = (function() return uilib.global.settings.buttons[i].switch; end)
             });

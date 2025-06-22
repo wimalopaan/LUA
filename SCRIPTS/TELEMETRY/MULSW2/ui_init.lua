@@ -18,15 +18,16 @@
 local uilib, env = ... 
 
 local global = {
+    RF = {CRSF = 1, SPORT = 2, SBUS = 3},
     settings = {},
     state = {
         buttons = {}
     };
-
-    version = 1;
-    settingsVersion = 1;
-
-    settingsFilename = env.dir .. model.getInfo().name .. ".lua";
+    version = 3,
+    settingsVersion = 2,
+    settingsFilename = env.dir .. model.getInfo().name .. ".lua",
+    crsfProto = 1,
+    radio = 1, -- 1: 192KB, 2: 128kb (disable some menus)
 }
 
 local function resetState() 
@@ -44,17 +45,15 @@ local function updateAddressButtonLookup()
             global.state.addresses[btn.address][#global.state.addresses[btn.address] + 1] = i;
         end
     end
-
---     local count = 0; 
---     for _ in pairs(global.state.addresses) do
---         count = count + 1; -- need to count because #-op does count only contiguos tables 
---     end
--- --    print("count:", count);
---     if (count > 1) then -- use SET4M protocol
---         crsf.switchProtocol(2);
---     else
---         crsf.switchProtocol(1);
---     end
+    local count = 0; 
+    for _ in pairs(global.state.addresses) do
+        count = count + 1; -- need to count because #-op does count only contiguos tables 
+    end
+    if (count > 1) then -- use SET4M protocol
+        global.crsfProto = 2;
+    else
+        global.crsfProto = 1;
+    end
 end
 local function resetButtons()
     global.settings.buttons = {};
@@ -62,17 +61,18 @@ local function resetButtons()
     for i = 1, (global.settings.rows * global.settings.columns) do
         global.settings.buttons[i] = { name = "Output " .. i, switch = uilib.switchIndexNone,  
                                 activation_switch = 0, external_switch = 0,
-                                output = ((i - 1) % 8) + 1, address = 0 + ((i - 1) // 8),
-                                sport = {pwm_on = 0xff, options = 0x00, type = 0x01}};
+                                output = ((i - 1) % 8) + 1, address = global.settings.Address + ((i - 1) // 8)};
+        global.settings.buttons[i].sport = {pwm_on = 0xff, options = 0x00, type = 0x01};
     end
     updateAddressButtonLookup();
 end
 local function resetSettings() 
+    global.settings = {};
     global.settings.version = global.settingsVersion;
-    global.settings.CRSF = 1;
+    global.settings.rflink = global.RF.CRSF; 
+--    global.settings.CRSF = 1;
     global.settings.Address = 0;
     global.settings.SPort = {
-        On  = 0,
         Phy = 0x1b,
         App = 0x51,
         Proto = 1
@@ -86,6 +86,17 @@ local function resetSettings()
 end
 
 local function init()
+    local ver, radio, maj, minor, rev, osname = getVersion();
+    print("radio:", radio);
+    if (radio == "t12") then
+        global.radio = 2;
+    elseif (radio == "x9d") then
+        global.radio = 2;
+    elseif (radio == "x9d+") then
+        global.radio = 2;
+    else 
+        global.radio = 1;
+    end
     local table_read = loadScript(env.dir .. "table_read.lua", "btd")();
     local st = table_read.load(global.settingsFilename);
     if ((st ~= nil) and (st.version == global.settingsVersion)) then

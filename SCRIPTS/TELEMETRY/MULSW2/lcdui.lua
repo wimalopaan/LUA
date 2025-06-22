@@ -105,6 +105,32 @@ local function numberEditEvent(self, event)
         end
         self.set(value);
         event = 0;
+    elseif (self.editing) and (event == EVT_VIRTUAL_MENU) then
+        self.set(self.max);
+        event = 0;
+    end
+    return event;
+end
+local function choiceEvent(self, event)
+    if (event == EVT_VIRTUAL_ENTER) then
+        self.editing = not self.editing;
+        event = 0;
+    elseif (self.editing) and (event == EVT_VIRTUAL_INC) then
+        local value = self.index();
+        value = value + 1;
+        if (value >= #self.values) then
+            value = #self.values;
+        end
+        self.set(value);
+        event = 0;
+    elseif (self.editing) and (event == EVT_VIRTUAL_DEC) then
+        local value = self.index();
+        value = value - 1;
+        if (value <= 0) then
+            value = 1;
+        end
+        self.set(value);
+        event = 0;
     end
     return event;
 end
@@ -133,6 +159,13 @@ local function switchSelectEvent(self, event)
 end
 local function drawButton(self)
     local flags = 0;
+    if (self.active) then
+        if (self.active()) then
+            if (GREY ~= nil) then
+                flags = flags + GREY(8);            
+            end
+        end
+    end
     if (self.state() > 0) then
         flags = flags + INVERS;
     end
@@ -144,7 +177,7 @@ local function drawButton(self)
     if (swindex ~= ui.switchIndexNone) then
         lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, text, flags);
         local swname = switchTab[swindex].name;
-        lcd.drawText(lcd.getLastPos() + ui.textGap, self.y + ui.activeContent.y_offset, swname, flags + SMLSIZE);
+        lcd.drawText(lcd.getLastPos() + ui.textGap, self.y + ui.activeContent.y_offset, swname, SMLSIZE);
     else
         lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, text, flags);
     end
@@ -171,6 +204,18 @@ local function drawNumberEdit(self)
     end
     local value = self.value();
     lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, value, flags);
+end
+local function drawChoice(self)
+    local flags = 0;
+    if (self == ui.activeContent.activeItem) then
+        flags = flags + BLINK;
+    end
+    if (self.editing) then
+        flags = flags + INVERS;
+    end
+    local index = self.index();
+    local text = self.values[index];
+    lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, text, flags);
 end
 local function drawTextEdit(self)
     local flags = 0;
@@ -248,6 +293,12 @@ function ui:setupPage(page)
     function page:addNumberEdit(params) 
         params.draw = drawNumberEdit;
         params.handleEvent = numberEditEvent;
+        params.editing = false;
+        self.activeItem = insert(self.items, params);
+    end;
+    function page:addChoice(params) 
+        params.draw = drawChoice;
+        params.handleEvent = choiceEvent;
         params.editing = false;
         self.activeItem = insert(self.items, params);
     end;
@@ -346,6 +397,7 @@ function ui.activate(page)
 --    print("activePage:", page);
     if (ui.activeContent ~= nil) then
         ui.activeContent = nil;
+        collectgarbage("collect");
     end
     ui.activePage = page;
     loadPage(page);
@@ -357,6 +409,7 @@ function ui.addBackground(script)
         local p = bg(ui, env);
         p.init();
         p.init = nil;
+        collectgarbage("collect");
         ui.background_script = p;
     end
 end
@@ -369,8 +422,8 @@ function ui.background()
     if ((getTime() - lastTime) > timeout) then
         lastTime = getTime();
         if (iCounter == 0) then
---            print("unload");
             ui.activeContent = nil;
+            collectgarbage("collect");
         else
             iCounter = 0;
         end
@@ -379,20 +432,18 @@ function ui.background()
         ui.background_script.background();
     end
 end
-
 function ui.update() 
     if (ui.background_script ~= nil) then
         ui.background_script.update();
     end
 end
-
 function ui.run(event)
     iCounter = iCounter + 1;
     if (ui.activeContent == nil) then
         loadPage(ui.activePage);
     else
-        handleEvent(event);
         drawactiveContent();
+        handleEvent(event);
     end
 end
 

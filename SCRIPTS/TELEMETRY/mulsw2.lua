@@ -15,6 +15,14 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- ToDo:
+-- recalculate address table after changing buttons address
+-- recalculate addresses affter setting global address 
+-- make rows/columns changeable -> more than one control page, more than two settings pages
+
+-- Done:
+-- S.Port protocols
+
 local environment = {
     name = "MulSW",
     longname = "MultiSwitch",
@@ -32,6 +40,7 @@ local function init()
     ui.addPage({script = "ui_set.lua", instance = 1});
     ui.addPage({script = "ui_set.lua", instance = 2});
     ui.addPage({script = "ui_glo.lua"});
+    ui.addPage({script = "ui_inf.lua"});
     ui.activate(p);
 end
 local function run(event)

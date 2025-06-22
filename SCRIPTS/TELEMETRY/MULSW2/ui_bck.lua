@@ -17,7 +17,7 @@
 
 local uilib, env = ... 
 
-local shm       = loadScript(env.dir .. "shm.lua", "btd")(uilib, env);
+--local shm       = loadScript(env.dir .. "shm.lua", "btd")(uilib, env);
 local fsm       = loadScript(env.dir .. "fsm.lua", "btd")(uilib, env);
 
 local function readPhysical() 
