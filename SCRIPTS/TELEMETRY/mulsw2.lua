@@ -16,6 +16,8 @@
 --
 
 -- ToDo:
+-- replace SHM vars with GVs for SBus encoding
+-- enable SBus encoding
 -- recalculate address table after changing buttons address
 -- recalculate addresses affter setting global address 
 -- distinguish CRSF protos or use SET4M always
