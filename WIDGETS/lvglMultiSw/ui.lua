@@ -76,7 +76,7 @@ local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util)
 local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 
-local version = 8;
+local version = 9;
 local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
@@ -260,8 +260,13 @@ local function createButton(i, width)
     if (widget.settings.buttons[i].type == TYPE_BUTTON) then
         return { type = "button", name = "b" .. i, text = (function() 
                     local sw = widget.settings.buttons[i].switch * widget.settings.show_physical;
-                    if (sw > 0) then
-                        return widget.settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                    if (sw ~= 0) then
+                        local swname = getSwitchName(sw);
+                        if (swname ~= nil) then
+                            return widget.settings.buttons[i].name .. " (" .. getSwitchName(sw) .. ")";
+                        else                            
+                            return widget.settings.buttons[i].name .. " (?)";
+                        end
                     else
                         return widget.settings.buttons[i].name;
                     end

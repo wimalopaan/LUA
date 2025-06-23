@@ -63,12 +63,14 @@ end
 
 local function send()
   if (widget.options.SPortProto <= 1) then
-    local value = computeState4();
-    local physicalId = widget.options.SPortPhy;
-    local primId = 0x31; -- write command without read
-    local dataId = (widget.options.SPortApp * 256) + widget.options.Address;
-    print("sport send WM", physicalId, primId, dataId, value);
-    return sportTelemetryPush(physicalId, primId, dataId, value);    
+    return checkState((function() 
+      local value = computeState4();
+      local physicalId = widget.options.SPortPhy;
+      local primId = 0x31; -- write command without read
+      local dataId = (widget.options.SPortApp * 256) + widget.options.Address;
+      print("sport send WM", physicalId, primId, dataId, value);
+      return sportTelemetryPush(physicalId, primId, dataId, value);    
+    end));
   elseif (widget.options.SPortProto == 2) then -- protocol version 1.5
     return checkState((function(i) 
       local physicalId = 0x1b;
