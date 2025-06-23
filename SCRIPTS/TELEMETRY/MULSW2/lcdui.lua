@@ -173,7 +173,7 @@ local function drawButton(self)
     local swindex = self.switch();
     if (swindex ~= ui.switchIndexNone) then
         lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, text, flags);
-        local swname = switchTab[swindex].name;
+        local swname = getSwitchName(switchTab[swindex].number);
         lcd.drawText(lcd.getLastPos() + ui.textGap, self.y + ui.activeContent.y_offset, swname, SMLSIZE);
     else
         lcd.drawText(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, text, flags);

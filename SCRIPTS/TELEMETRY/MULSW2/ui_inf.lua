@@ -29,6 +29,9 @@ local function init(instance, parent, page)
     global:addLabel({x = 0,  y = y, text = (function() return "Radio:"; end)});
     local ver, radio, maj, minor, rev, osname = getVersion();
     global:addLabel({x = 50, y = y, text = (function() return uilib.global.radio .. "(" .. radio .. ")"; end)});
+    y = y + 10;
+    global:addLabel({x = 0,  y = y, text = (function() return "SHM:"; end)});
+    global:addLabel({x = 50, y = y, text = (function() if (uilib.global.shm > 0) then return "yes"; else return "no"; end end)});
 end
 
 return {

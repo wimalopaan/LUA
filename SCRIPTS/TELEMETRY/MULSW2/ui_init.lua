@@ -28,6 +28,7 @@ local global = {
     settingsFilename = env.dir .. model.getInfo().name .. ".lua",
 --    crsfProto = 2, -- always use SET4M
     radio = 1, -- 1: 192KB, 2: 128kb (disable some menus)
+    shm = 0, -- SHM on b&w only available im compiled with SHMBW=YES (WM branch)
 }
 local function resetState() 
     for i = 1, (global.settings.rows * global.settings.columns) do
@@ -83,6 +84,9 @@ local function init()
         global.radio = 2;
     else 
         global.radio = 1;
+    end
+    if (getShmVar ~= nil) then
+        global.shm = 1;
     end
     local table_read = loadScript(env.dir .. "table_read.lua", "btd")();
     local st = table_read.load(global.settingsFilename);
