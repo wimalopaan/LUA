@@ -32,23 +32,20 @@ local ui = {
     },
     switchIndexNone = 1;
 };
-
 local switchTab = (function()
     local t = {};
-    for i, n in switches() do
-        t[#t+1] = {number = i, name = n};
+    for i, _ in switches() do
+        t[#t+1] = {number = i};
         if (i == 0) then
             ui.switchIndexNone = #t;
         end
     end
     return t;
 end)();
-
 local textEdit = {
     stringPossibleChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_#-. ",
     maxStringLength = 8,
 };
-
 local function incrCharInTextField(self, step)
     local text = self.text();
     local c = string.sub(text, self.fieldIndex, self.fieldIndex)
@@ -238,7 +235,6 @@ local function drawSwitchSelect(self)
     end
     local index = self.value();
     local sw = switchTab[index].number;
---    print("drawSwitch", index, switchTab, #switchTab);
     lcd.drawSwitch(self.x + ui.activeContent.x_offset, self.y + ui.activeContent.y_offset, sw, flags);
 end
 function ui.getSwitchValue(index)
@@ -372,7 +368,6 @@ local function handleEvent(event)
         end
     end
 end
-
 function ui.initGlobal(script)
     local initscript = loadScript(env.dir .. script, "btd");
     if (initscript ~= nil) then
@@ -384,7 +379,6 @@ function ui.initGlobal(script)
     initscript = nil;
     collectgarbage("collect");
 end
-
 local function loadPage(page)
     local pagescript = loadScript(env.dir .. page.script, "btd");
     if (pagescript ~= nil) then
@@ -392,9 +386,7 @@ local function loadPage(page)
         p.init(page.instance, page.parent, page);
     end
 end
-
 function ui.activate(page)
---    print("activePage:", page);
     if (ui.activeContent ~= nil) then
         ui.activeContent = nil;
         collectgarbage("collect");
@@ -402,7 +394,6 @@ function ui.activate(page)
     ui.activePage = page;
     loadPage(page);
 end
-
 function ui.addBackground(script)
     local bg = loadScript(env.dir .. script, "btd");
     if (bg ~= nil) then
@@ -413,11 +404,9 @@ function ui.addBackground(script)
         ui.background_script = p;
     end
 end
-
 local iCounter = 0;
 local lastTime = getTime();
 local timeout = 10;
-
 function ui.background()
     if ((getTime() - lastTime) > timeout) then
         lastTime = getTime();

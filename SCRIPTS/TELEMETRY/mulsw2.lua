@@ -18,7 +18,9 @@
 -- ToDo:
 -- recalculate address table after changing buttons address
 -- recalculate addresses affter setting global address 
+-- distinguish CRSF protos or use SET4M always
 -- make rows/columns changeable -> more than one control page, more than two settings pages
+-- better textEdit: highlight only actual cha being edited
 
 -- Done:
 -- S.Port protocols

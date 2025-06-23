@@ -52,55 +52,8 @@ local ARDUPILOT_SWITCH_APPID      = 6010;
 local ARDUPILOT_SWITCH_RESP_CI    = 0x00;
 local ARDUPILOT_SWITCH_RESP_DI    = 0x01;
 
-local setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
+local setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4M;
 
--- local _, rv = getVersion()
--- if string.sub(rv, -5) == "-simu" then 
---   local c = loadScript(env.dir .. "crsfserial.lua");
---   if (c ~= nil) then
---     --print("load crsf serial")
---     local t = c();
---     crossfireTelemetryPush = t.crossfireTelemetryPush;
---     crossfireTelemetryPop  = t.crossfireTelemetryPop;
---   end
--- end
-
-local function switchProtocol(proto)
-  print("switchProtocol", proto);
-  if (proto == 1) then
-    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
-  elseif (proto == 2) then
-    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4M;
-  else
-    setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
-  end 
-end
--- fix: use output-value instead of i
-local function computeState2()
-    local s = 0;
-    for i = 1, 8 do
-        s = s * 2;
-        if ((uilib.global.state.buttons[8 - i + 1] ~= nil) and (uilib.global.state.buttons[8 - i + 1].value > 0)) then
-            s = s + 1;
-        end
-    end
-    return s;
-end
--- fix: use output-value instead of i
-local function computeState4()
-    local s = 0;
-    for i = 1, 8 do
-        s = s * 4;
-        if (uilib.global.state.buttons[8 - i + 1] ~= nil) then
-          if (uilib.global.state.buttons[8 - i + 1].value == 1) then
-            s = s + 1;
-          elseif (uilib.global.state.buttons[8 - i + 1].value == 2) then
-            s = s + 2;
-          end      
-        end
-    end
-    return s;
-end
 local function computeState4M(buttons)
   local s = 0;
   for _, btn in ipairs(buttons) do
@@ -115,20 +68,6 @@ local function computeState4M(buttons)
     end
   end
   return s;
-end
-local function sendSet()
-  local state2 = computeState2();
-  local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
-                       uilib.global.settings.Address, state2 };
-  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
-end
-local function sendSet4()
-  local state4 = computeState4();
-  local state_high = bit32.rshift(state4, 8);
-  local state_low = bit32.band(state4, 0xff);
-  local payloadOut = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
-                      uilib.global.settings.Address, state_high, state_low };
-  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
 end
 local function sendSet4M()
   -- [N, A1, {H1, L1}, A2, {H2, L2}]
@@ -146,20 +85,9 @@ local function sendSet4M()
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
 end
 local function send()
-  print("crsf send:", setProtocolVersion);
-    local ret = false;
-    if (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET) then
-        ret = sendSet();
-    elseif (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET4) then
-        ret = sendSet4();
-    elseif (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET4M) then
-        ret = sendSet4M();
-    end
+    local ret = sendSet4M();
     if (ret == nil) then ret = true; end;
---    print("senddata adr:", widget.options.Address, ret);
     return ret;
 end
   
-return {send = send, 
-        switchProtocol = switchProtocol,
-      };
+return {send = send};

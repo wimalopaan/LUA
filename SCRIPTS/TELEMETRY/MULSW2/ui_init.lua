@@ -23,13 +23,12 @@ local global = {
     state = {
         buttons = {}
     };
-    version = 3,
-    settingsVersion = 2,
+    version = 5,
+    settingsVersion = 3,
     settingsFilename = env.dir .. model.getInfo().name .. ".lua",
-    crsfProto = 1,
+--    crsfProto = 2, -- always use SET4M
     radio = 1, -- 1: 192KB, 2: 128kb (disable some menus)
 }
-
 local function resetState() 
     for i = 1, (global.settings.rows * global.settings.columns) do
         global.state.buttons[i] = { value = 0 };
@@ -44,15 +43,6 @@ local function updateAddressButtonLookup()
         else
             global.state.addresses[btn.address][#global.state.addresses[btn.address] + 1] = i;
         end
-    end
-    local count = 0; 
-    for _ in pairs(global.state.addresses) do
-        count = count + 1; -- need to count because #-op does count only contiguos tables 
-    end
-    if (count > 1) then -- use SET4M protocol
-        global.crsfProto = 2;
-    else
-        global.crsfProto = 1;
     end
 end
 local function resetButtons()
@@ -70,7 +60,6 @@ local function resetSettings()
     global.settings = {};
     global.settings.version = global.settingsVersion;
     global.settings.rflink = global.RF.CRSF; 
---    global.settings.CRSF = 1;
     global.settings.Address = 0;
     global.settings.SPort = {
         Phy = 0x1b,
@@ -84,10 +73,8 @@ local function resetSettings()
     global.settings.columns = 2;
     resetButtons();
 end
-
 local function init()
     local ver, radio, maj, minor, rev, osname = getVersion();
-    print("radio:", radio);
     if (radio == "t12") then
         global.radio = 2;
     elseif (radio == "x9d") then

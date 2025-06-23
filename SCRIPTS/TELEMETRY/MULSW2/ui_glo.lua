@@ -37,35 +37,38 @@ local function init(instance, parent, page)
     global:addNumberEdit({x = 115, y = y, min = 0, max = 1, value = (function() return uilib.global.settings.show_physical; end),
                             set = (function(v) uilib.global.settings.show_physical = v; saveSettings(); end)});
 
-    y = y + 10;
-    global:addLabel({x = 0, y = y, text = (function() return "RF link:"; end)});
-    global:addChoice({x = 50, y = y, values = {"CRSF", "S.Port", "SBus"}, 
-                            index = (function() return uilib.global.settings.rflink; end),
-                            set = (function(v) 
-                                uilib.global.settings.rflink = v; 
-                                saveSettings();
-                                uilib.activeContent = nil; -- reload and init
-                            end)});
-    
-    if (uilib.global.settings.rflink == uilib.global.RF.SPORT) then
+    if (uilib.global.radio ~= 2) then
+        -- radio must have enough memory
         y = y + 10;
-        global:addLabel({x = 0, y = y, text = (function() return "S.Port/P:"; end)});
-        global:addChoice({x = 50, y = y, values = {"WM", "ACW1.4", "ACW1.5"}, 
-                            index = (function() return uilib.global.settings.SPort.Proto; end),
-                            set = (function(v) 
-                                uilib.global.settings.SPort.Proto = v; 
-                                saveSettings(); 
-                                uilib.activeContent = nil; -- reload and init
-                            end)});
-        if (uilib.global.settings.SPort.Proto == 1) then
+        global:addLabel({x = 0, y = y, text = (function() return "RF link:"; end)});
+        global:addChoice({x = 50, y = y, values = {"CRSF", "S.Port", "SBus"}, 
+                                index = (function() return uilib.global.settings.rflink; end),
+                                set = (function(v) 
+                                    uilib.global.settings.rflink = v; 
+                                    saveSettings();
+                                    uilib.activeContent = nil; -- reload and init
+                                end)});
+        
+        if (uilib.global.settings.rflink == uilib.global.RF.SPORT) then
             y = y + 10;
-            global:addLabel({x = 0, y = y, text = (function() return "S/Phy:"; end)});
-            global:addNumberEdit({x = 50, y = y, min = 0, max = 1, value = (function() return uilib.global.settings.SPort.Phy; end),
-                                    set = (function(v) uilib.global.settings.SPort.Phy = v; saveSettings(); end)});
-            global:addLabel({x = 65, y = y, text = (function() return "S/App:"; end)});
-            global:addNumberEdit({x = 115, y = y, min = 0, max = 1, value = (function() return uilib.global.settings.SPort.App; end),
-                                    set = (function(v) uilib.global.settings.SPort.App = v; saveSettings(); end)});
-        end
+            global:addLabel({x = 0, y = y, text = (function() return "S.Port/P:"; end)});
+            global:addChoice({x = 50, y = y, values = {"WM", "ACW1.4", "ACW1.5"}, 
+                                index = (function() return uilib.global.settings.SPort.Proto; end),
+                                set = (function(v) 
+                                    uilib.global.settings.SPort.Proto = v; 
+                                    saveSettings(); 
+                                    uilib.activeContent = nil; -- reload and init
+                                end)});
+            if (uilib.global.settings.SPort.Proto == 1) then
+                y = y + 10;
+                global:addLabel({x = 0, y = y, text = (function() return "S/Phy:"; end)});
+                global:addNumberEdit({x = 50, y = y, min = 0, max = 1, value = (function() return uilib.global.settings.SPort.Phy; end),
+                                        set = (function(v) uilib.global.settings.SPort.Phy = v; saveSettings(); end)});
+                global:addLabel({x = 65, y = y, text = (function() return "S/App:"; end)});
+                global:addNumberEdit({x = 115, y = y, min = 0, max = 1, value = (function() return uilib.global.settings.SPort.App; end),
+                                        set = (function(v) uilib.global.settings.SPort.App = v; saveSettings(); end)});
+            end
+        end       
     end
 end
 
