@@ -15,6 +15,8 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- needs EdgeTx PR https://github.com/EdgeTX/edgetx/pull/6419
+
 local input = {
    {"A1", SOURCE},
    {"B1", SOURCE},
