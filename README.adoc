@@ -53,7 +53,7 @@ This is usesful to use the Shared-Memoty-Variables as mixer-inputs.
 == Mixer-Script `schtl.lua`
 
 Mixer script that computes polar coordinates (direction, power) from two pairs of stick values.
-This is intended to be used with (old) schottel / pod drive controller.
+This is intended to be used with my (very old) schottel / pod drive controller.
 (The new schottel controller `RC720E32` does noch need this mixer script)
 
 == Widget for RC720E32 (Schottel-Controller)
