@@ -417,7 +417,7 @@ local function createSettings()
     children[#children+1] = {type = "hline", w = LCD_W - 10, h = 3};
     children[#children+1] = {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = propMappings()};
     children[#children+1] = {type = "hline", w = LCD_W - 10, h = 3};
-    children[#children+1] = {type = "button", text = "Display", press = widget.displayPage };
+    children[#children+1] = {type = "button", text = "Display", press = (function() serialize.save(settings, settingsFilename); widget.displayPage(); end) };
     return children;
 end
 
