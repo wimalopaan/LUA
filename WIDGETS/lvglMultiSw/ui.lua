@@ -19,9 +19,9 @@
 --- state update for sbus encoding
 
 -- todo
+--- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
---- split into parts usable for simpler telemetry script on b&w radios
 --- Set64 protocol
 --- images on non-buttons
 --- text placing if images are used
@@ -31,6 +31,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- use the visible attribute
 --- timeout for SPort sending (WM) -> ok on radio
 --- don't duplicate settings into state
 --- A.Cwalina S.port proto 
@@ -251,6 +252,9 @@ end
 
 local function createButton(i, width)
     print("createButton");
+    if (widget.settings.buttons[i].visible == 0) then
+        return;
+    end
     local ichild = {};
     if (widget.settings.buttons[i].image ~= "") then
         ichild = {{ type = "image", file = widget.settings.imagesdir .. widget.settings.buttons[i].image, x = 0, y = -5, 
@@ -419,10 +423,12 @@ function widget.controlPage()
     for c = 1, widget.settings.columns do
         columns[c] = {};
         for r = 1, widget.settings.rows do
-            columns[c][r] = createButton(r + (c - 1) * widget.settings.rows, button_width);
+            local b = createButton(r + (c - 1) * widget.settings.rows, button_width);
+            if (b) then
+                columns[c][#columns[c]+1] = b;
+            end
         end
     end
-
 
     local uit = {{ type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
         { type = "box",
