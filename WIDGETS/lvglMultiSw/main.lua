@@ -47,7 +47,7 @@ local options = {
     { "Autoconf", BOOL,  0 },
 --    { "Protocol", CHOICE, 2, { "Set", "Set4", "Set4M", "Set64", "Set64/4"}},
     { "ShmEncoding", BOOL,  0 },
-    { "ShmVar",  VALUE, 1, 1, 16 },
+    { "ShmVarStart",  VALUE, 1, 1, 16 },
     { "SPort", BOOL,  0 },
     { "SPortPhy", VALUE, 0, 0, 0x1b}, 
     { "SPortApp", VALUE, 0x51, 0, 255}, -- upper 8-bit (lower 8-bit: instance = address) 

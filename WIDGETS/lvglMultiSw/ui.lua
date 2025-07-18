@@ -16,7 +16,6 @@
 --
 
 -- bugs
---- state update for sbus encoding
 
 -- todo
 --- remove switch picker workaround (special case if switch name is nil)
@@ -31,6 +30,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- state update for sbus encoding
+--- reset button state if leaving/entering without changing anything (regression error)
 --- use the visible attribute
 --- timeout for SPort sending (WM) -> ok on radio
 --- don't duplicate settings into state
@@ -77,7 +78,7 @@ local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util)
 local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 
-local version = 9;
+local version = 10;
 local settingsVersion = 18;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
@@ -96,7 +97,6 @@ local function resetState()
 end
 local function updateAddressButtonLookup()
     print("updateAddressButtonLookup", #widget.settings.buttons);
-    resetState();
     state.addresses = {};
     for i, btn in ipairs(widget.settings.buttons) do
         if (state.addresses[btn.address] == nil) then
@@ -127,6 +127,7 @@ local function resetButtons()
                                 color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
     end
     updateAddressButtonLookup();
+    resetState();    
     saveSettings();
 end
 local function resetSettings() 
@@ -618,7 +619,7 @@ function widget.update()
         if (st ~= nil) then
             if (isValidSettingsTable(st)) then
                 widget.settings = st;
---                updateAddressButtonLookup();
+                resetState();
             else
                 resetSettings();
                 changed = true;
@@ -627,7 +628,6 @@ function widget.update()
             resetSettings();
             changed = true;
         end
---        updateAddressButtonLookup();
         initialized = true;
     end
     updateAddressButtonLookup();

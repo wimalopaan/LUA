@@ -50,12 +50,12 @@ local function encode(address, switch, on)
     local c = bit32.bor(bit32.lshift(address, 4), bit32.lshift((switch - 1), 1), bit32.band(state, 0x01));
     local v5 = bit32.lshift(c, 5);
     sbusEncodedValue = ((v5 + (2048 / 64) / 2) * 1024) / 1640 - 1024 + 0.5;
-    print("encode", c, v5, sbusEncodedValue, state);
+    print("encode", c, v5, sbusEncodedValue, state, address, switch, on);
 end
 
 local function checkChanges(values)
     for i, v in ipairs(values) do
-        local diff = bit32.band(bit32.bxor(v, lastInputs[i]), 0xff);
+        local diff = bit32.band(bit32.bxor(v, lastInputs[i]), 0x3ff); -- in total 10 bits
         if (diff ~= 0) then
             local address  = bit32.rshift(v, 8);
             local switches = bit32.band(v, 0xff);

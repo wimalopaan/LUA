@@ -19,14 +19,18 @@ local widget, state, util = ...
 
 local function encode()
     if (widget.options.ShmEncoding > 0) then
-        local e = bit32.lshift(widget.options.Address, 8);
-        for i, b in ipairs(state.buttons) do
-            if (b.value > 0) then
-                e = bit32.bor(e, bit32.lshift(1, (i - 1)));
+        local sn = 0;
+        for adr, buttons in pairs(state.addresses) do
+            local e = bit32.lshift(adr, 8); -- [0;3] -> 2bits (in total 10 bits )
+            for _, btn in ipairs(buttons) do
+                if (state.buttons[btn].value > 0) then
+                    e = bit32.bor(e, bit32.lshift(1, (btn - 1)));
+                end
             end
+            setShmVar(widget.options.ShmVarStart + sn, e);
+            sn = sn + 1;
         end
-        setShmVar(widget.options.ShmVar, e);
-    end 
+    end
 end
 
 return {encode = encode}
