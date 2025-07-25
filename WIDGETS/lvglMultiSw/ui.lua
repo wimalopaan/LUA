@@ -15,12 +15,15 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+--  requires
+--- EdgeTx 2.11.1
+--- Edgetx 2.11.2 momentary bug in EdgeTx, fix: PR 6460 
+
 -- bugs
 
 -- todo
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
---- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- Set64 protocol
 --- images on non-buttons
 --- text placing if images are used
@@ -30,6 +33,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- state update for sbus encoding
 --- reset button state if leaving/entering without changing anything (regression error)
 --- use the visible attribute
