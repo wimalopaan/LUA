@@ -16,8 +16,10 @@
 --
 
 -- todo: 
+--- timeout to save settings when in settings page
 
 -- done:
+--- update switch / controls activation when new mappings are added / deleted
 --- check for virtual controls
 
 local name = "HwExt/L"

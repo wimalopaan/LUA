@@ -21,6 +21,11 @@ widget.options = options;
 widget.zone = zone;
 widget.name = name;
 
+local version = 3;
+local settingsVersion = 9;
+local versionString = "[" .. version .. "." .. settingsVersion .. "]";
+local titleString = widget.name .. " " .. versionString;
+
 local serialize = loadScript(dir .. "tableser.lua", "btd")();
 
 widget.ui = nil;
@@ -84,7 +89,6 @@ local function activateVInputs()
     end
 end
 
-local settingsVersion = 9;
 local function resetSettings() 
     print("resetSettings");
     settings.version = settingsVersion;
@@ -98,7 +102,6 @@ local function resetSettings()
     activateVSwitches();
     activateVInputs();
 end
-resetSettings();
 
 local function isValidSettingsTable(t) 
     if (t.version ~= nil) then
@@ -122,7 +125,12 @@ end
 updateFilename();
 
 local function askClose()
-    lvgl.confirm({title = "Exit", message = "Really exit?", confirm = (function() serialize.save(settings, settingsFilename); lvgl.exitFullScreen(); end),})
+    lvgl.confirm({title = "Exit", message = "Really exit?", confirm = (function() 
+        serialize.save(settings, settingsFilename); 
+        activateVInputs();
+        activateVSwitches();
+        lvgl.exitFullScreen(); 
+    end),})
 end
 
 local function createSwitchDisplay(c)
@@ -221,7 +229,7 @@ end
 function widget.displayPage()
     lvgl.clear();
     local page = lvgl.page({
-        title = widget.name,
+        title = titleString,
         subtitle = "Display",
         back = askClose,
     });
@@ -424,7 +432,7 @@ end
 function widget.settingsPage()
     lvgl.clear();
     local page = lvgl.page({
-        title = widget.name,
+        title = titleString,
         subtitle = "Settings",
         back = askClose,
     });
@@ -458,6 +466,8 @@ function widget.update()
         if (st ~= nil) then
             if (isValidSettingsTable(st)) then
                 settings = st;
+                activateVInputs();
+                activateVSwitches();
             else
                 resetSettings();
                 changed = true;
