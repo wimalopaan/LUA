@@ -33,6 +33,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- enable virtual-switches (switch-picker, activate vswitches in global options)
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- state update for sbus encoding
 --- reset button state if leaving/entering without changing anything (regression error)
@@ -81,9 +82,10 @@ local sport     = loadScript(dir .. "sport.lua", "btd")(state, widget, dir, util
 local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util);
 local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
+local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 10;
-local settingsVersion = 18;
+local version = 11;
+local settingsVersion = 19;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
 
@@ -141,6 +143,7 @@ local function resetSettings()
     widget.settings.line_height = 45;
     widget.settings.momentaryButton_radius = 20;
     widget.settings.show_physical = 1;
+    widget.settings.activate_vswitches = 0;
     widget.settings.rows = 4;
     widget.settings.columns = 2;
     resetButtons();
@@ -163,6 +166,17 @@ local function updateFilename()
     return false;
 end
 updateFilename();
+
+local function activateVirtualSwitches() 
+    if (widget.settings.activate_vswitches > 0) then
+        if (hasVirtualInputs) then
+            for i = 1, 64 do
+                print("activate vsw:", i);
+                activateVirtualSwitch(i, true);        
+            end
+        end        
+    end
+end
 
 local function bool2int(v)
     if (v) then return 1; end
@@ -234,11 +248,20 @@ end
 local function updateButton(i)
     fsm.update();
     if (widget.settings.buttons[i].external_switch > 0) then
-        local lsname = getSwitchName(widget.settings.buttons[i].external_switch);
-        local lsnumber = string.sub(lsname, 2, 3);
-        local lsn = tonumber(lsnumber) - 1;
---        print("LS: ", lsname, state.buttons[i].value, lsnumber, lsn, (state.buttons[i].value > 0));
-        setStickySwitch(lsn, state.buttons[i].value > 0);
+        local swname = getSwitchName(widget.settings.buttons[i].external_switch);
+        local swtype = string.sub(swname, 1, 1);
+        if (swtype == "L") then
+            local lsnumber = string.sub(swname, 2, 3);
+            local lsn = tonumber(lsnumber) - 1;
+            print("LS: ", lsname, state.buttons[i].value, lsnumber, lsn, (state.buttons[i].value > 0));
+            setStickySwitch(lsn, state.buttons[i].value > 0);
+        elseif (swtype == "V") then
+            if (hasVirtualInputs) then
+                local vsnumber = string.sub(swname, 3, 4);
+                print("VS: ", swname, state.buttons[i].value, vsnumber, (state.buttons[i].value > 0));
+                setVirtualSwitch(vsnumber, state.buttons[i].value > 0);
+            end
+        end
     end
 end
 
@@ -364,6 +387,20 @@ function widget.globalsPage()
         subtitle = "Global-Settings",
         back = (function() askClose(); end),
     });
+    local vswitch_box = {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {}};
+    if (hasVirtualInputs) then
+        vswitch_box.children = {
+                    {type = "label", text = "Activate virtual switches: "},
+                    {type = "toggle", get = (function() return widget.settings.activate_vswitches; end), 
+                                      set = (function(v) 
+                                        widget.settings.activate_vswitches = v;
+                                        if (v > 0) then
+                                            activateVirtualSwitches();
+                                        end
+                                    end) }
+                };        
+    end
+
     local uit = {{
             type = "box",
             w = widget.zone.w, 
@@ -384,6 +421,7 @@ function widget.globalsPage()
                     {type = "toggle", get = (function() return widget.settings.show_physical; end), 
                                       set = (function(v) widget.settings.show_physical = v; end) }
                 }},
+                vswitch_box,
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Rows: "},
                     {type = "numberEdit", min = 1, max = 16, w = 40, get = (function() return widget.settings.rows; end), 
@@ -460,8 +498,12 @@ end
 local function createSettingsDetails(i, edit_width) 
     print("createDetails", i);
     local filter =  lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
-    if (lvgl.SW_VIRTUAL ~= nil) then
+    local setsw_filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
+    local setsw_text = " Set LS:"
+    if (hasVirtualInputs) then
         filter = filter | lvgl.SW_VIRTUAL;
+        setsw_filter = setsw_filter | lvgl.SW_VIRTUAL;
+        setsw_text = " Set LS/VS:"
     end
     local column_width = widget.zone.w / 2 - 10;
     local box_width = column_width / 2;
@@ -480,8 +522,8 @@ local function createSettingsDetails(i, edit_width)
                         { type = "label", text = " Activation:"},
                         { type = "switch", filter = filter, 
                             get = (function() return widget.settings.buttons[i].activation_switch; end), set = (function(s) widget.settings.buttons[i].activation_switch = s; end) },
-                        { type = "label", text = " Set LS:"},
-                        { type = "switch", filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR, 
+                        { type = "label", text = setsw_text},
+                        { type = "switch", filter = setsw_filter, 
                             active = (function() return (widget.settings.buttons[i].switch == 0); end),
                             get = (function() return widget.settings.buttons[i].external_switch; end), set = (function(s) widget.settings.buttons[i].external_switch = s; end) },
                         }},
@@ -635,6 +677,7 @@ function widget.update()
         initialized = true;
     end
     updateAddressButtonLookup();
+    activateVirtualSwitches();
     titleString = widget.name .. "@" .. widget.options.Address .. " : " .. widget.settings.name .. "  " ..versionString;
     if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.switchPage(PAGE_CONTROL);
