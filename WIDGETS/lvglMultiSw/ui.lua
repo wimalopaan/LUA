@@ -33,6 +33,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- add exclusive-groups (default N/2 groups, select a group for a swicth or none)
 --- enable virtual-switches (switch-picker, activate vswitches in global options)
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
 --- state update for sbus encoding
@@ -85,7 +86,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local version = 11;
-local settingsVersion = 19;
+local settingsVersion = 20;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
 
@@ -126,7 +127,8 @@ local function resetButtons()
     widget.settings.buttons = {};
     state.buttons = {};
     for i = 1, (widget.settings.rows * widget.settings.columns) do
-        widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1, 
+        widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1,
+                                exclusive_group = 0,
                                 activation_switch = 0, external_switch = 0, image = "",
                                 output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
                                 sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
@@ -193,6 +195,16 @@ local function setButton(btnstate, v, v2)
     return false;
 end
 
+local function checkButton(i, v)
+    if (widget.ui ~= nil) then
+        -- todo: caching ref
+        local b = widget.ui["b" .. i];
+        if (b ~= nil) then
+            b:set({checked = v});
+        end
+    end        
+end
+
 local function readPhysical() 
     for i, btn in ipairs(widget.settings.buttons) do
         local btnstate = state.buttons[i];
@@ -208,13 +220,7 @@ local function readPhysical()
                 local v  = (btn.switch > 0 ) and getSwitchValue(btn.switch);
                 local v2 = (btn.switch2 > 0) and getSwitchValue(btn.switch2);
                 if (setButton(btnstate, v, v2)) then
-                    if (widget.ui ~= nil) then
-                        -- todo: caching ref
-                        local b = widget.ui["b" .. i];
-                        if (b ~= nil) then
-                           b:set({checked = v});
-                        end
-                    end        
+                    checkButton(i, v);
                 end
             end
         end      
@@ -245,7 +251,22 @@ local function invert(v)
     end    
 end
 
+local function processButtonGroup(bnum) 
+    local egr = widget.settings.buttons[bnum].exclusive_group;
+    if ((state.buttons[bnum].value > 0) and (egr > 0)) then
+        for i, btn in ipairs(widget.settings.buttons) do
+            if ((i ~= bnum) and (egr == btn.exclusive_group)) then
+                if (state.buttons[i].value > 0) then
+                    state.buttons[i].value = 0;
+                    checkButton(i, false);
+                end
+            end            
+        end
+    end
+end
+
 local function updateButton(i)
+    processButtonGroup(i);
     fsm.update();
     if (widget.settings.buttons[i].external_switch > 0) then
         local swname = getSwitchName(widget.settings.buttons[i].external_switch);
@@ -541,6 +562,12 @@ local function createSettingsDetails(i, edit_width)
                         { type = "source", active = (function() if (widget.settings.buttons[i].type ~= TYPE_SLIDER) then return false; else return true; end; end), 
                                             get = (function() return widget.settings.buttons[i].source; end), 
                                             set = (function(s) widget.settings.buttons[i].source = s; end) },
+                        {type = "label", text = "Mutex-Group:" },
+                        {type = "numberEdit", min = 0, max = (widget.settings.rows * widget.settings.columns) / 2, w = 60, 
+                            active = (function() if (widget.settings.buttons[i].switch == 0) then return true; else return false; end; end),
+                            get = (function() return widget.settings.buttons[i].exclusive_group; end), 
+                            set = (function(v) widget.settings.buttons[i].exclusive_group = v; end) }, 
+
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                             {type = "label", text = "Address:", color = (function() if (widget.settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end)},
