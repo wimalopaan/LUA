@@ -46,17 +46,22 @@ local function update()
   if (widget.options.CRSF == 1) then
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
-    end    
+    else
+      print("crsf not send");
+    end   
   end  
   if (widget.options.SPort == 1) then
     if (sport.send() == true) then
       lastTimeSend = getTime();
+    else
+      print("sport not send");
     end    
   end
 end
 local function onTimeout(f)
     local t = getTime();
     if ((t - lastTimeSend) > sendTimeout) then
+      sport.invalidate();
       update();
     end
 end

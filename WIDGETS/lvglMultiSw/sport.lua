@@ -16,11 +16,12 @@
 --
 
 -- FrSky SPort Protocoll:
--- sending a write-command (0x31) to a sensor (physicalID / addID) disables this sensor 
--- to be further querying by the receiver
--- Maybe:
--- sending 0x31 (write) should be done only in disabled state of the sensor
--- this is normally done by sending 0x21 (0x20 activates the sensor) 
+-- WM: uses 0x31 (data write frames)
+
+-- Attention:
+-- if the switch acts also as a sensor (responses to S.Port query with data), it is mandatory that this
+-- instance was no detected in EdgeTx as sensor, otherwise the S.Port packages are not pushed to the receiver 
+-- (and sportTelemetryPush() fails)
 
 local state, widget, dir, util = ... 
 
@@ -46,6 +47,10 @@ end
 
 local lastState = {buttons = {}};
 
+local function invalidate()
+  lastState = {buttons = {}};
+end
+
 local function checkState(callback)
   for i = 1, (widget.settings.rows * widget.settings.columns) do
     if (state.buttons[i] ~= nil) then
@@ -63,7 +68,7 @@ end
 
 local function send()
   if (widget.options.SPortProto <= 1) then
-    return checkState((function() 
+    return checkState((function(i) 
       local value = computeState4();
       local physicalId = widget.options.SPortPhy;
       local primId = 0x31; -- write command without read
@@ -107,4 +112,4 @@ local function send()
   return true;
 end
 
-return {send = send};
+return {send = send, invalidate = invalidate};
