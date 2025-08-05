@@ -38,6 +38,18 @@ Sends additional channels (up to 32) to FC
 
 New widget for the MultiSwitch-E32 based on LVGL UI controls.
 
+See also <<mswsb>> and <<mswib>>.
+
+[[mswsb]]
+== SuperSimpleMultiswitch Mixer-Script `mswsb.lua`
+
+If you use the _SuperSimpleMultiSwitch_ in combination with `sbus` you'll need this together with the <<lvglmsw>> 
+
+[[mswib]]
+== SuperSimpleMultiswitch Mixer-Script `mswib.lua`
+
+If you use the _SuperSimpleMultiSwitch_ in combination with `ibus` you'll need this together with the <<lvglmsw>> 
+
 == LVGL Controls Widget `lvglControls`
 
 This widget shows up to 16 _virtual sources_ (sliders). The values of these controls are stored in
