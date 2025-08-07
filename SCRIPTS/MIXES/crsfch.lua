@@ -55,14 +55,25 @@ end
 local inputs = {
 	{"StartC", VALUE, 1, 17, 17},
   {"Interv", VALUE, 1, 99, 5},
-  {"Flags", VALUE, 0, 3, 0}
+  {"Flags", VALUE, 0, 3, 0},
+  {"ShmSync", VALUE, 0, 16, 0} -- shm variable used for sync with lvglMultiSw-widget
 }
 
 local last = getTime();
-local function run(startChannel, Interv, flags)
+local function run(startChannel, Interv, flags, shmSync)
     local t = getTime();
     if ((t - last) >= Interv) then
-      sendChannels(startChannel, 16, flags);
+      if (shmSync > 0) then
+        local s = getShmVar(shmSync);
+        if (s == 0) then
+          sendChannels(startChannel, 16, flags);    
+--          print("crsfch sent");
+        else
+          print("crsfch wait");
+        end
+      else
+        sendChannels(startChannel, 16, flags);        
+      end
       last = t;
     end  
 end

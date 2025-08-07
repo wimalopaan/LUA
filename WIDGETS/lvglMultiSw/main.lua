@@ -47,6 +47,7 @@ local options = {
 --    { "Autoconf", BOOL,  0 }, -- not fully implemented
     { "ShmEncoding", BOOL,  0 },
     { "ShmVarStart",  VALUE, 1, 1, 16 }, -- first shm var to be used: number of different addresses in widget gives number of contiguous shm vars 
+    { "ShmSync", VALUE, 0, 0, 16}, -- shm var used for sync with crsfch.lua, 0 means no sync
     { "SPort", BOOL,  0 },
     { "SPortPhy", VALUE, 0, 0, 0x1b}, 
     { "SPortApp", VALUE, 0x51, 0, 255}, -- upper 8-bit (lower 8-bit: instance = address) 

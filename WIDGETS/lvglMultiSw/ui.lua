@@ -86,7 +86,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 11;
+local version = 12;
 local settingsVersion = 20;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
