@@ -22,6 +22,7 @@
 -- bugs
 
 -- todo
+--- add synchronization between this widget and mixer script crsfch.lua (suspend crsfch.lua as long as updates are send from widget)
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
 --- Set64 protocol
