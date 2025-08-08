@@ -86,7 +86,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 12;
+local version = 13;
 local settingsVersion = 20;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 local titleString = "-";
@@ -686,7 +686,7 @@ local initialized = false;
 function widget.update()
     print("widget.update");
     local changed = updateFilename();
-    fsm.intervall(widget.options.Intervall + widget.options.Address); -- dither timeout a little bit
+    fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
     fsm.autoconf(widget.options.Autoconf);
     if ((not initialized) or changed) then
         local st = serialize.load(settingsFilename);

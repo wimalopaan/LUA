@@ -45,11 +45,11 @@ end
 local function update()
   if (widget.options.CRSF == 1) then
     if (widget.options.ShmSync > 0) then
-      setShmVar(widget.options.ShmSync, 1); -- stop crsfsh.lua from sending
+      setShmVar(widget.options.ShmSync, 1); -- stop crsfsh.lua from sending, better increment
     end
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
-      setShmVar(widget.options.ShmSync, 0);
+      setShmVar(widget.options.ShmSync, 0); -- better decrement
       print("crsf OK");
     else
       lastTimeSend = 0; -- reset next cycle
