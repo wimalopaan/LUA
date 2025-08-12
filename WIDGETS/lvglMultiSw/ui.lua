@@ -22,7 +22,6 @@
 -- bugs
 
 -- todo
---- add synchronization between this widget and mixer script crsfch.lua (suspend crsfch.lua as long as updates are send from widget)
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
 --- Set64 protocol
@@ -34,6 +33,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- reset also external switches in mutex-group 
+--- add synchronization between this widget and mixer script crsfch.lua (suspend crsfch.lua as long as updates are send from widget)
 --- add exclusive-groups (default N/2 groups, select a group for a swicth or none)
 --- enable virtual-switches (switch-picker, activate vswitches in global options)
 --- adapt SHM protocol if multiple addresses are found (maybe send only buttons with widget address)
@@ -86,12 +87,32 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 13;
+local version = 14;
 local settingsVersion = 20;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
-local titleString = "-";
 
 local settingsFilename = nil;
+
+local function addressString() 
+    local min = widget.options.Address;
+    local max = widget.options.Address;
+    for _, btn in pairs(widget.settings.buttons) do
+        if (btn.address < min) then
+            min = btn.address;
+        elseif (btn.address > max) then
+            max = btn.address;
+        end
+    end
+    if (min == max) then
+        return min;
+    else
+        return "[" .. min .. "," .. max .. "]";
+    end
+end
+
+local function titleString() 
+    return widget.name .. "@" .. addressString() .. " : " .. widget.settings.name .. "  " .. versionString;
+end
 
 local function saveSettings() 
     if (settingsFilename ~= nil) then
@@ -252,6 +273,25 @@ local function invert(v)
     end    
 end
 
+local function setLSorVs(sw, on)
+    if (sw > 0) then
+        local swname = getSwitchName(sw);
+        local swtype = string.sub(swname, 1, 1);
+        if (swtype == "L") then
+            local lsnumber = string.sub(swname, 2, 3);
+            local lsn = tonumber(lsnumber) - 1;
+            print("LS: ", lsnumber, lsn, on);
+            setStickySwitch(lsn, on);
+        elseif (swtype == "V") then
+            if (hasVirtualInputs) then
+                local vsnumber = string.sub(swname, 3, 4);
+                print("VS: ", swname, vsnumber, on);
+                setVirtualSwitch(vsnumber, on);
+            end
+        end
+    end
+end
+
 local function processButtonGroup(bnum) 
     local egr = widget.settings.buttons[bnum].exclusive_group;
     if ((state.buttons[bnum].value > 0) and (egr > 0)) then
@@ -260,6 +300,7 @@ local function processButtonGroup(bnum)
                 if (state.buttons[i].value > 0) then
                     state.buttons[i].value = 0;
                     checkButton(i, false);
+                    setLSorVs(widget.settings.buttons[i].external_switch, false);
                 end
             end            
         end
@@ -269,22 +310,7 @@ end
 local function updateButton(i)
     processButtonGroup(i);
     fsm.update();
-    if (widget.settings.buttons[i].external_switch > 0) then
-        local swname = getSwitchName(widget.settings.buttons[i].external_switch);
-        local swtype = string.sub(swname, 1, 1);
-        if (swtype == "L") then
-            local lsnumber = string.sub(swname, 2, 3);
-            local lsn = tonumber(lsnumber) - 1;
-            print("LS: ", lsname, state.buttons[i].value, lsnumber, lsn, (state.buttons[i].value > 0));
-            setStickySwitch(lsn, state.buttons[i].value > 0);
-        elseif (swtype == "V") then
-            if (hasVirtualInputs) then
-                local vsnumber = string.sub(swname, 3, 4);
-                print("VS: ", swname, state.buttons[i].value, vsnumber, (state.buttons[i].value > 0));
-                setVirtualSwitch(vsnumber, state.buttons[i].value > 0);
-            end
-        end
-    end
+    setLSorVs(widget.settings.buttons[i].external_switch, (state.buttons[i].value > 0));
 end
 
 local function isSwitchActive(i)
@@ -405,7 +431,7 @@ end
 function widget.globalsPage() 
     lvgl.clear();
     local page = lvgl.page({
-        title = titleString,
+        title = titleString(),
         subtitle = "Global-Settings",
         back = (function() askClose(); end),
     });
@@ -476,7 +502,7 @@ function widget.controlPage()
     print("controlPage", widget);
     lvgl.clear();
     local page = lvgl.page({
-        title = titleString,
+        title = titleString(),
         subtitle = "Control",
         back = (function() askClose(); end),
     });
@@ -532,7 +558,7 @@ local function createSettingsDetails(i, edit_width)
 
     lvgl.clear();
     local page = lvgl.page({
-        title = titleString,
+        title = titleString(),
         subtitle = "Output " .. i .. " details",
         back = (function() widget.switchPage(PAGE_SETTINGS); end),
     });
@@ -650,7 +676,7 @@ end
 function widget.settingsPage()
     lvgl.clear();
     local page = lvgl.page({
-        title = titleString,
+        title = titleString(),
         subtitle = "Function-Settings",
         back = (function() askClose(); end),
     });
@@ -677,7 +703,7 @@ function widget.widgetPage()
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
-            { type = "label", text = widget.settings.name .. "@" .. widget.options.Address, w = widget.zone.x, align = CENTER }, }
+            { type = "label", text = widget.settings.name .. "@" .. addressString(), w = widget.zone.x, align = CENTER }, }
         }
     });
 end
@@ -706,7 +732,6 @@ function widget.update()
     end
     updateAddressButtonLookup();
     activateVirtualSwitches();
-    titleString = widget.name .. "@" .. widget.options.Address .. " : " .. widget.settings.name .. "  " ..versionString;
     if (lvgl.isFullScreen() or lvgl.isAppMode()) then
         widget.switchPage(PAGE_CONTROL);
     else
