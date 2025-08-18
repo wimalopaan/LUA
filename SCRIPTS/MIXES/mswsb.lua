@@ -89,8 +89,9 @@ end
 local function onTimeout(callback)
     local t = getTime();
     if ((t - lastTime) > timeout) then
-        callback();
-        lastTime = t;
+        if (callback()) then
+            lastTime = t;
+        end
     end
 end
 

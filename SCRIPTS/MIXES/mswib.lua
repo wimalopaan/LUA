@@ -80,6 +80,7 @@ local function onChange(values, callback)
             if (rrCounter == 8) then
                 rrCounter = 0;
             end
+            return true;
         end
     end
     return false;
@@ -88,8 +89,9 @@ end
 local function onTimeout(callback)
     local t = getTime();
     if ((t - lastTime) > timeout) then
-        callback();
-        lastTime = t;
+        if (callback()) then
+            lastTime = t;
+        end
     end
 end
 
