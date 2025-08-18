@@ -72,7 +72,7 @@ local function send()
       local value = computeState4();
       local physicalId = widget.options.SPortPhy;
       local primId = 0x31; -- write command without read
-      local dataId = (widget.options.SPortApp * 256) + widget.options.Address;
+      local dataId = (widget.options.SPortApp * 256) + widget.settings.buttons[i].address;
       print("sport send WM", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
