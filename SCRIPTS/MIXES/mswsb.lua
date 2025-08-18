@@ -39,7 +39,7 @@ local lastInputs = {0, 0, 0, 0};
 -- step size: 2048/64
 -- offset (half-step): (step size) / 2
 -- sbus-range: [172,1812], sbus-delta: 1640
--- scaling: 1024 / 1620 (to reach [172, 1196], delta: 1024)
+-- scaling: 1024 / 1640 (to reach [172, 1196], delta: 1024)
 -- on receiver side: rshift of 4 
 
 local function encode(address, switch, on)
@@ -53,45 +53,58 @@ local function encode(address, switch, on)
     print("encode", c, v5, sbusEncodedValue, state, address, switch, on);
 end
 
-local function checkChanges(values)
+local rrCounter = 0;
+local function onChange(values, callback)
     for i, v in ipairs(values) do
         local diff = bit32.band(bit32.bxor(v, lastInputs[i]), 0x3ff); -- in total 10 bits
+        local address  = bit32.rshift(v, 8);
+        local switches = bit32.band(v, 0xff);
         if (diff ~= 0) then
-            local address  = bit32.rshift(v, 8);
-            local switches = bit32.band(v, 0xff);
             local mask = 1;
             for sw = 1, 8 do
                 if (bit32.band(diff, mask) > 0) then
                     print("changed", i, address, switches, sw);
                     local onMask = bit32.band(switches, mask);
-                    encode(address, sw, (onMask > 0)); 
+                    callback(address, sw, (onMask > 0)); 
                     lastInputs[i] = bit32.bor(bit32.band(lastInputs[i], bit32.bnot(mask)), onMask);
                     return true; -- send one at a time
                 end
                 mask = bit32.lshift(mask, 1);
+            end
+        else
+            local mask = bit32.lshift(1, rrCounter);
+            print("rr", rrCounter, address, switches, mask);
+            local onMask = bit32.band(switches, mask);
+            local sw = rrCounter + 1;
+            callback(address, sw, (onMask > 0)); 
+            rrCounter = rrCounter + 1;
+            if (rrCounter == 8) then
+                rrCounter = 0;
             end
         end
     end
     return false;
 end
 
-local function setNext()
+local function onTimeout(callback)
+    local t = getTime();
+    if ((t - lastTime) > timeout) then
+        callback();
+        lastTime = t;
+    end
 end
 
 local function run(n1, n2, n3, n4)
-    local t = getTime();
-    if ((t - lastTime) > timeout) then
-        lastTime = t;
-        local v1 = getShmVar(n1);
-        local v2 = getShmVar(n2);
-        local v3 = getShmVar(n3);
-        local v4 = getShmVar(n4);
-        if (not checkChanges({v1, v2, v3, v4})) then 
-            setNext();
+    onTimeout((function() 
+        local vt = {};
+        for _, nv in ipairs({n1, n2, n3, n4}) do
+            if (nv > 0) then
+                vt[#vt + 1] = getShmVar(nv);
+            end
         end
-    end
+        onChange(vt, encode);
+    end));
     return sbusEncodedValue;
 end
 
 return {input = inputs, run = run, output = output}; 
-
