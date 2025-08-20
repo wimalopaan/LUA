@@ -36,10 +36,8 @@ local function event(button)
         elseif (button < 0) then
             buttonstate = 1;
             return -1;
-        else
-            buttonstate = 0;
-            return 0;
         end
+        return 0;
     elseif (buttonstate == 1) then
         if (button == 0) then
             buttonstate = 0;
@@ -65,6 +63,8 @@ local function run(input, button, deadband, adjust)
                 state = 1;
                 thr_set = input;                
             end
+        elseif (evt == -1) then
+            state = 1;
         end
         return input, 0;
     elseif (state == 1) then -- on
