@@ -93,7 +93,7 @@ do not have a separate clutch switch.
 The mixer script has following inputs:
 
 * throttle/brake
-* 3pos momentary switch like `T5` or `T2` (be sure to set this switch to `3pos` in every flight-mode used
+* 3pos momentary switch like `T5` or `T2` as "Set/+" or "Res/-" (be sure to set this switch to `3pos` in every flight-mode used)
 * deadband to recognize brake activation
 * adjustment value for in/decresing the throttle via the switch
 
