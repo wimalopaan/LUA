@@ -82,6 +82,27 @@ additional correction algorithm. This is neccessary due to the geometry of the f
 The `increm.lua` mixer script implements an incremental channel: an output value that is the integral (sum over time) of 
 the choosen input scaled with some (speed) factor. This sometimes called hydraulic-simulation.
 
+[[tempo]]
+== Tempomat EdgeTx / OpenTx mixer script `tempo.lua`
+
+This mixer script is suitable for any sort of crawler. It realizes a _tempomat_, that is a circuit in real cars/vans that hold the velocity of the vehicle.
+
+The most common _user-interface_ in the real world to this device are the gas-, brake- and clutch-pedal as well as to buttons "Set/+" and "Res-". On the handset we mostly use only one stick for throttle/brake and 
+do not have a separate clutch switch.
+
+The mixer script has following inputs:
+
+* throttle/brake
+* 3pos momentary switch like `T5` or `T2` (be sure to set this switch to `3pos` in every flight-mode used
+* deadband to recognize brake activation
+* adjustment value for in/decresing the throttle via the switch
+
+It has two outputs:
+
+* throttle/brake to be used in any mixer
+* state (maybe used to trigger voice-anouncements)
+
+
 == EdgeTx Simulator
 
 As of version 2.11 the EdgeTx simulator supports using host serial ports (e.g. USB/serial adapters) as AUX1/2 in the simulator. These serial ports can be used for all purposes but for internal/external module connection.
