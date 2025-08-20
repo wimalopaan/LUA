@@ -87,7 +87,7 @@ the choosen input scaled with some (speed) factor. This sometimes called hydraul
 
 This mixer script is suitable for any sort of crawler. It realizes a _tempomat_, that is a circuit in real cars/vans that hold the velocity of the vehicle.
 
-The most common _user-interface_ in the real world to this device are the gas-, brake- and clutch-pedal as well as to buttons "Set/+" and "Res-". On the handset we mostly use only one stick for throttle/brake and 
+The most common _user-interface_ in the real world to this device are the gas-, brake- and clutch-pedal as well as to buttons "Set/+" and "Res/-". On the handset we mostly use only one stick for throttle/brake and 
 do not have a separate clutch switch.
 
 The mixer script has following inputs:
@@ -102,6 +102,14 @@ It has two outputs:
 * throttle/brake to be used in any mixer
 * state (maybe used to trigger voice-anouncements)
 
+Simple usage:
+
+Use the throttle-input and then set the value by pressing "Set/+" (e.g. `T5` up). The throttle value is now hold even if you release the throttle-input. If you increase the input over the already set value, the output follows. 
+If you lower the input, the output stays on the set value.
+
+If the throttle-input is set to brake, then the output follows the input as normal. Pressing "Res/-" (e.g. `T5` down) can restore the previous set value.
+
+If the throttle is hold, you can increase or decrese that value by " Set/+" or "Res/-".
 
 == EdgeTx Simulator
 
