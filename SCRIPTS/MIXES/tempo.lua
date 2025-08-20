@@ -37,12 +37,10 @@ local function event(button)
             buttonstate = 1;
             return -1;
         end
-        return 0;
     elseif (buttonstate == 1) then
         if (button == 0) then
             buttonstate = 0;
         end
-        return 0;
     end
     return 0;
 end
