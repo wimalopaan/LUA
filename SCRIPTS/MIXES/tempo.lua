@@ -16,20 +16,19 @@
 --
 
 local input = {
-    {"Input", SOURCE},
-    {"Button", SOURCE},
-    {"DeadB", VALUE, 0, 10, 1},
-    {"Adjust", VALUE, 1, 20, 10}
+    {"Input", SOURCE}, -- throttle input
+    {"Button", SOURCE}, -- 3pos momentary button: "Set/+" and "Res/-"
+    {"DeadB", VALUE, 0, 10, 1}, -- percent
+    {"Adjust", VALUE, 1, 20, 10} -- percent adjustment for "Set/+" and "Res/-"
 };
 local output = {
-    "Throttle",
-    "State"
+    "Throttle", -- throttle output (with tempomat)
+    "State" -- informative, maybe used to trigger voice anouncements
 };
 local thr_set = 0;
 local state = 0;
 local buttonstate = 0;
 local function event(button)
-    print("event", button); 
     if (buttonstate == 0) then
         if (button > 0) then
             buttonstate = 1;
@@ -60,19 +59,18 @@ local function clamp(v)
 end
 local function run(input, button, deadband, adjust)
     local evt = event(button);
-    print("evt", evt);
     if (state == 0) then -- off
         if (evt == 1) then
-            if (input > deadband) then
+            if (input > (deadband * 10.24)) then
                 state = 1;
                 thr_set = input;                
             end
         end
         return input, 0;
     elseif (state == 1) then -- on
-        if (input < -deadband) then -- brake -> off
+        if (input < -(deadband * 10.24)) then -- brake -> off
             state = 0;
-            return input, state;
+            return input, 0;
         else 
             if (evt == 1) then
                 thr_set = clamp(thr_set + adjust * 10.24);
