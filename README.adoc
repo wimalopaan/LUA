@@ -87,7 +87,7 @@ the choosen input scaled with some (speed) factor. This sometimes called hydraul
 
 This mixer script is suitable for any sort of crawler. It realizes a _tempomat_, that is a circuit in real cars/vans that hold the velocity of the vehicle.
 
-The most common _user-interface_ in the real world to this device are the gas-, brake- and clutch-pedal as well as to buttons "Set/+" and "Res/-". On the handset we mostly use only one stick for throttle/brake and 
+The most common _user-interface_ in the real world to this device comprises the gas-, brake- and clutch-pedals as well as two buttons "Set/+" and "Res/-". On the handset we mostly use only one stick for throttle/brake and 
 do not have a separate clutch switch.
 
 The mixer script has following inputs:
