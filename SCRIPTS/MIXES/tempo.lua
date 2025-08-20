@@ -15,6 +15,9 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- ToDo:
+-- restore the value smoothly instead of instantaneously
+
 local input = {
     {"Input", SOURCE}, -- throttle input
     {"Button", SOURCE}, -- 3pos momentary button: "Set/+" and "Res/-"
