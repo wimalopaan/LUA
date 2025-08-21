@@ -47,15 +47,6 @@ local function event(button)
     end
     return 0;
 end
-local function clamp(v)
-    if (v > 1024) then
-        return 1024;
-    elseif (v < -1024) then
-        return -1024;
-    else
-        return v;
-    end
-end
 local function run(input, button, deadband, adjust)
     local evt = event(button);
     if (state == 0) then -- off
@@ -74,9 +65,9 @@ local function run(input, button, deadband, adjust)
             return input, 0;
         else 
             if (evt == 1) then
-                thr_set = clamp(thr_set + adjust * 10.24);
+                thr_set = math.min(1024, thr_set + adjust * 10.24);
             elseif (evt == -1) then
-                thr_set = clamp(thr_set - adjust * 10.24);
+                thr_set = math.max(-1024, thr_set - adjust * 10.24);
             end
         end
     end
