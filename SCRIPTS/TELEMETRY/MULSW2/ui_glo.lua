@@ -40,6 +40,11 @@ local function init(instance, parent, page)
     if (uilib.global.radio ~= 2) then
         -- radio must have enough memory
         y = y + 10;
+        global:addLabel({x = 0, y = y, text = (function() return "Pages(*):"; end)});
+        global:addNumberEdit({x = 50, y = y, min = 1, max = 2, value = (function() return uilib.global.settings.pages; end),
+                                set = (function(v) uilib.global.settings.pages = v; saveSettings(); end)});
+
+        y = y + 10;
         global:addLabel({x = 0, y = y, text = (function() return "RF link:"; end)});
         global:addChoice({x = 50, y = y, values = {"CRSF", "S.Port", "SBus"}, 
                                 index = (function() return uilib.global.settings.rflink; end),

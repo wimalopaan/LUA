@@ -67,7 +67,7 @@ local function send()
       local physicalId = uilib.global.settings.SPort.Phy;
       local primId = 0x31; -- write command without read
       local dataId = (uilib.global.settings.SPort.App * 256) + uilib.global.settings.Address;
-      print("sport send WM", physicalId, primId, dataId, value);
+--      print("sport send WM", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   elseif (uilib.global.settings.SPort.Proto == 2) then -- protocol version 1.5
@@ -83,7 +83,7 @@ local function send()
         pwm = uilib.global.settings.buttons[i].sport.pwm_on;
       end
       local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
-      print("sport send ACW 1.5", physicalId, primId, dataId, value);
+--      print("sport send ACW 1.5", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   elseif (uilib.global.settings.SPort.Proto == 3) then -- protocol version 1.4
@@ -99,7 +99,7 @@ local function send()
         pwm = uilib.global.widget.settings.buttons[i].sport.pwm_on;
       end
       local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
-      print("sport send ACW 1.4", physicalId, primId, dataId, value);
+--      print("sport send ACW 1.4", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   end

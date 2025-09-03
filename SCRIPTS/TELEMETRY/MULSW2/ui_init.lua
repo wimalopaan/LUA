@@ -23,15 +23,19 @@ local global = {
     state = {
         buttons = {}
     };
-    version = 5,
-    settingsVersion = 3,
+    version = 7,
+    settingsVersion = 4,
     settingsFilename = env.dir .. model.getInfo().name .. ".lua",
 --    crsfProto = 2, -- always use SET4M
     radio = 1, -- 1: 192KB, 2: 128kb (disable some menus)
     shm = 0, -- SHM on b&w only available im compiled with SHMBW=YES (WM branch)
 }
+local function saveSettings() 
+    local serialize = loadScript(env.dir .. "table_write.lua", "btd")();
+    serialize.save(global.settings, global.settingsFilename);        
+end
 local function resetState() 
-    for i = 1, (global.settings.rows * global.settings.columns) do
+    for i = 1, (global.settings.rows * global.settings.columns * global.settings.pages) do
         global.state.buttons[i] = { value = 0 };
     end
 end
@@ -49,7 +53,7 @@ end
 local function resetButtons()
     global.settings.buttons = {};
     global.state.buttons = {};
-    for i = 1, (global.settings.rows * global.settings.columns) do
+    for i = 1, (global.settings.rows * global.settings.columns * global.settings.pages) do
         global.settings.buttons[i] = { name = "Output " .. i, switch = uilib.switchIndexNone,  
                                 activation_switch = 0, external_switch = 0,
                                 output = ((i - 1) % 8) + 1, address = global.settings.Address + ((i - 1) // 8)};
@@ -72,6 +76,7 @@ local function resetSettings()
     global.settings.show_physical = 1;
     global.settings.rows = 4;
     global.settings.columns = 2;
+    global.settings.pages = 1;
     resetButtons();
 end
 local function init()
@@ -92,7 +97,13 @@ local function init()
     local st = table_read.load(global.settingsFilename);
     if ((st ~= nil) and (st.version == global.settingsVersion)) then
         global.settings = st;
-        updateAddressButtonLookup();
+        if (#global.settings.buttons ~= (global.settings.rows * global.settings.columns * global.settings.pages)) then
+--            print("unmatched");
+            resetButtons();
+            saveSettings();
+        else
+            updateAddressButtonLookup();
+        end
     else
         resetSettings();
     end

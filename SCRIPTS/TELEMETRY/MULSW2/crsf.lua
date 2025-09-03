@@ -57,7 +57,7 @@ local setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4M;
 local function computeState4M(buttons)
   local s = 0;
   for _, btn in ipairs(buttons) do
-    print("button: ", btn, #uilib.global.state.buttons, uilib.global.state.buttons[btn]);
+--    print("button: ", btn, #uilib.global.state.buttons, uilib.global.state.buttons[btn]);
     if (uilib.global.settings.buttons[btn].output ~= nil) then
       local outnr = uilib.global.settings.buttons[btn].output - 1;
       if (uilib.global.state.buttons[btn].value == 1) then
@@ -73,7 +73,7 @@ local function sendSet4M()
   -- [N, A1, {H1, L1}, A2, {H2, L2}]
   local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
   for adr, buttons in pairs(uilib.global.state.addresses) do
-    print("adr:", adr, #buttons);
+--    print("adr:", adr, #buttons);
     payload[5] = payload[5] + 1;
     payload[#payload+1] = adr;
     local state4m = computeState4M(buttons);

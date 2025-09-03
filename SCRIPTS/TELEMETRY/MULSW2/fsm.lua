@@ -30,10 +30,14 @@ local function update()
   if (uilib.global.settings.rflink == uilib.global.RF.CRSF) then
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
+    else 
+      lastTimeSend = 0;
     end    
   elseif (uilib.global.settings.rflink == uilib.global.RF.SPORT) then
     if (sport.send() == true) then
       lastTimeSend = getTime();
+    else
+      lastTimeSend = 0;
     end    
   end
 end

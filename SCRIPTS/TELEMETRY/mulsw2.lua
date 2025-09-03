@@ -16,16 +16,19 @@
 --
 
 -- ToDo:
+-- implement 4-state switches (UI ???)
 -- replace SHM vars with GVs for SBus encoding
 -- enable SBus encoding
 -- recalculate address table after changing buttons address
--- recalculate addresses affter setting global address 
--- distinguish CRSF protos or use SET4M always
+-- recalculate addresses after setting global address 
 -- make rows/columns changeable -> more than one control page, more than two settings pages
 -- better textEdit: highlight only actual cha being edited
 
 -- Done:
 -- S.Port protocols
+-- immediate update (crsf may not be pushed immediately)
+-- more than 8 switches
+-- distinguish CRSF protos or use SET4M always
 
 local environment = {
     name = "MulSW",
@@ -36,13 +39,20 @@ local environment = {
 local ui = nil;
 
 local function init()
-    print("init");
+--    print("init");
     ui = loadScript(environment.dir .. "lcdui.lua", "btd")(environment);
     ui.initGlobal("ui_init.lua");
     ui.addBackground("ui_bck.lua");
-    local p = ui.addPage({script = "ui_ctrl.lua"});
+    local p = ui.addPage({script = "ui_ctrl.lua", instance = 1});
+    if (ui.global.settings.pages == 2) then
+        ui.addPage({script = "ui_ctrl.lua", instance = 2});
+    end
     ui.addPage({script = "ui_set.lua", instance = 1});
     ui.addPage({script = "ui_set.lua", instance = 2});
+    if (ui.global.settings.pages == 2) then
+        ui.addPage({script = "ui_set.lua", instance = 3});
+        ui.addPage({script = "ui_set.lua", instance = 4});
+    end
     ui.addPage({script = "ui_glo.lua"});
     ui.addPage({script = "ui_inf.lua"});
     ui.activate(p);

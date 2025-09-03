@@ -17,11 +17,11 @@
 
 local uilib, environment = ...
 
-local function init()
-    local control = uilib:setupPage({name = (function() return "Ctrl/" .. uilib.global.settings.name; end)});
+local function init(instance, parent, page)
+    local control = uilib:setupPage({name = (function() return "Ctrl/" .. uilib.global.settings.name .. " " .. instance; end)});
     for col = 1, uilib.global.settings.columns do
         for row = 1, uilib.global.settings.rows do
-            local i = row + (col - 1) * uilib.global.settings.rows;
+            local i = row + (col - 1) * uilib.global.settings.rows + (instance - 1) * uilib.global.settings.rows * uilib.global.settings.columns;
             control:addStateButton({x = (col - 1) * 70, y = (row - 1) * 14, 
                                         text = (function() return uilib.global.settings.buttons[i].name; end),
                                         press = (function()
