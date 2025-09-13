@@ -20,8 +20,12 @@
 --- Edgetx 2.11.2 momentary bug in EdgeTx, fix: PR 6460 
 
 -- bugs
+--- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
+ 
 
 -- todo
+--- add setting to activate color protocol setRGB
+--- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
 --- Set64 protocol
@@ -33,6 +37,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- implement color updates
 --- reset also external switches in mutex-group 
 --- add synchronization between this widget and mixer script crsfch.lua (suspend crsfch.lua as long as updates are send from widget)
 --- add exclusive-groups (default N/2 groups, select a group for a swicth or none)
@@ -87,7 +92,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 14;
+local version = 15;
 local settingsVersion = 20;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -427,6 +432,9 @@ local function askClose()
     lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() lvgl.exitFullScreen(); end) })
 end
   
+local function sendColors()
+    fsm.sendColors();
+end
 
 function widget.globalsPage() 
     lvgl.clear();
@@ -489,6 +497,7 @@ function widget.globalsPage()
                     end) } 
                 }},
                 {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
+                {type = "button", text = "Send Colors", press = (function() sendColors() end)},
                 {type = "hline", w = widget.zone.w / 2, h = 1 },
                 {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
@@ -607,7 +616,7 @@ local function createSettingsDetails(i, edit_width)
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Color:" },
                         { type = "color", get = (function() return widget.settings.buttons[i].color; end),
-                                            set = (function(v) widget.settings.buttons[i].color = v; end) },
+                                            set = (function(v) widget.settings.buttons[i].color = v; fsm.sendEvent(2); end) },
                         { type = "label", text = " TextColor:" },
                         { type = "color", get = (function() return widget.settings.buttons[i].textColor; end),
                                             set = (function(v) widget.settings.buttons[i].textColor = v; end) },                                     
@@ -746,7 +755,21 @@ local function configItemCallback(item)
     print("configItemCallback:", item);
 end 
 
+local lastTlm = 0;
+local function isConnected()
+    local tlm = getValue("RQly");
+    local r = false;
+    if (lastTlm == 0) and (tlm > 0) then
+        r = true;
+    end
+    lastTlm = tlm;
+    return r;
+end
+
 function widget.background()
+    if (isConnected()) then
+        fsm.sendEvent(2);
+    end
     fsm.tick(configItemCallback);
     readPhysical();
     shm.encode();

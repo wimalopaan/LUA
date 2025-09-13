@@ -32,6 +32,7 @@ local CRSF_REALM_SCHOTTEL         = 0xA2;
 local CRSF_SUBCMD_CC_ADATA        = 0x01;
 local CRSF_SUBCMD_CC_ACHUNK       = 0x02;
 local CRSF_SUBCMD_CC_ACHANNEL     = 0x03;
+local CRSF_SUBCMD_CC_ACHAN_EXT    = 0x04;
 local CRSF_SUBCMD_SWITCH_SET      = 0x01; -- 2-state switches
 local CRSF_SUBCMD_SWITCH_PROP_SET = 0x02;
 local CRSF_SUBCMD_SWITCH_REQ_T    = 0x03;
@@ -41,6 +42,7 @@ local CRSF_SUBCMD_SWITCH_REQ_DI   = 0x06; -- request device info
 local CRSF_SUBCMD_SWITCH_SET4     = 0x07; -- 4-state switches (8 switches) 2bytes payload
 local CRSF_SUBCMD_SWITCH_SET64    = 0x08; -- 64 x 4-state switches (8 groups of 8 switches) 3bytes payload
 local CRSF_SUBCMD_SWITCH_SET4M    = 0x09; -- 4-state switches (8 switches) 2bytes payload, multiple addresses
+local CRSF_SUBCMD_SWITCH_SETRGB   = 0x0a; 
 local CRSF_SUBCMD_SWITCH_INTERMOD = 0x10; -- intermodule command
 local CRSF_SUBCMD_SCHOTTEL_RESET  = 0x01;
 
@@ -159,6 +161,52 @@ local function send()
 --    print("senddata adr:", widget.options.Address, ret);
     return ret;
 end
+local function sendColorsForAddress(adr, buttons)
+  print("sendColorsForAddress", adr, buttons);
+  if (buttons == nil) then
+    return true;
+  end
+  -- [A, N, {O1/R1, G1/B1}, ..., {ON/RN,GNBN}] ; A: Address; Ox: 3-bit MSB output, Rx, Gx, Bx: 4-bit color
+  local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SETRGB, adr, 0};
+  for _, btn in ipairs(buttons) do
+    payload[6] = payload[6] + 1;
+    local c = bit32.rshift(widget.settings.buttons[btn].color, 16); -- RGB565 in upper half
+    local r = bit32.band(bit32.rshift(c, 11 + 1), 0x0f);
+    local g = bit32.band(bit32.rshift(c, 5 + 2), 0x0f);
+    local b = bit32.band(bit32.rshift(c, 1), 0x0f);
+    local b1 = bit32.band(bit32.lshift(widget.settings.buttons[btn].output - 1, 4), 0xf0) + r;
+    local b2 = bit32.lshift(g, 4) + b;
+    payload[#payload+1] = b1;
+    payload[#payload+1] = b2;
+    print("out:", widget.settings.buttons[btn].output - 1, c, r, g, b, b1, b2, widget.settings.buttons[btn].color);
+  end
+  return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
+end
+local colorIter = {adr = 0, btn = nil};
+local function resetColorSendingState()
+  print("resetColorSendingState");
+  local adr, btns = next(state.addresses, nil);
+  colorIter.adr = adr;
+  colorIter.btns = btns;
+end
+local function sendNextColor()
+--  print("sendNextColor");
+  if (colorIter.btn == nil) then
+    resetColorSendingState();
+  end
+  local r = sendColorsForAddress(colorIter.adr, colorIter.btns);
+  print("sendNextColor", r);
+  if (r) then
+    local adr, btns = next(state.addresses, colorIter.adr);
+    colorIter.adr = adr;
+    colorIter.btns = btns;
+    if (adr == nil) then
+      resetColorSendingState();
+      return true;
+    end
+  end
+  return false;
+end
 local function sendProp(channel, value)
     --print("sendprop adr:", widget.options.Address, channel, value);
     local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
@@ -223,6 +271,8 @@ end
   
 return {send = send, 
         sendProp = sendProp, 
+        sendNextColor = sendNextColor,
+        resetColorSending = resetColorSendingState,
         switchProtocol = switchProtocol,
         requestConfigItem = requestConfigItem, 
         readItem = readItem, 

@@ -71,10 +71,29 @@ local function onTimeout(f)
       update();
     end
 end
-
+local function getEvent()
+  local e = event;
+  event = 0;
+  return e;
+end
+local stateCounter = 0;
 local function tick(configCallback) 
---  local oldstate = state;
-  onTimeout(update);
+  local oldstate = state;
+  stateCounter = stateCounter + 1;
+  local e = getEvent();
+  if (state == 0) then -- normal
+    if (e == 1) or (e == 2) then
+      state = 1;
+    end
+    onTimeout(update);
+  elseif (state == 1) then -- send color
+    if (stateCounter > 3) then
+      state = 0;
+    end
+    if (crsf.sendNextColor()) then
+      state = 0;
+    end
+  end
 
   -- if (state == 0) then
   --   crsf.requestConfigItem(actual_item);
@@ -107,13 +126,17 @@ local function tick(configCallback)
   --     state = 0;
   --   end
   -- end
-  -- if (oldstate ~= state) then
-  --   print("state:", state, "item:", actual_item);    
-  -- end
+  if (oldstate ~= state) then
+    stateCounter = 0;
+  end
 end
-
+local function sendColors()
+  sendEvent(1);
+end
 return {tick = tick, 
         update = update,
         intervall = intervall,
         autoconf = autoconf,
+        sendColors = sendColors,
+        sendEvent = sendEvent
        };
