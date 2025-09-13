@@ -22,9 +22,7 @@
 -- bugs
 --- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
  
-
 -- todo
---- add setting to activate color protocol setRGB
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
@@ -37,6 +35,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- add setting to activate color protocol setRGB
 --- implement color updates
 --- reset also external switches in mutex-group 
 --- add synchronization between this widget and mixer script crsfch.lua (suspend crsfch.lua as long as updates are send from widget)
@@ -93,7 +92,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local version = 15;
-local settingsVersion = 20;
+local settingsVersion = 21;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -173,6 +172,7 @@ local function resetSettings()
     widget.settings.momentaryButton_radius = 20;
     widget.settings.show_physical = 1;
     widget.settings.activate_vswitches = 0;
+    widget.settings.activate_color_proto = 0;
     widget.settings.rows = 4;
     widget.settings.columns = 2;
     resetButtons();
@@ -497,11 +497,17 @@ function widget.globalsPage()
                     end) } 
                 }},
                 {type = "button", text = "Reset all Settings", press = (function() resetSettings() end)},
-                {type = "button", text = "Send Colors", press = (function() sendColors() end)},
+                {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+                    {type = "button", text = "Send Colors", press = (function() sendColors() end)},
+                    {type = "toggle", get = (function() return widget.settings.activate_color_proto; end), 
+                                      set = (function(v) widget.settings.activate_color_proto = v; end) }
+                    }
+                },
                 {type = "hline", w = widget.zone.w / 2, h = 1 },
                 {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
-                        {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)} }
+                        {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)} 
+                    }
                 }                        
             }}};
     widget.ui = page:build(uit);

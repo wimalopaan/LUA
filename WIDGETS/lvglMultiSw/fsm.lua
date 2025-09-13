@@ -82,8 +82,10 @@ local function tick(configCallback)
   stateCounter = stateCounter + 1;
   local e = getEvent();
   if (state == 0) then -- normal
-    if (e == 1) or (e == 2) then
-      state = 1;
+    if (widget.settings.activate_color_proto > 0) then
+      if (e == 1) or (e == 2) then
+        state = 1;
+      end    
     end
     onTimeout(update);
   elseif (state == 1) then -- send color
