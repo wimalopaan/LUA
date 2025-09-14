@@ -20,8 +20,6 @@
 --- Edgetx 2.11.2 momentary bug in EdgeTx, fix: PR 6460 
 
 -- bugs
---- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
---- theme colors are stored as indices, so: how to convert color indices to RGB565 / RGB565 values?
  
 -- todo
 --- implement 4-state switches(e.g. Led4x4) 
@@ -36,6 +34,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
+--- theme colors are stored as indices, so: how to convert color indices to RGB565 / RGB565 values?
 --- add setting to activate color protocol setRGB
 --- implement color updates
 --- reset also external switches in mutex-group 
