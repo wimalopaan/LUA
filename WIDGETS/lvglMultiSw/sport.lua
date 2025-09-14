@@ -73,7 +73,7 @@ local function send()
       local physicalId = widget.options.SPortPhy;
       local primId = 0x31; -- write command without read
       local dataId = (widget.options.SPortApp * 256) + widget.settings.buttons[i].address;
-      print("sport send WM", physicalId, primId, dataId, value);
+      --print("sport send WM", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   elseif (widget.options.SPortProto == 2) then -- protocol version 1.5
@@ -89,7 +89,7 @@ local function send()
         pwm = widget.settings.buttons[i].sport.pwm_on;
       end
       local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
-      print("sport send ACW", physicalId, primId, dataId, value);
+      --print("sport send ACW", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   elseif (widget.options.SPortProto == 3) then -- protocol version 1.4
@@ -105,7 +105,7 @@ local function send()
         pwm = widget.settings.buttons[i].sport.pwm_on;
       end
       local value = bit32.lshift(type, 24) + bit32.lshift(option, 16) + bit32.lshift(switch, 8) + pwm; 
-      print("sport send ACW", physicalId, primId, dataId, value);
+      --print("sport send ACW", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
   end

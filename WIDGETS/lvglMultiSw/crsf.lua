@@ -68,7 +68,7 @@ if string.sub(rv, -5) == "-simu" then
   end
 end
 local function switchProtocol(proto)
-  print("switchProtocol", proto);
+  --print("switchProtocol", proto);
   if (proto == 1) then
     setProtocolVersion = CRSF_SUBCMD_SWITCH_SET4;
   elseif (proto == 2) then
@@ -106,7 +106,7 @@ end
 local function computeState4M(buttons)
   local s = 0;
   for _, btn in ipairs(buttons) do
-    print("button: ", btn, #state.buttons, state.buttons[btn]);
+    --print("button: ", btn, #state.buttons, state.buttons[btn]);
     if (widget.settings.buttons[btn].output ~= nil) then
       local outnr = widget.settings.buttons[btn].output - 1;
       if (state.buttons[btn].value == 1) then
@@ -136,7 +136,7 @@ local function sendSet4M()
   -- [N, A1, {H1, L1}, A2, {H2, L2}]
   local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
   for adr, buttons in pairs(state.addresses) do
-    print("adr:", adr, #buttons);
+    --print("adr:", adr, #buttons);
     payload[5] = payload[5] + 1;
     payload[#payload+1] = adr;
     local state4m = computeState4M(buttons);
@@ -148,7 +148,7 @@ local function sendSet4M()
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
 end
 local function send()
-  print("crsf send:", setProtocolVersion);
+  --print("crsf send:", setProtocolVersion);
     local ret = false;
     if (setProtocolVersion == CRSF_SUBCMD_SWITCH_SET) then
         ret = sendSet();
@@ -162,7 +162,7 @@ local function send()
     return ret;
 end
 local function sendColorsForAddress(adr, buttons)
-  print("sendColorsForAddress", adr, buttons);
+  --print("sendColorsForAddress", adr, buttons);
   if (buttons == nil) then
     return true;
   end
@@ -170,7 +170,12 @@ local function sendColorsForAddress(adr, buttons)
   local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SETRGB, adr, 0};
   for _, btn in ipairs(buttons) do
     payload[6] = payload[6] + 1;
-    local c = bit32.rshift(widget.settings.buttons[btn].color, 16); -- RGB565 in upper half
+    local c = 0;
+    if (bit32.band(widget.settings.buttons[btn].color, 0x8000) > 0) then
+      c = bit32.rshift(widget.settings.buttons[btn].color, 16); -- RGB565 in upper half
+    else
+      c = bit32.rshift(lcd.getColor(widget.settings.buttons[btn].color), 16);
+    end
     local r = bit32.band(bit32.rshift(c, 11 + 1), 0x0f);
     local g = bit32.band(bit32.rshift(c, 5 + 2), 0x0f);
     local b = bit32.band(bit32.rshift(c, 1), 0x0f);
@@ -178,13 +183,13 @@ local function sendColorsForAddress(adr, buttons)
     local b2 = bit32.lshift(g, 4) + b;
     payload[#payload+1] = b1;
     payload[#payload+1] = b2;
-    print("out:", widget.settings.buttons[btn].output - 1, c, r, g, b, b1, b2, widget.settings.buttons[btn].color);
+--    print("out:", widget.settings.buttons[btn].output - 1, c, r, g, b, b1, b2, widget.settings.buttons[btn].color);
   end
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
 end
 local colorIter = {adr = 0, btn = nil};
 local function resetColorSendingState()
-  print("resetColorSendingState");
+  --print("resetColorSendingState");
   local adr, btns = next(state.addresses, nil);
   colorIter.adr = adr;
   colorIter.btns = btns;
@@ -195,7 +200,7 @@ local function sendNextColor()
     resetColorSendingState();
   end
   local r = sendColorsForAddress(colorIter.adr, colorIter.btns);
-  print("sendNextColor", r);
+  --print("sendNextColor", r);
   if (r) then
     local adr, btns = next(state.addresses, colorIter.adr);
     colorIter.adr = adr;

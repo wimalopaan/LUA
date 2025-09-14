@@ -21,6 +21,7 @@
 
 -- bugs
 --- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
+--- theme colors are stored as indices, so: how to convert color indices to RGB565 / RGB565 values?
  
 -- todo
 --- implement 4-state switches(e.g. Led4x4) 
@@ -129,7 +130,7 @@ local function resetState()
     end
 end
 local function updateAddressButtonLookup()
-    print("updateAddressButtonLookup", #widget.settings.buttons);
+    -- print("updateAddressButtonLookup", #widget.settings.buttons);
     state.addresses = {};
     for i, btn in ipairs(widget.settings.buttons) do
         if (state.addresses[btn.address] == nil) then
@@ -142,7 +143,7 @@ local function updateAddressButtonLookup()
     for _ in pairs(state.addresses) do
         count = count + 1; -- need to count because #-op does count only contiguos tables 
     end
-    print("count:", count);
+    -- print("count:", count);
     if (count > 1) then -- use SET4M protocol
         crsf.switchProtocol(2);
     else
@@ -200,7 +201,7 @@ local function activateVirtualSwitches()
     if (widget.settings.activate_vswitches > 0) then
         if (hasVirtualInputs) then
             for i = 1, 64 do
-                print("activate vsw:", i);
+                -- print("activate vsw:", i);
                 activateVirtualSwitch(i, true);        
             end
         end        
@@ -255,7 +256,7 @@ local function readPhysical()
 end
 
 function widget.switchPage(id)
-    print("switchPage", id);
+    --print("switchPage", id);
     lvgl.clear()
     if (id == PAGE_CONTROL) then
         widget.controlPage()
@@ -264,7 +265,7 @@ function widget.switchPage(id)
     elseif (id == PAGE_GLOBALS) then
         widget.globalsPage()
     else
-        print("unknown id:", id)
+        --print("unknown id:", id)
     end
     widget.activePage = id
     saveSettings();
@@ -285,12 +286,12 @@ local function setLSorVs(sw, on)
         if (swtype == "L") then
             local lsnumber = string.sub(swname, 2, 3);
             local lsn = tonumber(lsnumber) - 1;
-            print("LS: ", lsnumber, lsn, on);
+            --print("LS: ", lsnumber, lsn, on);
             setStickySwitch(lsn, on);
         elseif (swtype == "V") then
             if (hasVirtualInputs) then
                 local vsnumber = string.sub(swname, 3, 4);
-                print("VS: ", swname, vsnumber, on);
+                --print("VS: ", swname, vsnumber, on);
                 setVirtualSwitch(vsnumber, on);
             end
         end
@@ -332,7 +333,7 @@ local function isSwitchActive(i)
 end
 
 local function createButton(i, width)
-    print("createButton");
+    --print("createButton");
     if (widget.settings.buttons[i].visible == 0) then
         return;
     end
@@ -514,7 +515,7 @@ function widget.globalsPage()
 end
 
 function widget.controlPage()
-    print("controlPage", widget);
+    --print("controlPage", widget);
     lvgl.clear();
     local page = lvgl.page({
         title = titleString(),
@@ -559,7 +560,7 @@ function widget.controlPage()
 end
 
 local function createSettingsDetails(i, edit_width) 
-    print("createDetails", i);
+    --print("createDetails", i);
     local filter =  lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
     local setsw_filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
     local setsw_text = " Set LS:"
@@ -725,7 +726,7 @@ end
 
 local initialized = false;
 function widget.update()
-    print("widget.update");
+    --print("widget.update");
     local changed = updateFilename();
     fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
     fsm.autoconf(widget.options.Autoconf);
@@ -758,7 +759,7 @@ function widget.update()
 end
 
 local function configItemCallback(item)
-    print("configItemCallback:", item);
+    --print("configItemCallback:", item);
 end 
 
 local lastTlm = 0;

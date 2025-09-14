@@ -50,17 +50,17 @@ local function update()
     if (crsf.send() == true) then
       lastTimeSend = getTime();     
       setShmVar(widget.options.ShmSync, 0); -- better decrement
-      print("crsf OK");
+      --print("crsf OK");
     else
       lastTimeSend = 0; -- reset next cycle
-      print("crsf NOK");
+      --print("crsf NOK");
     end   
   end  
   if (widget.options.SPort == 1) then
     if (sport.send() == true) then
       lastTimeSend = getTime();
     else
-      print("sport not send");
+      --print("sport not send");
     end    
   end
 end
