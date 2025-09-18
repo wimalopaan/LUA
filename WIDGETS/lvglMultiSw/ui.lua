@@ -34,6 +34,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- implement seetings version mirgration (save old settings in: <name>_<address>.lua.<version>)
 --- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
 --- theme colors are stored as indices, so: how to convert color indices to RGB565 / RGB565 values?
 --- add setting to activate color protocol setRGB
@@ -92,7 +93,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 15;
+local version = 16;
 local settingsVersion = 21;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -130,7 +131,7 @@ local function resetState()
     end
 end
 local function updateAddressButtonLookup()
-    -- print("updateAddressButtonLookup", #widget.settings.buttons);
+    print("updateAddressButtonLookup", #widget.settings.buttons);
     state.addresses = {};
     for i, btn in ipairs(widget.settings.buttons) do
         if (state.addresses[btn.address] == nil) then
@@ -198,6 +199,7 @@ end
 updateFilename();
 
 local function activateVirtualSwitches() 
+    print("activateVirtualSwitches");
     if (widget.settings.activate_vswitches > 0) then
         if (hasVirtualInputs) then
             for i = 1, 64 do
@@ -257,6 +259,7 @@ end
 
 function widget.switchPage(id)
     --print("switchPage", id);
+    fsm.sendEvent(2);
     lvgl.clear()
     if (id == PAGE_CONTROL) then
         widget.controlPage()
@@ -714,19 +717,52 @@ function widget.settingsPage()
     widget.ui = page:build(uit);
 end
 
+local oldSettings = nil;
 function widget.widgetPage()
     lvgl.clear();
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
-            { type = "label", text = widget.settings.name .. "@" .. addressString(), w = widget.zone.x, align = CENTER }, }
+            { type = "label", text = (function() 
+                if (oldSettings ~= nil) then
+                    return widget.settings.name .. "@" .. addressString() .. " (CV)";
+                else
+                    return widget.settings.name .. "@" .. addressString();
+                end
+                end), 
+                w = widget.zone.x, align = CENTER }, }
         }
     });
+end
+local function convertSettings(t)
+    if (t.version ~= nil) then
+        resetSettings();
+        for k, v in pairs(t) do
+--            print("cv:", k, v);
+            if (k ~= "buttons") then
+                widget.settings[k] = v;
+            else
+                for bi, b in ipairs(t.buttons) do
+                    for kk, vv in pairs(b) do
+--                        print("cv button:", bi, kk, vv);
+                        widget.settings.buttons[bi][kk] = vv;                    
+                    end
+                end
+            end
+        end
+        widget.settings.version = settingsVersion;
+        return true;
+    end
+    return false;
 end
 
 local initialized = false;
 function widget.update()
     --print("widget.update");
+    if (oldSettings ~= nil) then
+        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
+        oldSettings = nil;
+    end
     local changed = updateFilename();
     fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
     fsm.autoconf(widget.options.Autoconf);
@@ -737,7 +773,11 @@ function widget.update()
                 widget.settings = st;
                 resetState();
             else
-                resetSettings();
+                if (not convertSettings(st)) then
+                    resetSettings();
+                else
+                    oldSettings = st;
+                end
                 changed = true;
             end
         else -- no file
