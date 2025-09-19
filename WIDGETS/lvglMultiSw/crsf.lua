@@ -187,26 +187,16 @@ local function sendColorsForAddress(adr, buttons)
   end
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payload);    
 end
-local colorIter = {adr = 0, btn = nil};
-local function resetColorSendingState()
-  --print("resetColorSendingState");
-  local adr, btns = next(state.addresses, nil);
-  colorIter.adr = adr;
-  colorIter.btns = btns;
-end
+local colorIter = {adr = nil, btn = nil};
 local function sendNextColor()
---  print("sendNextColor");
-  if (colorIter.btn == nil) then
-    resetColorSendingState();
+  if (colorIter.adr == nil) then
+    colorIter.adr, colorIter.btn = next(state.addresses);
   end
-  local r = sendColorsForAddress(colorIter.adr, colorIter.btns);
-  --print("sendNextColor", r);
+  local r = sendColorsForAddress(colorIter.adr, colorIter.btn);
+  print("sendNextColor", colorIter.adr, r);
   if (r) then
-    local adr, btns = next(state.addresses, colorIter.adr);
-    colorIter.adr = adr;
-    colorIter.btns = btns;
-    if (adr == nil) then
-      resetColorSendingState();
+    colorIter.adr, colorIter.btn = next(state.addresses, colorIter.adr);
+    if (colorIter.adr == nil) then
       return true;
     end
   end
