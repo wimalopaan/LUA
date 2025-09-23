@@ -424,7 +424,7 @@ local function createButton(i, width)
                 end
              end)(), 
               w = width / 3, font = widget.settings.buttons[i].font},
-            { type = "slider", min = 0, max = 255, get = (function() return state.buttons[i].value; end),
+            { type = "slider", min = 0, max = 100, get = (function() return state.buttons[i].value; end),
                                                       set = (function(v) state.buttons[i].value = v; crsf.sendProp(i, v); end), w = (2 * width) / 3,
                                                       active = (function() if (widget.settings.buttons[i].source > 0) then return false; else return true; end; end),
                                                       color = widget.settings.buttons[i].color
