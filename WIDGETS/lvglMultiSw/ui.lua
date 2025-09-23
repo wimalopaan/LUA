@@ -34,6 +34,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- sendProp Bug
 --- implement seetings version mirgration (save old settings in: <name>_<address>.lua.<version>)
 --- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
 --- theme colors are stored as indices, so: how to convert color indices to RGB565 / RGB565 values?
@@ -93,7 +94,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 16;
+local version = 17;
 local settingsVersion = 21;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -423,7 +424,7 @@ local function createButton(i, width)
                 end
              end)(), 
               w = width / 3, font = widget.settings.buttons[i].font},
-            { type = "slider", min = -100, max = 100, get = (function() return state.buttons[i].value; end),
+            { type = "slider", min = 0, max = 255, get = (function() return state.buttons[i].value; end),
                                                       set = (function(v) state.buttons[i].value = v; crsf.sendProp(i, v); end), w = (2 * width) / 3,
                                                       active = (function() if (widget.settings.buttons[i].source > 0) then return false; else return true; end; end),
                                                       color = widget.settings.buttons[i].color

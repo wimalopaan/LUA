@@ -205,7 +205,7 @@ end
 local function sendProp(channel, value)
     --print("sendprop adr:", widget.options.Address, channel, value);
     local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
-                          widget.options.Address, channel, value };
+                          widget.options.Address, widget.settings.buttons[channel].output - 1, value };
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end    
 
