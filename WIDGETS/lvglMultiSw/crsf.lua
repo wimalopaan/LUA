@@ -17,7 +17,7 @@
 
 local state, widget, dir, util = ... 
 
-local CRSF_ADDRESS_CONTROLLER     = 0xC8;
+local CRSF_ADDRESS_CONTROLLER     = 0xC8; 
 local CRSF_ADDRESS_TRANSMITTER    = 0xEA;
 local CRSF_ADDRESS_CC             = 0xA0; -- non-standard
 local CRSF_ADDRESS_SWITCH         = 0xA1; -- non-standard
@@ -120,7 +120,7 @@ local function computeState4M(buttons)
 end
 local function sendSet()
   local state2 = computeState2();
-  local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
+  local payloadOut = { widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET,
                        widget.options.Address, state2 };
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
 end
@@ -128,13 +128,13 @@ local function sendSet4()
   local state4 = computeState4();
   local state_high = bit32.rshift(state4, 8);
   local state_low = bit32.band(state4, 0xff);
-  local payloadOut = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
+  local payloadOut = {widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
                       widget.options.Address, state_high, state_low };
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
 end
 local function sendSet4M()
   -- [N, A1, {H1, L1}, A2, {H2, L2}]
-  local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
+  local payload = {widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
   for adr, buttons in pairs(state.addresses) do
     --print("adr:", adr, #buttons);
     payload[5] = payload[5] + 1;
@@ -167,7 +167,7 @@ local function sendColorsForAddress(adr, buttons)
     return true;
   end
   -- [A, N, {O1/R1, G1/B1}, ..., {ON/RN,GNBN}] ; A: Address; Ox: 3-bit MSB output, Rx, Gx, Bx: 4-bit color
-  local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SETRGB, adr, 0};
+  local payload = {widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SETRGB, adr, 0};
   for _, btn in ipairs(buttons) do
     payload[6] = payload[6] + 1;
     local c = 0;
@@ -204,21 +204,21 @@ local function sendNextColor()
 end
 local function sendProp(channel, value)
     --print("sendprop adr:", widget.options.Address, channel, value);
-    local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
+    local payloadOut = { widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
                           widget.options.Address, widget.settings.buttons[channel].output - 1, value };
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end    
 
 local function requestConfigItem(nr)
     --print("reg config item adr:", widget.options.Address, nr);
-    local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_REQ_CI, 
+    local payloadOut = { widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_REQ_CI, 
                          widget.options.Address, nr };
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end
 
 local function requestDeviceInfo()
     --print("reg device info adr:", widget.options.Address);
-    local payloadOut = { CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_REQ_DI, 
+    local payloadOut = { widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_REQ_DI, 
                          widget.options.Address};
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end

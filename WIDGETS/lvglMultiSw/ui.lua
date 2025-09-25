@@ -22,6 +22,7 @@
 -- bugs
  
 -- todo
+--- add command broadcast address option (does ELRS-3 really route command packages with bcast address? how does ELRS-V4)
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
@@ -94,8 +95,8 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 17;
-local settingsVersion = 21;
+local version = 18;
+local settingsVersion = 23;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -152,22 +153,25 @@ local function updateAddressButtonLookup()
         crsf.switchProtocol(1);
     end
 end
+local function resetButton(i)
+    widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1,
+                            exclusive_group = 0,
+                            activation_switch = 0, external_switch = 0, image = "",
+                            output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
+                            sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
+                            color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
+end
 local function resetButtons()
     widget.settings.buttons = {};
     state.buttons = {};
     for i = 1, (widget.settings.rows * widget.settings.columns) do
-        widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1,
-                                exclusive_group = 0,
-                                activation_switch = 0, external_switch = 0, image = "",
-                                output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
-                                sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
-                                color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
+        resetButton(i);
     end
     updateAddressButtonLookup();
     resetState();    
     saveSettings();
 end
-local function resetSettings() 
+local function resetSettingsOnly()
     widget.settings.version = settingsVersion;
     widget.settings.imagesdir = "/IMAGES/";
     widget.settings.name = "Beleuchtung";
@@ -178,6 +182,10 @@ local function resetSettings()
     widget.settings.activate_color_proto = 0;
     widget.settings.rows = 4;
     widget.settings.columns = 2;
+    widget.settings.commandBroadcastAddress = 0xc8;
+end
+local function resetSettings() 
+    resetSettingsOnly();
     resetButtons();
 end
 resetSettings();
@@ -258,7 +266,7 @@ local function readPhysical()
     end
 end
 
-function widget.switchPage(id)
+function widget.switchPage(id, nosave)
     --print("switchPage", id);
     fsm.sendEvent(2);
     lvgl.clear()
@@ -271,8 +279,10 @@ function widget.switchPage(id)
     else
         --print("unknown id:", id)
     end
-    widget.activePage = id
-    saveSettings();
+    widget.activePage = id;
+    if (not nosave) then
+        saveSettings();    
+    end
 end
 
 local function invert(v) 
@@ -483,6 +493,12 @@ function widget.globalsPage()
                                       set = (function(v) widget.settings.show_physical = v; end) }
                 }},
                 vswitch_box,
+                {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+                    {type = "label", text = "Command broadcast address: "},
+                    {type = "numberEdit", min = 0, max = 0xcf, w = 50, 
+                                    get = (function() return widget.settings.commandBroadcastAddress; end), 
+                                    set = (function(v) widget.settings.commandBroadcastAddress = v; end) } 
+                }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Rows: "},
                     {type = "numberEdit", min = 1, max = 16, w = 40, get = (function() return widget.settings.rows; end), 
@@ -737,21 +753,22 @@ function widget.widgetPage()
 end
 local function convertSettings(t)
     if (t.version ~= nil) then
-        resetSettings();
+        resetSettingsOnly();
         for k, v in pairs(t) do
---            print("cv:", k, v);
             if (k ~= "buttons") then
                 widget.settings[k] = v;
             else
                 for bi, b in ipairs(t.buttons) do
+                    resetButton(bi);
                     for kk, vv in pairs(b) do
---                        print("cv button:", bi, kk, vv);
+--                        print("cv button:", bi, kk, vv, widget.settings.buttons[bi]);
                         widget.settings.buttons[bi][kk] = vv;                    
                     end
                 end
             end
         end
         widget.settings.version = settingsVersion;
+        resetState();
         return true;
     end
     return false;
@@ -790,7 +807,7 @@ function widget.update()
     updateAddressButtonLookup();
     activateVirtualSwitches();
     if (lvgl.isFullScreen() or lvgl.isAppMode()) then
-        widget.switchPage(PAGE_CONTROL);
+        widget.switchPage(PAGE_CONTROL, true);
     else
         widget.widgetPage();
     end
