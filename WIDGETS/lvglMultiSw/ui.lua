@@ -36,6 +36,7 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- configure / set LS or VS by telemetry 
 --- get ArduPilot/PassThru tunnel messages transporting MultiSwitch-Input (In0, In1) states (make that optional)
 --- display ArduPilot/PassThru SubType=Switch and AppId=Status in header line or left/right of buttons
 --- add command broadcast address option (ELRS V3 does not route BCast. ELRS V4 is correct )
@@ -74,9 +75,10 @@ widget.options = options;
 widget.zone = zone;
 widget.name = name;
 
-local PAGE_CONTROL  = 1;
-local PAGE_SETTINGS = 2;
-local PAGE_GLOBALS  = 3;
+local PAGE_CONTROL    = 1;
+local PAGE_SETTINGS   = 2;
+local PAGE_GLOBALS    = 3;
+local PAGE_TELEMETRY  = 4;
 
 widget.ui = nil;
 widget.activePage = PAGE_CONTROL;
@@ -99,8 +101,8 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 19;
-local settingsVersion = 24;
+local version = 20;
+local settingsVersion = 25;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -175,6 +177,11 @@ local function resetButton(i)
 end
 local function resetButtons()
     widget.settings.buttons = {};
+    widget.settings.telemActions = {};
+    for i = 1, 8 do
+        widget.settings.telemActions[i] = {name = "Status " .. i, input = i, switch = 0, 
+                                            colorOff = COLOR_THEME_SECONDARY2, colorOn = COLOR_THEME_WARNING};
+    end
     state.buttons = {};
     for i = 1, (widget.settings.rows * widget.settings.columns) do
         resetButton(i);
@@ -289,6 +296,8 @@ function widget.switchPage(id, nosave)
         widget.settingsPage()
     elseif (id == PAGE_GLOBALS) then
         widget.globalsPage()
+    elseif (id == PAGE_TELEMETRY) then
+        widget.telemetryPage()
     else
         --print("unknown id:", id)
     end
@@ -324,6 +333,7 @@ local function setLSorVs(sw, on)
         end
     end
 end
+widget.setLSorVs = setLSorVs;
 
 local function processButtonGroup(bnum) 
     local egr = widget.settings.buttons[bnum].exclusive_group;
@@ -545,7 +555,8 @@ function widget.globalsPage()
                 {type = "hline", w = widget.zone.w / 2, h = 1 },
                 {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
-                        {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)} 
+                        {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)}, 
+                        {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)} 
                     }
                 }                        
             }}};
@@ -561,9 +572,9 @@ local function leftStatusBit(i)
     local r = {type = "rectangle", x = xo, y = yo + (i - 1) * (dy + h), w = w, h = h, filled = true,
                                    color = (function() 
                                     if (state.remoteStatus[i] > 0) then
-                                        return COLOR_THEME_WARNING;
+                                        return widget.settings.telemActions[i].colorOn;
                                     else
-                                        return COLOR_THEME_SECONDARY2; 
+                                        return widget.settings.telemActions[i].colorOff;
                                     end
                                    end)};
     return r;                   
@@ -577,10 +588,11 @@ local function rightStatusBit(i)
     local h = 20;
     local r = {type = "rectangle", x = LCD_W - xo - w, y = yo + (i - 1) * (dy + h), w = w, h = h, filled = true,
                                    color = (function() 
-                                    if (state.remoteStatus[i + 4] > 0) then
-                                        return COLOR_THEME_WARNING;
+                                    local ii = i + 4;
+                                    if (state.remoteStatus[ii] > 0) then
+                                        return widget.settings.telemActions[ii].colorOn;
                                     else
-                                        return COLOR_THEME_SECONDARY2; 
+                                        return widget.settings.telemActions[ii].colorOff;
                                     end
                                    end)};
     return r;                   
@@ -623,7 +635,9 @@ function widget.controlPage()
         { type = "hline", w = widget.zone.w / 2, h = 1 },
         { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                 {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
-                {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)} }
+                {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
+                {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)} 
+            }
         }
     }}};
     if (widget.settings.statusPassthru > 0) then
@@ -735,7 +749,9 @@ local function createSettingsDetails(i, edit_width)
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)},
             {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
-            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)} }
+            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
+            {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)}
+            }
         };
     page:build(uit);
 end
@@ -789,7 +805,76 @@ function widget.settingsPage()
     uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)},
-            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)} }
+            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
+            {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)} 
+        }
+        };
+    widget.ui = page:build(uit);
+end
+
+local function statusRow(r)
+    local sw_filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
+    if (lvgl.SW_VIRTUAL ~= nil) then
+        sw_filter = sw_filter | lvgl.SW_VIRTUAL;
+    end
+    return {
+        type = "box",
+        flexFlow = lvgl.FLOW_ROW,
+        children = {
+            {type = "label", text = "Input " .. r},
+            {type = "textEdit", value = widget.settings.telemActions[r].name, 
+                    w = 80, maxLen = 16, set = (function(s) widget.settings.telemActions[r].name = s; end) },
+            {type = "label", text = " Bit:" },
+            {type = "numberEdit", min = 1, max = 8, w = 20, get = (function() return widget.settings.telemActions[r].input; end), 
+                                                            set = (function(v) widget.settings.telemActions[r].input = v; end)},
+            {type = "switch", filter = sw_filter, w = 40,
+                            get = (function() return widget.settings.telemActions[r].switch; end), 
+                            set = (function(s) widget.settings.telemActions[r].switch = s; end) },
+            {type = "label", text = " On:" },
+            {type = "color", get = (function() return widget.settings.telemActions[r].colorOn; end),
+                                            set = (function(v) widget.settings.telemActions[r].colorOn = v; end) },
+            {type = "label", text = " Off:" },
+            {type = "color", get = (function() return widget.settings.telemActions[r].colorOff; end),
+                                            set = (function(v) widget.settings.telemActions[r].colorOff = v; end) },
+        }
+    };
+end
+
+local function statusRows()
+    return {{
+        type = "box",
+        flexFlow = lvgl.FLOW_COLUMN,
+        children = (function()
+            local col = {};
+            for r = 1, 8 do
+                col[#col+1] = statusRow(r);
+            end
+            return col;
+        end)()
+    }
+    };
+end
+
+function widget.telemetryPage()
+    lvgl.clear();
+    local page = lvgl.page({
+        title = titleString(),
+        subtitle = "Telemetry-Settings",
+        back = (function() askClose(); end),
+    });
+    local uit = {{
+            type = "box",
+            flexFlow = lvgl.FLOW_COLUMN,
+            flexPad = lvgl.PAD_LARGE,
+            w = widget.zone.w,
+            children = statusRows()
+         }};
+    uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
+    uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)},
+            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
+            {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)} 
+        }
         };
     widget.ui = page:build(uit);
 end
@@ -807,7 +892,8 @@ function widget.widgetPage()
                     return widget.settings.name .. "@" .. addressString();
                 end
                 end), 
-                w = widget.zone.x, align = CENTER }, }
+                w = widget.zone.x, align = CENTER }, 
+            }
         }
     });
 end

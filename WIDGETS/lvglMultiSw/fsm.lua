@@ -64,19 +64,30 @@ local function update()
     end    
   end
 end
+local lastBits = 0;
 local rptp = 0;
 local function readStatusBits()
   if (widget.settings.statusPassthru > 0) then
     local bits = crsf.readPassThru();
     if (bits ~= nil) then
       rptp = rptp + 1;
+      local changedBits = bit32.bxor(bits, lastBits);
+      lastBits = bits;
       local mask = 1;
       for i = 1, 8 do
         local b = bit32.band(bits, mask);
-        if (b > 0) then
-          uistate.remoteStatus[i] = 1;
-        else 
-          uistate.remoteStatus[i] = 0;
+        local changed = bit32.band(changedBits, mask);
+        for a = 1, 8 do
+          if (widget.settings.telemActions[a].input == i) then
+            if (changed > 0) then
+                widget.setLSorVs(widget.settings.telemActions[a].switch, (b > 0));
+            end
+            if (b > 0) then
+              uistate.remoteStatus[a] = 1;
+            else 
+              uistate.remoteStatus[a] = 0;
+            end            
+          end
         end
         mask = mask * 2;
       end     
