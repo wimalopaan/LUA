@@ -18,11 +18,12 @@
 --  requires
 --- EdgeTx 2.11.1
 --- Edgetx 2.11.2 momentary bug in EdgeTx, fix: PR 6460 
+--- EdgeTx 2.11.3 
 
 -- bugs
  
 -- todo
---- add command broadcast address option (does ELRS-3 really route command packages with bcast address? how does ELRS-V4)
+--- move some Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
@@ -35,6 +36,9 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- get ArduPilot/PassThru tunnel messages transporting MultiSwitch-Input (In0, In1) states (make that optional)
+--- display ArduPilot/PassThru SubType=Switch and AppId=Status in header line or left/right of buttons
+--- add command broadcast address option (ELRS V3 does not route BCast. ELRS V4 is correct )
 --- sendProp Bug
 --- implement seetings version mirgration (save old settings in: <name>_<address>.lua.<version>)
 --- converting theme / predefined colors to RGB888 does not work correctly. Workaround: use RGB color picker
@@ -90,13 +94,13 @@ local serialize = loadScript(dir .. "tableser.lua", "btd")();
 local util      = loadScript(dir .. "util.lua", "btd")();
 local crsf      = loadScript(dir .. "crsf.lua", "btd")(state, widget, dir, util);
 local sport     = loadScript(dir .. "sport.lua", "btd")(state, widget, dir, util);
-local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util);
+local fsm       = loadScript(dir .. "fsm.lua", "btd")(crsf, sport, widget, util, state);
 local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 18;
-local settingsVersion = 23;
+local version = 19;
+local settingsVersion = 24;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -119,7 +123,11 @@ local function addressString()
 end
 
 local function titleString() 
-    return widget.name .. "@" .. addressString() .. " : " .. widget.settings.name .. "  " .. versionString;
+    local statusString = "[_]";
+    if (fsm.getStatusOk()) then
+        statusString = "[C]";
+    end
+    return widget.name .. "@" .. addressString() .. " : " .. widget.settings.name .. "  " .. versionString .. " " .. statusString;
 end
 
 local function saveSettings() 
@@ -128,6 +136,10 @@ local function saveSettings()
     end
 end
 local function resetState() 
+    state.remoteStatus = {};
+    for i = 1, 8 do
+        state.remoteStatus[i] = 0;
+    end
     for i = 1, (widget.settings.rows * widget.settings.columns) do
         state.buttons[i] = { value = 0 };
     end
@@ -183,6 +195,7 @@ local function resetSettingsOnly()
     widget.settings.rows = 4;
     widget.settings.columns = 2;
     widget.settings.commandBroadcastAddress = 0xc8;
+    widget.settings.statusPassthru = 0;
 end
 local function resetSettings() 
     resetSettingsOnly();
@@ -492,6 +505,11 @@ function widget.globalsPage()
                     {type = "toggle", get = (function() return widget.settings.show_physical; end), 
                                       set = (function(v) widget.settings.show_physical = v; end) }
                 }},
+                {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+                    {type = "label", text = "Show telemetry status: "},
+                    {type = "toggle", get = (function() return widget.settings.statusPassthru; end), 
+                                      set = (function(v) widget.settings.statusPassthru = v; end) }
+                }},
                 vswitch_box,
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Command broadcast address: "},
@@ -534,6 +552,40 @@ function widget.globalsPage()
     widget.ui = page:build(uit);
 end
 
+local function leftStatusBit(i)
+    local xo = 1;
+    local yo = 20;
+    local dy = 10;
+    local w = 10;
+    local h = 20;
+    local r = {type = "rectangle", x = xo, y = yo + (i - 1) * (dy + h), w = w, h = h, filled = true,
+                                   color = (function() 
+                                    if (state.remoteStatus[i] > 0) then
+                                        return COLOR_THEME_WARNING;
+                                    else
+                                        return COLOR_THEME_SECONDARY2; 
+                                    end
+                                   end)};
+    return r;                   
+end
+
+local function rightStatusBit(i)
+    local xo = 1;
+    local yo = 20;
+    local dy = 10;
+    local w = 10;
+    local h = 20;
+    local r = {type = "rectangle", x = LCD_W - xo - w, y = yo + (i - 1) * (dy + h), w = w, h = h, filled = true,
+                                   color = (function() 
+                                    if (state.remoteStatus[i + 4] > 0) then
+                                        return COLOR_THEME_WARNING;
+                                    else
+                                        return COLOR_THEME_SECONDARY2; 
+                                    end
+                                   end)};
+    return r;                   
+end
+
 function widget.controlPage()
     --print("controlPage", widget);
     lvgl.clear();
@@ -574,6 +626,14 @@ function widget.controlPage()
                 {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)} }
         }
     }}};
+    if (widget.settings.statusPassthru > 0) then
+        for i = 1, 4 do
+            uit[#uit + 1] = leftStatusBit(i);        
+        end
+        for i = 1, 4 do
+            uit[#uit + 1] = rightStatusBit(i);        
+        end
+    end
     if (page ~= nil) then
         widget.ui = page:build(uit);        
     end

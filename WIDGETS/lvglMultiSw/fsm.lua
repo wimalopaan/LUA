@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local crsf, sport, widget, util = ... 
+local crsf, sport, widget, util, uistate = ... 
 
 local state = 0;    
 local actual_item = 0;
@@ -64,12 +64,42 @@ local function update()
     end    
   end
 end
+local rptp = 0;
+local function readStatusBits()
+  if (widget.settings.statusPassthru > 0) then
+    local bits = crsf.readPassThru();
+    if (bits ~= nil) then
+      rptp = rptp + 1;
+      local mask = 1;
+      for i = 1, 8 do
+        local b = bit32.band(bits, mask);
+        if (b > 0) then
+          uistate.remoteStatus[i] = 1;
+        else 
+          uistate.remoteStatus[i] = 0;
+        end
+        mask = mask * 2;
+      end     
+    end
+  end
+end
+local receivingStatus = false;
 local function onTimeout(f)
     local t = getTime();
     if ((t - lastTimeSend) > sendTimeout) then
       sport.invalidate();
       update();
+      if (rptp > 0) then
+        receivingStatus = true;
+        rptp = 0;
+      else
+        receivingStatus = false;
+      end
     end
+    readStatusBits();
+end
+local function getStatusOk()
+  return receivingStatus;
 end
 local function getEvent()
   local e = event;
@@ -140,5 +170,6 @@ return {tick = tick,
         intervall = intervall,
         autoconf = autoconf,
         sendColors = sendColors,
-        sendEvent = sendEvent
+        sendEvent = sendEvent,
+        getStatusOk = getStatusOk 
        };

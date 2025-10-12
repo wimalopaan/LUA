@@ -23,6 +23,7 @@ local CRSF_ADDRESS_CC             = 0xA0; -- non-standard
 local CRSF_ADDRESS_SWITCH         = 0xA1; -- non-standard
 
 local CRSF_FRAMETYPE_CMD          = 0x32;
+local CRSF_FRAMETYPE_PASSTHRU     = 0x7f;
 local CRSF_FRAMETYPE_ARDUPILOT    = 0x80;
 
 -- following CRSF definitions are non-standard
@@ -45,6 +46,9 @@ local CRSF_SUBCMD_SWITCH_SET4M    = 0x09; -- 4-state switches (8 switches) 2byte
 local CRSF_SUBCMD_SWITCH_SETRGB   = 0x0a; 
 local CRSF_SUBCMD_SWITCH_INTERMOD = 0x10; -- intermodule command
 local CRSF_SUBCMD_SCHOTTEL_RESET  = 0x01;
+
+local PASSTHRU_SUBTYPE_SWITCH     = 0xa1;
+local PASSTHRU_APPID_STATUS       = 6100;
 
 local ARDUPILOT_SCHOTTEL_APPID    = 6000;
 local ARDUPILOT_SCHOTTEL_RESP_T   = 0x00;
@@ -223,8 +227,25 @@ local function requestDeviceInfo()
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end
 
-local frameCounter = 0;
+local function readPassThru()
+  local command, data = crossfireTelemetryPop();
+  if (command == CRSF_FRAMETYPE_PASSTHRU) and data ~= nil then
+    if (#data >= 6) then
+      local extdest = data[1]; 
+      local extsrc = data[2];
+      local subtype = data[3];
+      local appid = bit32.lshift(data[4], 8) + data[5];
+      if (subtype == PASSTHRU_SUBTYPE_SWITCH) then
+        if (appid == PASSTHRU_APPID_STATUS) then
+          return data[6];
+        end
+      end     
+    end
+  end
+  return nil;
+end
 
+local frameCounter = 0;
 local function readItem()
   local command = 0;
   local data = {};
@@ -267,8 +288,8 @@ end
 return {send = send, 
         sendProp = sendProp, 
         sendNextColor = sendNextColor,
-        resetColorSending = resetColorSendingState,
         switchProtocol = switchProtocol,
         requestConfigItem = requestConfigItem, 
         readItem = readItem, 
+        readPassThru = readPassThru,
         requestDeviceInfo = requestDeviceInfo };
