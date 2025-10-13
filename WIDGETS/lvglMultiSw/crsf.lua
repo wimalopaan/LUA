@@ -230,19 +230,21 @@ end
 local function readPassThru()
   local command, data = crossfireTelemetryPop();
   if (command == CRSF_FRAMETYPE_PASSTHRU) and data ~= nil then
-    if (#data >= 6) then
+    if (#data >= 7) then
       local extdest = data[1]; 
       local extsrc = data[2];
       local subtype = data[3];
       local appid = bit32.lshift(data[4], 8) + data[5];
       if (subtype == PASSTHRU_SUBTYPE_SWITCH) then
         if (appid == PASSTHRU_APPID_STATUS) then
-          return data[6];
+          local address = data[6];
+          local bits = data[7];
+          return address, bits;
         end
       end     
     end
   end
-  return nil;
+  return nil, nil;
 end
 
 local frameCounter = 0;

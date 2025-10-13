@@ -68,8 +68,8 @@ local lastBits = 0;
 local rptp = 0;
 local function readStatusBits()
   if (widget.settings.statusPassthru > 0) then
-    local bits = crsf.readPassThru();
-    if (bits ~= nil) then
+    local address, bits = crsf.readPassThru();
+    while (bits ~= nil) do
       rptp = rptp + 1;
       local changedBits = bit32.bxor(bits, lastBits);
       lastBits = bits;
@@ -78,19 +78,20 @@ local function readStatusBits()
         local b = bit32.band(bits, mask);
         local changed = bit32.band(changedBits, mask);
         for a = 1, 8 do
-          if (widget.settings.telemActions[a].input == i) then
+          if ((widget.settings.telemActions[a].input == i) and (widget.settings.telemActions[a].address == address)) then
             if (changed > 0) then
-                widget.setLSorVs(widget.settings.telemActions[a].switch, (b > 0));
+              widget.setLSorVs(widget.settings.telemActions[a].switch, (b > 0));
+              if (b > 0) then
+                uistate.remoteStatus[a] = 1;
+              else 
+                uistate.remoteStatus[a] = 0;
+              end            
             end
-            if (b > 0) then
-              uistate.remoteStatus[a] = 1;
-            else 
-              uistate.remoteStatus[a] = 0;
-            end            
           end
         end
         mask = mask * 2;
       end     
+      address, bits = crsf.readPassThru();
     end
   end
 end

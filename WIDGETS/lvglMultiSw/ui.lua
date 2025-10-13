@@ -21,7 +21,8 @@
 --- EdgeTx 2.11.3 
 
 -- bugs
- 
+--- reaches CPU limit if saving of old config enabled
+
 -- todo
 --- move some Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
@@ -36,6 +37,8 @@
 --- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- read all crsf messages from queue and parse them (reduces the change of congestion of widget queue)
+--- adapt to new passthru format (with switch address, maybe display crsf-address)
 --- configure / set LS or VS by telemetry 
 --- get ArduPilot/PassThru tunnel messages transporting MultiSwitch-Input (In0, In1) states (make that optional)
 --- display ArduPilot/PassThru SubType=Switch and AppId=Status in header line or left/right of buttons
@@ -101,8 +104,8 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 20;
-local settingsVersion = 25;
+local version = 21;
+local settingsVersion = 26;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -179,7 +182,7 @@ local function resetButtons()
     widget.settings.buttons = {};
     widget.settings.telemActions = {};
     for i = 1, 8 do
-        widget.settings.telemActions[i] = {name = "Status " .. i, input = i, switch = 0, 
+        widget.settings.telemActions[i] = {name = "In" .. i, input = i, switch = 0, address = widget.options.Address,
                                             colorOff = COLOR_THEME_SECONDARY2, colorOn = COLOR_THEME_WARNING};
     end
     state.buttons = {};
@@ -821,13 +824,17 @@ local function statusRow(r)
         type = "box",
         flexFlow = lvgl.FLOW_ROW,
         children = {
-            {type = "label", text = "Input " .. r},
+            {type = "label", text = "In " .. r},
             {type = "textEdit", value = widget.settings.telemActions[r].name, 
-                    w = 80, maxLen = 16, set = (function(s) widget.settings.telemActions[r].name = s; end) },
+                    w = 50, maxLen = 16, set = (function(s) widget.settings.telemActions[r].name = s; end) },
             {type = "label", text = " Bit:" },
-            {type = "numberEdit", min = 1, max = 8, w = 20, get = (function() return widget.settings.telemActions[r].input; end), 
+            {type = "numberEdit", min = 1, max = 8, w = 30, get = (function() return widget.settings.telemActions[r].input; end), 
                                                             set = (function(v) widget.settings.telemActions[r].input = v; end)},
-            {type = "switch", filter = sw_filter, w = 40,
+            {type = "label", text = " Adr:" },
+            {type = "numberEdit", min = 0, max = 255, w = 30, get = (function() return widget.settings.telemActions[r].address; end), 
+                                                              set = (function(v) widget.settings.telemActions[r].address = v; end)},
+            {type = "label", text = " Sw:" },
+            {type = "switch", filter = sw_filter, w = 50,
                             get = (function() return widget.settings.telemActions[r].switch; end), 
                             set = (function(s) widget.settings.telemActions[r].switch = s; end) },
             {type = "label", text = " On:" },
@@ -923,13 +930,13 @@ end
 local initialized = false;
 function widget.update()
     --print("widget.update");
-    if (oldSettings ~= nil) then
-        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
-        oldSettings = nil;
-    end
+--    if (oldSettings ~= nil) then
+--        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
+--        oldSettings = nil;
+--    end
     local changed = updateFilename();
     fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
-    fsm.autoconf(widget.options.Autoconf);
+--    fsm.autoconf(widget.options.Autoconf);
     if ((not initialized) or changed) then
         local st = serialize.load(settingsFilename);
         if (st ~= nil) then
@@ -940,7 +947,7 @@ function widget.update()
                 if (not convertSettings(st)) then
                     resetSettings();
                 else
-                    oldSettings = st;
+--                    oldSettings = st;
                 end
                 changed = true;
             end
