@@ -45,6 +45,9 @@ local options = {
     {"Mag_Offset", VALUE, 0, -20, 20},
     {"MaxRoll", VALUE, 45, 15, 90},
     {"MaxPitch", VALUE, 45, 15, 60},
+    {"InvPitch",  BOOL, 0},
+    {"InvRoll",  BOOL, 0},
+    {"InvYaw",  BOOL, 0},
     {"Help", SOURCE, 1},
 }
   

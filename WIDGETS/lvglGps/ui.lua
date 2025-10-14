@@ -15,6 +15,9 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+-- ToDo:
+-- save positions / edit names
+
 local zone, options, name, dir = ...
 local widget = {}
 widget.options = options;
@@ -23,6 +26,7 @@ widget.name = name;
 widget.ui = nil;
 
 local crsf = loadScript(dir .. "crsf.lua", "btd")(dir);
+local serialize = loadScript(dir .. "tableser.lua", "btd")(dir);
 
 local gps_radio = {};
 local gps_model = {
@@ -48,6 +52,27 @@ local nav = {
         course = 0;
     }
 };
+local resolution = {
+    selected = 1;
+    titles = {"Normal Resolution", "Full Resolution"};
+};
+local positionStore = {
+    titles = {"Radio", "Pos 1", "Pos 2", "Pos 3"};
+    selected = 1;
+    target = 1;
+    positions = {
+        {lon = 0, lat = 0},
+        {lon = 0, lat = 0},
+        {lon = 0, lat = 0},
+        {lon = 0, lat = 0},
+    };
+};
+local settingsFilename = dir .. model.getInfo().name .. ".lua";
+local function saveSettings() 
+    if (settingsFilename ~= nil) then
+        serialize.save(positionStore, settingsFilename);        
+    end
+end
 
 local degToRad = (math.pi / 180);
 
@@ -141,6 +166,7 @@ local function drawCompass(page, cx, cy, r_circle)
                     return {{cx, cy}, {x, y}};
     end)});
     page:line({thickness = 2, color = BLUE, pts = (function() 
+        -- select normal or full reso
                     local course = nav.raw.course - (math.pi / 2) -- reverse the direction (model -> pilot) (-PI) and correct for naval to math angle (+PI/2)
                     if (nav.raw.course < 0) then
                         course = nav.raw.course + math.pi;
@@ -158,6 +184,9 @@ local function drawPitchIndicator(page, x, y)
     page:line({thickness = 1, color = GREEN, pts = {{x - lineLength, y + offset}, {x + lineLength, y + offset}}});
     page:line({thickness = 3, color = RED, pts = (function()
         local pitch = gps_model.pitch;
+        if (widget.options.InvPitch > 0) then
+            pitch = pitch * -1;
+        end
         if (pitch > max_pitch) then
             pitch = max_pitch;
         elseif (pitch < -max_pitch) then
@@ -175,12 +204,16 @@ local function drawRollIndicator(page, x, y)
     page:circle({x = x, y = y, radius = 4, filled = true, color = GREEN });
     page:arc({x = x, y = y, radius = r_roll, color = GREEN, startAngle = (270 - max_roll / degToRad), endAngle = (270 + max_roll / degToRad)});
     page:line({thickness = 1, color = RED, pts = (function()
-        local roll = math.pi / 2 + gps_model.roll;
+        local roll = gps_model.roll;
+        if (widget.options.InvRoll > 0) then
+            roll = roll * -1;
+        end
         if (roll > max_roll) then
             roll = max_roll;
         elseif (roll < -max_roll) then
             roll = -max_roll;
         end
+        roll = roll + math.pi / 2;
         local dx = r_roll * math.cos(roll); 
         local dy = r_roll * math.sin(roll); 
         return {{x, y}, {x + dx, y - dy}};
@@ -205,6 +238,8 @@ local function drawRadio(page, x, y)
     page:label({x = x, y = y, text = (function() return "Dist: " .. nav.distance; end)});
     y = y + dy;
     page:label({x = x, y = y, text = (function() return "Dist/R: " .. nav.raw.distance; end)});
+    y = y + dy;
+    return y;
 end
 
 local function drawModel(page, x, y)
@@ -230,13 +265,63 @@ local function drawModel(page, x, y)
     page:label({x = x, y = y, text = (function() return "Yaw: " .. gps_model.yaw; end)});
     y = y + dy;
     page:label({x = x, y = y, text = (function() return "Speed: " .. gps_model.speed; end)});
+    y = y + dy;
+    return y;
+end
+
+local function drawButtons(page, y)
+    local b = page:box({x = 0, y = y, w = LCD_W, flexFlow = lvgl.FLOW_COLUMN});
+    b:hline({w = LCD_W, h = 2});
+    local buttonBox = b:box({flexFlow = lvgl.FLOW_ROW});
+    buttonBox:button({text = "Save model pos", active = (function() return positionStore.selected ~= 1; end), 
+                                            press = (function() 
+                                                positionStore.positions[positionStore.selected] = {lon = gps_model.lon, lat = gps_model.lat}; 
+                                                saveSettings();
+                                            end)});
+    buttonBox:choice({title = "Select Position", values = positionStore.titles, get = (function() return positionStore.selected ; end), set = (function(v) positionStore.selected = v; if (v == 1) then positionStore.target = 1; end end)});
+    buttonBox:button({text = "Recall pos", active = (function() return positionStore.selected ~= 1; end), press = (function() positionStore.target = positionStore.selected; end)});
+
+    buttonBox:choice({title = "Select Resolution", values = resolution.titles, 
+                                    get = (function() return resolution.selected ; end), 
+                                    set = (function(v) resolution.selected = v; end)});
+end
+
+local function drawInfo(page, x, y)
+    page:label({x = x, y = y, text = (function() return "Target: " .. positionStore.titles[positionStore.target]; end), font = SMLSIZE});
+end
+
+local function drawResolution(page, x, y)
+    page:label({x = x, y = y, text = (function() return resolution.titles[resolution.selected]; end), font = SMLSIZE});
+end
+
+local function drawTarget(page, x, y)
+    local dy = 30;
+    page:label({x = x, y = y, text = "Target", font = BOLD, color = BLUE});
+    y = y + dy;
+    page:label({x = x, y = y, text = (function() 
+        if (positionStore.target == 1) then
+            return "Lat: " .. gps_radio.lat; 
+        else
+            return "Lat: " .. positionStore.positions[positionStore.target].lat;                 
+        end
+    end)});
+    y = y + dy;
+    page:label({x = x, y = y, text = (function() 
+        if (positionStore.target == 1) then
+            return "Lon: " .. gps_radio.lon; 
+        else
+            return "Lon: " .. positionStore.positions[positionStore.target].lon;                 
+        end
+    end)});            
+    y = y + dy;
+    return y;
 end
 
 function widget.compassPage()
     lvgl.clear();
     local page = lvgl.page({
         title = "GPS",
-        subtitle = "Model steering (red) to radio (blue)"
+        subtitle = "Model steering (red) to target (blue)"
     });
     local w = LCD_W;
     local h = LCD_H - 60;
@@ -244,6 +329,8 @@ function widget.compassPage()
     local cy = h / 2 + 30;
     local r_circle = h / 2;
     drawCompass(page, cx, cy, r_circle);
+    drawInfo(page, cx - 30, cy - r_circle / 2);
+    drawResolution(page, cx - 50, cy + r_circle / 2);
 
     local x_roll = cx + r_circle + w / 20;
     local y_roll = cy - r_circle / 2;
@@ -255,11 +342,21 @@ function widget.compassPage()
 
     local x_text = 5;
     local y_text = 20;
-    drawRadio(page, x_text, y_text);
+    local y_next = drawTarget(page, x_text, y_text);
+
+    local x_text = 5;
+    local y_text = y_next;
+    local y_bottom1 = drawRadio(page, x_text, y_text);
 
     local x_text = LCD_W - 50;
     local y_text = 20;
-    drawModel(page, x_text, y_text);
+    local y_bottom2 = drawModel(page, x_text, y_text);
+
+    local y_buttons = y_bottom1;
+    if (y_bottom2 > y_buttons) then
+        y_buttons = y_bottom2;
+    end
+    drawButtons(page, y_buttons + 20);
 end
 function widget.widgetPage()
     lvgl.clear();
@@ -270,7 +367,15 @@ function widget.widgetPage()
     local r = widget.zone.h * 0.3;
     drawCompass(b, cx, cy, r);
 end
+
+local initialized = false;
 function widget.update()
+    if (not initialized) then
+        local st = serialize.load(settingsFilename);
+        if (st ~= nil) then
+            positionStore = st;
+        end
+    end
     if lvgl.isFullScreen() then
         widget.compassPage();
     else
