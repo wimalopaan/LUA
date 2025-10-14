@@ -21,9 +21,11 @@
 --- EdgeTx 2.11.3 
 
 -- bugs
+--- reaches CPU limit if saving config after converting
 --- reaches CPU limit if saving of old config enabled (see setting SAVE_OLD_CONFIG)
 
 -- todo
+--- definitely need an explicit state machine for function update()
 --- move some Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
@@ -74,7 +76,7 @@
 
 -- Settings:
 
-local SAVE_OLD_CONFIG = false; -- saves old config if converting to new config file version; may reach CPU limit (if not DEBUG)
+local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version; may reach CPU limit (if not DEBUG)
 
 -- End of Settings
 
@@ -110,7 +112,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 22;
+local version = 23;
 local settingsVersion = 26;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -143,6 +145,7 @@ end
 
 local function saveSettings() 
     if (settingsFilename ~= nil) then
+        print("saveSettings");
         serialize.save(widget.settings, settingsFilename);        
     end
 end
@@ -935,13 +938,19 @@ local function convertSettings(t)
 end
 
 local initialized = false;
+local changed = false;
 function widget.update()
 --    print("update: zone.x", widget.zone.x, "zone.y", widget.zone.y, "zone.w", widget.zone.w, "zone.h", widget.zone.h);
-    if ((SAVE_OLD_CONFIG) and (oldSettings ~= nil)) then
-        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
-        oldSettings = nil;
+    if (changed) then
+        saveSettings();
+        changed = false;
+    else 
+        if ((SAVE_OLD_CONFIG) and (oldSettings ~= nil)) then
+            serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
+            oldSettings = nil;
+        end
     end
-    local changed = updateFilename();
+    changed = updateFilename();
     fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
     if ((not initialized) or changed) then
         local st = serialize.load(settingsFilename);
@@ -957,7 +966,7 @@ function widget.update()
                         oldSettings = st;                        
                     end
                 end
-                changed = true;
+                changed = true;                
             end
         else -- no file
             resetSettings();
@@ -971,9 +980,6 @@ function widget.update()
         widget.switchPage(PAGE_CONTROL, true);
     else
         widget.widgetPage();
-    end
-    if (changed) then
-        saveSettings();
     end
 end
 
