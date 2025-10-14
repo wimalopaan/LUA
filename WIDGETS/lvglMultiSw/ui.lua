@@ -21,7 +21,7 @@
 --- EdgeTx 2.11.3 
 
 -- bugs
---- reaches CPU limit if saving of old config enabled
+--- reaches CPU limit if saving of old config enabled (see setting SAVE_OLD_CONFIG)
 
 -- todo
 --- move some Widget-settings to global config dialog
@@ -72,6 +72,12 @@
 --- cleanup settings page 
 --- restore button state when switch page/update
 
+-- Settings:
+
+local SAVE_OLD_CONFIG = false; -- saves old config if converting to new config file version; may reach CPU limit (if not DEBUG)
+
+-- End of Settings
+
 local zone, options, name, dir = ...
 local widget = {}
 widget.options = options;
@@ -104,7 +110,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 21;
+local version = 22;
 local settingsVersion = 26;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -900,6 +906,7 @@ function widget.widgetPage()
                 end
                 end), 
                 w = widget.zone.x, align = CENTER }, 
+            { type = "label", text = "V: " .. versionString, w = widget.zone.x, align = CENTER, font = SMLSIZE}
             }
         }
     });
@@ -929,14 +936,13 @@ end
 
 local initialized = false;
 function widget.update()
-    --print("widget.update");
---    if (oldSettings ~= nil) then
---        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
---        oldSettings = nil;
---    end
+--    print("update: zone.x", widget.zone.x, "zone.y", widget.zone.y, "zone.w", widget.zone.w, "zone.h", widget.zone.h);
+    if ((SAVE_OLD_CONFIG) and (oldSettings ~= nil)) then
+        serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
+        oldSettings = nil;
+    end
     local changed = updateFilename();
     fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
---    fsm.autoconf(widget.options.Autoconf);
     if ((not initialized) or changed) then
         local st = serialize.load(settingsFilename);
         if (st ~= nil) then
@@ -947,7 +953,9 @@ function widget.update()
                 if (not convertSettings(st)) then
                     resetSettings();
                 else
---                    oldSettings = st;
+                    if (SAVE_OLD_CONFIG) then
+                        oldSettings = st;                        
+                    end
                 end
                 changed = true;
             end
@@ -970,11 +978,10 @@ function widget.update()
 end
 
 local function configItemCallback(item)
-    --print("configItemCallback:", item);
 end 
 
 local lastTlm = 0;
-local function isConnected()
+local function gotConnected()
     local tlm = getValue("RQly");
     local r = false;
     if (lastTlm == 0) and (tlm > 0) then
@@ -985,7 +992,7 @@ local function isConnected()
 end
 
 function widget.background()
-    if (isConnected()) then
+    if (gotConnected()) then
         fsm.sendEvent(2);
     end
     fsm.tick(configItemCallback);
