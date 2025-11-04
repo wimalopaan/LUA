@@ -25,6 +25,11 @@
 --- reaches CPU limit if saving of old config enabled (see setting SAVE_OLD_CONFIG)
 
 -- todo
+--- make background a state-machine to distributed compute intense tasks to different calls e.g. resetButtons() and saveSettings()
+--- use events to control the background state-machine,e.g. change the number of cols/rows
+--- introduce config option to disable features: e.g. telemetry status bits 
+--- split UI in different files (control, settings, global)
+--- global page: nicer (rectangle for line heigth and column width, columns)
 --- definitely need an explicit state machine for function update()
 --- move some Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
@@ -33,12 +38,11 @@
 --- Set64 protocol
 --- images on non-buttons
 --- text placing if images are used
---- split UI in different files (control, settings, global)
 --- fsm.config() instead of different functions
 --- autoconf fsm
---- global page: nicer (rectangle for line heigth and column width, columns)
 
 -- done
+--- sliders don't use correct switch-address 
 --- read all crsf messages from queue and parse them (reduces the change of congestion of widget queue)
 --- adapt to new passthru format (with switch address, maybe display crsf-address)
 --- configure / set LS or VS by telemetry 

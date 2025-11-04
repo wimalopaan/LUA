@@ -207,9 +207,9 @@ local function sendNextColor()
   return false;
 end
 local function sendProp(channel, value)
-    --print("sendprop adr:", widget.options.Address, channel, value);
+--    print("sendprop adr:", widget.settings.buttons[channel].address, channel, value);
     local payloadOut = { widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_PROP_SET, 
-                          widget.options.Address, widget.settings.buttons[channel].output - 1, value };
+                          widget.settings.buttons[channel].address, widget.settings.buttons[channel].output - 1, value };
     crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);
 end    
 
