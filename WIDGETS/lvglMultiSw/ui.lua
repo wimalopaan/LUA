@@ -21,12 +21,8 @@
 --- EdgeTx 2.11.3 
 
 -- bugs
---- reaches CPU limit if saving config after converting
---- reaches CPU limit if saving of old config enabled (see setting SAVE_OLD_CONFIG)
 
 -- todo
---- make background a state-machine to distributed compute intense tasks to different calls e.g. resetButtons() and saveSettings()
---- use events to control the background state-machine,e.g. change the number of cols/rows
 --- introduce config option to disable features: e.g. telemetry status bits 
 --- split UI in different files (control, settings, global)
 --- global page: nicer (rectangle for line heigth and column width, columns)
@@ -42,6 +38,10 @@
 --- autoconf fsm
 
 -- done
+--- make background a state-machine to distributed compute intense tasks to different calls e.g. resetButtons() and saveSettings()
+--- use events to control the background state-machine,e.g. change the number of cols/rows
+--- reaches CPU limit if saving config after converting
+--- reaches CPU limit if saving of old config enabled (see setting SAVE_OLD_CONFIG)
 --- sliders don't use correct switch-address 
 --- read all crsf messages from queue and parse them (reduces the change of congestion of widget queue)
 --- adapt to new passthru format (with switch address, maybe display crsf-address)
@@ -116,11 +116,32 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 23;
+local version = 24;
 local settingsVersion = 26;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
+
+local EVT_NONE          = 0;
+local EVT_FILE_CHANCE   = 1;
+local EVT_WIDGET_CHANGE = 2;
+local EVT_STATE_CHANGE  = 3;
+
+local update_event = EVT_NONE;
+local widget_event = EVT_NONE;
+
+local BG_STATE_UNDEF   = 0;
+local BG_STATE_INIT    = 1;
+local BG_STATE_HAS_FILE   = 2;
+local BG_STATE_NO_FILE   = 3;
+local BG_STATE_CONVERT = 4;
+local BG_STATE_SAVE    = 5;
+local BG_STATE_SAVE_OLD    = 6;
+local BG_STATE_UPDATE_MAPPINGS    = 7;
+local BG_STATE_ACTIVATE_VS    = 8;
+local BG_STATE_RUN     = 10;
+
+local bg_state = BG_STATE_UNDEF;
 
 local function addressString() 
     local min = widget.options.Address;
@@ -138,7 +159,6 @@ local function addressString()
         return "[" .. min .. "," .. max .. "]";
     end
 end
-
 local function titleString() 
     local statusString = "[_]";
     if (fsm.getStatusOk()) then
@@ -146,12 +166,12 @@ local function titleString()
     end
     return widget.name .. "@" .. addressString() .. " : " .. widget.settings.name .. "  " .. versionString .. " " .. statusString;
 end
-
-local function saveSettings() 
+local function saveSettingsIncremental() 
     if (settingsFilename ~= nil) then
-        print("saveSettings");
-        serialize.save(widget.settings, settingsFilename);        
+--        print("saveSettingsIncremental");
+        return serialize.saveIncremental(widget.settings, settingsFilename);        
     end
+    return true;
 end
 local function resetState() 
     state.remoteStatus = {};
@@ -163,7 +183,7 @@ local function resetState()
     end
 end
 local function updateAddressButtonLookup()
-    print("updateAddressButtonLookup", #widget.settings.buttons);
+--    print("updateAddressButtonLookup", #widget.settings.buttons);
     state.addresses = {};
     for i, btn in ipairs(widget.settings.buttons) do
         if (state.addresses[btn.address] == nil) then
@@ -204,7 +224,7 @@ local function resetButtons()
     end
     updateAddressButtonLookup();
     resetState();    
-    saveSettings();
+    update_event = EVT_FILE_CHANCE;
 end
 local function resetSettingsOnly()
     widget.settings.version = settingsVersion;
@@ -319,7 +339,7 @@ function widget.switchPage(id, nosave)
     end
     widget.activePage = id;
     if (not nosave) then
-        saveSettings();    
+        update_event = EVT_FILE_CHANCE;
     end
 end
 
@@ -482,8 +502,14 @@ local function createButton(i, width)
     end
 end
 
-local function askClose()
-    lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() lvgl.exitFullScreen(); end) })
+local function askClose(save)
+    lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() 
+        lvgl.exitFullScreen();
+        if (save) then
+            print("save")
+            update_event = EVT_FILE_CHANCE;
+        end
+    end) })
 end
   
 local function sendColors()
@@ -495,7 +521,7 @@ function widget.globalsPage()
     local page = lvgl.page({
         title = titleString(),
         subtitle = "Global-Settings",
-        back = (function() askClose(); end),
+        back = (function() askClose(true); end),
     });
     local vswitch_box = {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {}};
     if (hasVirtualInputs) then
@@ -579,6 +605,16 @@ function widget.globalsPage()
     widget.ui = page:build(uit);
 end
 
+local function saveIndicator() 
+    return {type = "rectangle", x = 0, y = 0, w = LCD_W, h = 2, filled = true, 
+            color = (function()
+                if ((bg_state == BG_STATE_SAVE) or (bg_state == BG_STATE_SAVE_OLD)) then
+                    return COLOR_THEME_WARNING; 
+                else
+                    return COLOR_THEME_SECONDARY3; 
+                end 
+            end)};
+end
 local function leftStatusBit(i)
     local xo = 1;
     local yo = 20;
@@ -650,12 +686,13 @@ function widget.controlPage()
         },
         { type = "hline", w = widget.zone.w / 2, h = 1 },
         { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-                {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)},
-                {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
-                {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)} 
+                {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS, true); end)},
+                {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS, true); end)},
+                {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY, true); end)} 
             }
         }
     }}};
+    uit[#uit + 1] = saveIndicator();
     if (widget.settings.statusPassthru > 0) then
         for i = 1, 4 do
             uit[#uit + 1] = leftStatusBit(i);        
@@ -806,7 +843,7 @@ function widget.settingsPage()
     local page = lvgl.page({
         title = titleString(),
         subtitle = "Function-Settings",
-        back = (function() askClose(); end),
+        back = (function() askClose(true); end),
     });
     local edit_width = widget.zone.w / 6;
     local maxLen = 16;
@@ -880,7 +917,7 @@ function widget.telemetryPage()
     local page = lvgl.page({
         title = titleString(),
         subtitle = "Telemetry-Settings",
-        back = (function() askClose(); end),
+        back = (function() askClose(true); end),
     });
     local uit = {{
             type = "box",
@@ -899,14 +936,14 @@ function widget.telemetryPage()
     widget.ui = page:build(uit);
 end
 
-local oldSettings = nil;
+local converted = false;
 function widget.widgetPage()
     lvgl.clear();
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
             { type = "label", text = (function() 
-                if (oldSettings ~= nil) then
+                if (converted) then
                     return widget.settings.name .. "@" .. addressString() .. " (CV)";
                 else
                     return widget.settings.name .. "@" .. addressString();
@@ -941,49 +978,12 @@ local function convertSettings(t)
     return false;
 end
 
-local initialized = false;
-local changed = false;
 function widget.update()
---    print("update: zone.x", widget.zone.x, "zone.y", widget.zone.y, "zone.w", widget.zone.w, "zone.h", widget.zone.h);
-    if (changed) then
-        saveSettings();
-        changed = false;
+    print("update");
+    if(updateFilename()) then
+        update_event = EVT_FILE_CHANCE;
     else 
-        if ((SAVE_OLD_CONFIG) and (oldSettings ~= nil)) then
-            serialize.save(oldSettings, settingsFilename .. "." .. oldSettings.version); -- save old file with new name
-            oldSettings = nil;
-        end
-    end
-    changed = updateFilename();
-    fsm.intervall(widget.options.Intervall + (widget.options.Address % 15)); -- dither timeout a little bit
-    if ((not initialized) or changed) then
-        local st = serialize.load(settingsFilename);
-        if (st ~= nil) then
-            if (isValidSettingsTable(st)) then
-                widget.settings = st;
-                resetState();
-            else
-                if (not convertSettings(st)) then
-                    resetSettings();
-                else
-                    if (SAVE_OLD_CONFIG) then
-                        oldSettings = st;                        
-                    end
-                end
-                changed = true;                
-            end
-        else -- no file
-            resetSettings();
-            changed = true;
-        end
-        initialized = true;
-    end
-    updateAddressButtonLookup();
-    activateVirtualSwitches();
-    if (lvgl.isFullScreen() or lvgl.isAppMode()) then
-        widget.switchPage(PAGE_CONTROL, true);
-    else
-        widget.widgetPage();
+        widget_event = EVT_WIDGET_CHANGE;
     end
 end
 
@@ -1001,25 +1001,88 @@ local function gotConnected()
     return r;
 end
 
+local st = nil;
 function widget.background()
-    if (gotConnected()) then
-        fsm.sendEvent(2);
+    local oldstate = bg_state;
+    if (bg_state == BG_STATE_UNDEF) then
+        bg_state = BG_STATE_INIT;            
+    elseif (bg_state == BG_STATE_INIT) then
+        st = serialize.load(settingsFilename);
+        if (st ~= nil) then
+            bg_state = BG_STATE_HAS_FILE;
+        else
+            bg_state = BG_STATE_NO_FILE;
+        end
+    elseif (bg_state == BG_STATE_HAS_FILE) then
+        if (isValidSettingsTable(st)) then
+            widget.settings = st;
+            resetState();
+            bg_state = BG_STATE_UPDATE_MAPPINGS;
+        else
+            bg_state = BG_STATE_CONVERT;
+        end
+    elseif (bg_state == BG_STATE_CONVERT) then
+        if (not convertSettings(st)) then
+            bg_state = BG_STATE_NO_FILE;
+        else
+            converted = true;
+            if (SAVE_OLD_CONFIG) then
+                bg_state = BG_STATE_SAVE_OLD;
+            else
+                bg_state = BG_STATE_UPDATE_MAPPINGS;
+            end
+        end
+    elseif (bg_state == BG_STATE_NO_FILE) then
+        resetSettings();
+        bg_state = BG_STATE_UPDATE_MAPPINGS;
+    elseif (bg_state == BG_STATE_SAVE_OLD) then
+        if (serialize.saveIncremental(st, settingsFilename .. "." .. st.version)) then -- save old file with new name
+            bg_state = BG_STATE_UPDATE_MAPPINGS;
+        end
+    elseif (bg_state == BG_STATE_UPDATE_MAPPINGS) then
+        updateAddressButtonLookup();
+        bg_state = BG_STATE_ACTIVATE_VS;
+    elseif (bg_state == BG_STATE_ACTIVATE_VS) then
+        activateVirtualSwitches();
+        bg_state = BG_STATE_SAVE;
+    elseif (bg_state == BG_STATE_SAVE) then
+        if (saveSettingsIncremental()) then
+            bg_state = BG_STATE_RUN;        
+        end
+    elseif (bg_state == BG_STATE_RUN) then
+        if (update_event == EVT_FILE_CHANCE) then
+            update_event = EVT_NONE;
+            bg_state = BG_STATE_SAVE;
+        end
+        if (gotConnected()) then
+            fsm.sendEvent(2);
+        end
+        fsm.tick(configItemCallback);
+        readPhysical();
+        shm.encode();
     end
-    fsm.tick(configItemCallback);
-    readPhysical();
-    shm.encode();
-end
-
-local function fullScreenRefresh()
+    if (oldstate ~= bg_state) then
+        widget_event = EVT_STATE_CHANGE;
+        print("bgstate: ", oldstate, " -> ", bg_state);
+    end
 end
 
 function widget.refresh(event, touchState)
-    --    print("refresh", widget.zone.x, widget.zone.y);
-    if lvgl == nil then
-        lcd.drawText(widget.zone.x, widget.zone.y, "Lvgl support required", COLOR_THEME_WARNING)
-    end
-    if (lvgl.isFullScreen()) then
-        fullScreenRefresh();
+    if (lvgl == nil) then
+        lcd.drawText(widget.zone.x, widget.zone.y, "Lvgl support required", COLOR_THEME_WARNING);
+    else
+        if (widget_event ~= EVT_NONE) then
+            widget_event = EVT_NONE;
+            if ((bg_state == BG_STATE_RUN) or (bg_state == BG_STATE_SAVE)) then
+                if (lvgl.isFullScreen() or lvgl.isAppMode()) then
+                    widget.switchPage(widget.activePage, true);
+                else
+                    widget.widgetPage();
+                end
+            else
+                widget.widgetPage();
+            end
+        end
     end
     widget.background();
 end

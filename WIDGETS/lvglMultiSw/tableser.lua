@@ -19,8 +19,106 @@ local function exportstring(s)
     return string.format("%q", s)
 end
 
+local charS, charE = "   ", "\n";
+
+local S_IDLE = 0;
+local S_SAVING = 1;
+local s_state = S_IDLE;
+
+local s_file;
+local s_tables;
+local s_lookup;
+local s_i;
+
+local function save_table(idx, t)
+        io.write(s_file, "-- Table: {" .. idx .. "}" .. charE)
+        io.write(s_file, "{" .. charE)
+        local thandled = {}
+
+        for i, v in ipairs(t) do
+            thandled[i] = true
+            local stype = type(v)
+            -- only handle value
+            if stype == "table" then
+                if not s_lookup[v] then
+                    table.insert(s_tables, v)
+                    s_lookup[v] = #s_tables
+                end
+                io.write(s_file, charS .. "{" .. s_lookup[v] .. "}," .. charE)
+            elseif stype == "string" then
+                io.write(s_file, charS .. exportstring(v) .. "," .. charE)
+            elseif stype == "number" then
+                io.write(s_file, charS .. tostring(v) .. "," .. charE)
+            elseif stype == "boolean" then
+                io.write(s_file, charS .. tostring(v) .. "," .. charE)
+            end
+        end
+
+        for i, v in pairs(t) do
+            -- escape handled values
+            if (not thandled[i]) then
+                local str = ""
+                local stype = type(i)
+                -- handle index
+                if stype == "table" then
+                    if not s_lookup[i] then
+                        table.insert(s_tables, i)
+                        s_lookup[i] = #s_tables
+                    end
+                    str = charS .. "[{" .. s_lookup[i] .. "}]="
+                elseif stype == "string" then
+                    str = charS .. "[" .. exportstring(i) .. "]="
+                elseif stype == "number" then
+                    str = charS .. "[" .. tostring(i) .. "]="
+                end
+
+                if str ~= "" then
+                    stype = type(v)
+                    -- handle value
+                    if stype == "table" then
+                        if not s_lookup[v] then
+                            table.insert(s_tables, v)
+                            s_lookup[v] = #s_tables
+                        end
+                        io.write(s_file, str .. "{" .. s_lookup[v] .. "}," .. charE)
+                    elseif stype == "string" then
+                        io.write(s_file, str .. exportstring(v) .. "," .. charE)
+                    elseif stype == "number" then
+                        io.write(s_file, str .. tostring(v) .. "," .. charE)
+                    end
+                end
+            end
+        end
+        io.write(s_file, "}," .. charE)
+end
+local function saveIncremental(tbl, filename)
+    if (s_state == S_IDLE) then
+        local err;
+        s_file, err = io.open(filename, "wb")
+        if err then 
+            return err; 
+        end
+        s_tables, s_lookup = { tbl }, { [tbl] = 1 }
+        io.write(s_file, "return {" .. charE)
+        s_state = S_SAVING;
+        s_i = 0;
+    elseif (s_state == S_SAVING) then
+        s_i = s_i + 1;
+        local t = s_tables[s_i];
+        if (t) then
+            save_table(s_i, t);
+            return false;
+        else
+            io.write(s_file, "}")
+            io.close(s_file)
+            s_state = S_IDLE;
+            return true;
+        end
+    end
+end
+
 local function save(tbl, filename)
-    local charS, charE = "   ", "\n"
+--    local charS, charE = "   ", "\n"
     local file, err = io.open(filename, "wb")
     if err then return err end
 
@@ -115,4 +213,4 @@ local function load(sfile)
     return tables[1]
 end
 
-return {save = save, load = load};
+return {save = save, load = load, saveIncremental = saveIncremental};
