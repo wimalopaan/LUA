@@ -26,7 +26,6 @@
 --- introduce config option to disable features: e.g. telemetry status bits 
 --- split UI in different files (control, settings, global)
 --- global page: nicer (rectangle for line heigth and column width, columns)
---- definitely need an explicit state machine for function update()
 --- move some Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
@@ -264,7 +263,7 @@ end
 updateFilename();
 
 local function activateVirtualSwitches() 
-    print("activateVirtualSwitches");
+--    print("activateVirtualSwitches");
     if (widget.settings.activate_vswitches > 0) then
         if (hasVirtualInputs) then
             for i = 1, 64 do
@@ -506,7 +505,6 @@ local function askClose(save)
     lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() 
         lvgl.exitFullScreen();
         if (save) then
-            print("save")
             update_event = EVT_FILE_CHANCE;
         end
     end) })
@@ -979,7 +977,7 @@ local function convertSettings(t)
 end
 
 function widget.update()
-    print("update");
+--    print("update");
     if(updateFilename()) then
         update_event = EVT_FILE_CHANCE;
     else 
@@ -1063,7 +1061,6 @@ function widget.background()
     end
     if (oldstate ~= bg_state) then
         widget_event = EVT_STATE_CHANGE;
-        print("bgstate: ", oldstate, " -> ", bg_state);
     end
 end
 
