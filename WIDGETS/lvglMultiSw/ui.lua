@@ -95,7 +95,7 @@ local PAGE_GLOBALS    = 3;
 local PAGE_TELEMETRY  = 4;
 
 widget.ui = nil;
-widget.activePage = PAGE_CONTROL;
+widget.activePage    = 0;
 
 local TYPE_BUTTON    = 1;
 local TYPE_TOGGLE    = 2;
@@ -115,7 +115,7 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 24;
+local version = 25;
 local settingsVersion = 26;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -324,6 +324,9 @@ end
 function widget.switchPage(id, nosave)
     --print("switchPage", id);
     fsm.sendEvent(2);
+    if (id == widget.activePage) then
+        return;
+    end
     lvgl.clear()
     if (id == PAGE_CONTROL) then
         widget.controlPage()
@@ -1072,7 +1075,11 @@ function widget.refresh(event, touchState)
             widget_event = EVT_NONE;
             if ((bg_state == BG_STATE_RUN) or (bg_state == BG_STATE_SAVE)) then
                 if (lvgl.isFullScreen() or lvgl.isAppMode()) then
-                    widget.switchPage(widget.activePage, true);
+                    if (widget.activePage > 0) then
+                        widget.switchPage(widget.activePage, true);
+                    else                    
+                        widget.switchPage(PAGE_CONTROL, true);
+                    end
                 else
                     widget.widgetPage();
                 end
