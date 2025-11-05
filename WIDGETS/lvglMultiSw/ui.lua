@@ -980,7 +980,6 @@ local function convertSettings(t)
 end
 
 function widget.update()
---    print("update");
     if(updateFilename()) then
         update_event = EVT_FILE_CHANCE;
     else 
@@ -1081,9 +1080,11 @@ function widget.refresh(event, touchState)
                         widget.switchPage(PAGE_CONTROL, true);
                     end
                 else
+                    widget.activePage = 0;
                     widget.widgetPage();
                 end
             else
+                widget.activePage = 0;
                 widget.widgetPage();
             end
         end
