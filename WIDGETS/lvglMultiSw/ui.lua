@@ -23,6 +23,9 @@
 -- bugs
 
 -- todo
+--- use a real event queue
+--- restructure background / refresh() /update()
+--- check for lvgl only in create()
 --- introduce config option to disable features: e.g. telemetry status bits 
 --- split UI in different files (control, settings, global)
 --- global page: nicer (rectangle for line heigth and column width, columns)
