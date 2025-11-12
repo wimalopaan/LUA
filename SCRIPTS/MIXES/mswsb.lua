@@ -54,34 +54,45 @@ local function encode(address, switch, on)
 end
 
 local rrCounter = 0;
+local vCounter = 1;
 local function onChange(values, callback)
-    for i, v in ipairs(values) do
-        local diff = bit32.band(bit32.bxor(v, lastInputs[i]), 0x3ff); -- in total 10 bits
-        local address  = bit32.rshift(v, 8);
-        local switches = bit32.band(v, 0xff);
-        if (diff ~= 0) then
-            local mask = 1;
-            for sw = 1, 8 do
-                if (bit32.band(diff, mask) > 0) then
-                    print("changed", i, address, switches, sw);
-                    local onMask = bit32.band(switches, mask);
-                    callback(address, sw, (onMask > 0)); 
-                    lastInputs[i] = bit32.bor(bit32.band(lastInputs[i], bit32.bnot(mask)), onMask);
-                    return true; -- send one at a time
-                end
-                mask = bit32.lshift(mask, 1);
-            end
-        else
-            local mask = bit32.lshift(1, rrCounter);
-            print("rr", rrCounter, address, switches, mask);
-            local onMask = bit32.band(switches, mask);
-            local sw = rrCounter + 1;
-            callback(address, sw, (onMask > 0)); 
-            rrCounter = rrCounter + 1;
-            if (rrCounter == 8) then
-                rrCounter = 0;
-            end
+--    print("onchange", vCounter);
+    local i = vCounter;
+    local v = values[i];
+    if (v == nil) then return false; end;
+    vCounter = vCounter + 1;
+    if (vCounter > #values) then
+        vCounter = 1;
+        rrCounter = rrCounter + 1;
+        if (rrCounter == 8) then
+            rrCounter = 0;
         end
+    end
+    local diff = bit32.band(bit32.bxor(v, lastInputs[i]), 0x3ff); -- in total 10 bits
+    local address  = bit32.rshift(v, 8);
+    local switches = bit32.band(v, 0xff);
+    local adrMask  = bit32.band(v, 0x300);
+    if (diff ~= 0) then
+        local mask = 1;
+        for sw = 1, 8 do
+            if (bit32.band(diff, mask) > 0) then
+--                print("changed", i, address, switches, sw);
+                local onMask = bit32.band(switches, mask);
+                callback(address, sw, (onMask > 0)); 
+                lastInputs[i] = bit32.bor(adrMask, bit32.band(0xff, lastInputs[i], bit32.bnot(mask)), onMask);
+                return true; -- send one at a time
+            end
+            mask = bit32.lshift(mask, 1);
+        end
+        lastInputs[i] = v;
+    else
+        local mask = bit32.lshift(1, rrCounter);
+--        print("rr", #values, i, vCounter, rrCounter, address, switches, mask);
+        local onMask = bit32.band(switches, mask);
+        local sw = rrCounter + 1;
+        callback(address, sw, (onMask > 0)); 
+        lastInputs[i] = v;
+        return true;
     end
     return false;
 end
@@ -103,7 +114,7 @@ local function run(n1, n2, n3, n4)
                 vt[#vt + 1] = getShmVar(nv);
             end
         end
-        onChange(vt, encode);
+        return onChange(vt, encode);
     end));
     return sbusEncodedValue;
 end
