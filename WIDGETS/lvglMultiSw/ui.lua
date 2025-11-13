@@ -23,8 +23,9 @@
 -- bugs
 
 -- todo
---- use a real event queue
---- restructure background / refresh() /update()
+--- load submodules in state-machine
+--- visualize states of state-machine
+--- increase max height of buttons (e.g. for 2x1 design)
 --- check for lvgl only in create()
 --- introduce config option to disable features: e.g. telemetry status bits 
 --- split UI in different files (control, settings, global)
@@ -40,6 +41,9 @@
 --- autoconf fsm
 
 -- done
+--- add setting a value for virtual inputs
+--- fixed settingsDetails page switching issue
+--- real event-queue
 --- make background a state-machine to distributed compute intense tasks to different calls e.g. resetButtons() and saveSettings()
 --- use events to control the background state-machine,e.g. change the number of cols/rows
 --- reaches CPU limit if saving config after converting
@@ -82,7 +86,7 @@
 
 -- Settings:
 
-local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version; may reach CPU limit (if not DEBUG)
+local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version
 
 -- End of Settings
 
@@ -96,6 +100,8 @@ local PAGE_CONTROL    = 1;
 local PAGE_SETTINGS   = 2;
 local PAGE_GLOBALS    = 3;
 local PAGE_TELEMETRY  = 4;
+local PAGE_SETTINGS_D = 5;
+local PAGE_VIRTUALS   = 6;
 
 widget.ui = nil;
 widget.activePage    = 0;
@@ -118,8 +124,8 @@ local shm       = loadScript(dir .. "shm.lua", "btd")(widget, state, util);
 
 local hasVirtualInputs = (getVirtualSwitch ~= nil);
 
-local version = 25;
-local settingsVersion = 26;
+local version = 26;
+local settingsVersion = 28;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -129,8 +135,19 @@ local EVT_FILE_CHANCE   = 1;
 local EVT_WIDGET_CHANGE = 2;
 local EVT_STATE_CHANGE  = 3;
 
-local update_event = EVT_NONE;
-local widget_event = EVT_NONE;
+local eventQueue = {first = 0, last = -1};
+local function eventPush(e)
+    eventQueue.last = eventQueue.last + 1;
+    eventQueue[eventQueue.last] = e;
+end
+local function eventPop()
+    if (eventQueue.first > eventQueue.last) then
+        return EVT_NONE;
+    end
+    local e = eventQueue[eventQueue.first];
+    eventQueue.first = eventQueue.first + 1;
+    return e;
+end
 
 local BG_STATE_UNDEF   = 0;
 local BG_STATE_INIT    = 1;
@@ -176,12 +193,19 @@ local function saveSettingsIncremental()
     return true;
 end
 local function resetState() 
+    print("reset");
     state.remoteStatus = {};
     for i = 1, 8 do
         state.remoteStatus[i] = 0;
     end
     for i = 1, (widget.settings.rows * widget.settings.columns) do
         state.buttons[i] = { value = 0 };
+    end
+    if (hasVirtualInputs) then
+        for i, btns in pairs(state.virtuals) do
+            print("reset", i, btns);
+            setVirtualInput(i, widget.settings.virtualInputs[i].off * 10.24);
+        end
     end
 end
 local function updateAddressButtonLookup()
@@ -205,10 +229,23 @@ local function updateAddressButtonLookup()
         crsf.switchProtocol(1);
     end
 end
+local function updateVirtualInputButtons()
+    state.virtuals = {};
+    for i, btn in ipairs(widget.settings.buttons) do
+        if (btn.setVirtualInput > 0) then
+            if (state.virtuals[btn.setVirtualInput] == nil) then
+                state.virtuals[btn.setVirtualInput] = {i};
+            else
+                state.virtuals[btn.setVirtualInput][#state.virtuals[btn.setVirtualInput] + 1] = i;
+            end
+        end
+    end
+end
 local function resetButton(i)
     widget.settings.buttons[i] = { name = "Output " .. i, type = TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1,
                             exclusive_group = 0,
                             activation_switch = 0, external_switch = 0, image = "",
+                            setVirtualInput = 0, setVirtualValue = 0,
                             output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
                             sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
                             color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
@@ -220,13 +257,18 @@ local function resetButtons()
         widget.settings.telemActions[i] = {name = "In" .. i, input = i, switch = 0, address = widget.options.Address,
                                             colorOff = COLOR_THEME_SECONDARY2, colorOn = COLOR_THEME_WARNING};
     end
+    widget.settings.virtualInputs = {};
+    for i = 1, 16 do
+        widget.settings.virtualInputs[i] = {off = 0};
+    end
     state.buttons = {};
     for i = 1, (widget.settings.rows * widget.settings.columns) do
         resetButton(i);
     end
     updateAddressButtonLookup();
+    updateVirtualInputButtons();
     resetState();    
-    update_event = EVT_FILE_CHANCE;
+    eventPush(EVT_FILE_CHANCE);
 end
 local function resetSettingsOnly()
     widget.settings.version = settingsVersion;
@@ -272,6 +314,9 @@ local function activateVirtualSwitches()
             for i = 1, 64 do
                 -- print("activate vsw:", i);
                 activateVirtualSwitch(i, true);        
+            end
+            for i = 1, 16 do
+                activateVirtualInput(i, true);        
             end
         end        
     end
@@ -339,12 +384,14 @@ function widget.switchPage(id, nosave)
         widget.globalsPage()
     elseif (id == PAGE_TELEMETRY) then
         widget.telemetryPage()
+    elseif (id == PAGE_VIRTUALS) then
+        widget.virtualInputsPage()
     else
         --print("unknown id:", id)
     end
     widget.activePage = id;
     if (not nosave) then
-        update_event = EVT_FILE_CHANCE;
+        eventPush(EVT_FILE_CHANCE);
     end
 end
 
@@ -395,6 +442,14 @@ local function updateButton(i)
     processButtonGroup(i);
     fsm.update();
     setLSorVs(widget.settings.buttons[i].external_switch, (state.buttons[i].value > 0));
+    if (hasVirtualInputs) then
+        if (state.buttons[i].value > 0) then
+            setVirtualInput(widget.settings.buttons[i].setVirtualInput, widget.settings.buttons[i].setVirtualValue * 10.24);
+        else
+            local off = widget.settings.virtualInputs[widget.settings.buttons[i].setVirtualInput].off * 10.24;
+            setVirtualInput(widget.settings.buttons[i].setVirtualInput, off);
+        end        
+    end
 end
 
 local function isSwitchActive(i)
@@ -511,7 +566,7 @@ local function askClose(save)
     lvgl.confirm({title="Exit", message="Really exit?", confirm=(function() 
         lvgl.exitFullScreen();
         if (save) then
-            update_event = EVT_FILE_CHANCE;
+            eventPush(EVT_FILE_CHANCE);
         end
     end) })
 end
@@ -519,7 +574,16 @@ end
 local function sendColors()
     fsm.sendColors();
 end
-
+local function saveIndicator() 
+    return {type = "rectangle", x = 0, y = 0, w = LCD_W, h = 2, filled = true, 
+            color = (function()
+                if ((bg_state == BG_STATE_SAVE) or (bg_state == BG_STATE_SAVE_OLD)) then
+                    return COLOR_THEME_WARNING; 
+                else
+                    return COLOR_THEME_SECONDARY3; 
+                end 
+            end)};
+end
 function widget.globalsPage() 
     lvgl.clear();
     local page = lvgl.page({
@@ -606,19 +670,10 @@ function widget.globalsPage()
                     }
                 }                        
             }}};
+    uit[#uit + 1] = saveIndicator();
     widget.ui = page:build(uit);
 end
 
-local function saveIndicator() 
-    return {type = "rectangle", x = 0, y = 0, w = LCD_W, h = 2, filled = true, 
-            color = (function()
-                if ((bg_state == BG_STATE_SAVE) or (bg_state == BG_STATE_SAVE_OLD)) then
-                    return COLOR_THEME_WARNING; 
-                else
-                    return COLOR_THEME_SECONDARY3; 
-                end 
-            end)};
-end
 local function leftStatusBit(i)
     local xo = 1;
     local yo = 20;
@@ -712,6 +767,7 @@ end
 
 local function createSettingsDetails(i, edit_width) 
     --print("createDetails", i);
+    widget.activePage = PAGE_SETTINGS_D;
     local filter =  lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
     local setsw_filter = lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR;
     local setsw_text = " Set LS:"
@@ -770,6 +826,15 @@ local function createSettingsDetails(i, edit_width)
                             {type = "label", text = "Output:"},
                             {type = "numberEdit", min = 1, max = 8, w = 40, get = (function() return widget.settings.buttons[i].output; end), 
                                                                               set = (function(v) widget.settings.buttons[i].output = v; updateAddressButtonLookup(); end) }, 
+                    }},
+                    { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+                            {type = "label", text = "VirtualInput:"},
+                            {type = "numberEdit", min = 0, max = 16, w = 60, get = (function() return widget.settings.buttons[i].setVirtualInput; end), 
+                                                                              set = (function(v) widget.settings.buttons[i].setVirtualInput = v; updateVirtualInputButtons(); end) }, 
+                            {type = "label", text = "Value:"},
+                            {type = "numberEdit", min = -100, max = 100, w = 40, get = (function() return widget.settings.buttons[i].setVirtualValue; end), 
+                                                                              set = (function(v) widget.settings.buttons[i].setVirtualValue = v; end),
+                                                                            active = (function() return (widget.settings.buttons[i].setVirtualInput > 0); end) }, 
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Color:" },
@@ -863,9 +928,11 @@ function widget.settingsPage()
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)},
             {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
-            {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)} 
+            {type = "button", text = "Telemetry", press = (function() widget.switchPage(PAGE_TELEMETRY); end)}, 
+            {type = "button", text = "Virtuals", press = (function() widget.switchPage(PAGE_VIRTUALS); end)} 
         }
         };
+    uit[#uit + 1] = saveIndicator();
     widget.ui = page:build(uit);
 end
 
@@ -900,7 +967,6 @@ local function statusRow(r)
         }
     };
 end
-
 local function statusRows()
     return {{
         type = "box",
@@ -915,7 +981,6 @@ local function statusRows()
     }
     };
 end
-
 function widget.telemetryPage()
     lvgl.clear();
     local page = lvgl.page({
@@ -929,6 +994,57 @@ function widget.telemetryPage()
             flexPad = lvgl.PAD_LARGE,
             w = widget.zone.w,
             children = statusRows()
+         }};
+    uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
+    uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "button", text = "Control", press = (function() widget.switchPage(PAGE_CONTROL); end)},
+            {type = "button", text = "Global", press = (function() widget.switchPage(PAGE_GLOBALS); end)},
+            {type = "button", text = "Settings", press = (function() widget.switchPage(PAGE_SETTINGS); end)} 
+        }
+        };
+    widget.ui = page:build(uit);
+end
+local function virtualsRow(r)
+    return {
+        type = "box",
+        flexFlow = lvgl.FLOW_ROW,
+        children = {
+            {type = "label", text = "Virtual Input: " .. r},
+            {type = "label", text = " Off Value: "},
+            {type = "numberEdit", min = -100, max = 100, w = 60, 
+                            active = (function() return state.virtuals[r] ~= nil; end),
+                            get = (function() return widget.settings.virtualInputs[r].off; end), 
+                            set = (function(v) widget.settings.virtualInputs[r].off = v; end)},
+        }
+    };
+end
+local function virtualsRows()
+    return {{
+        type = "box",
+        flexFlow = lvgl.FLOW_COLUMN,
+        children = (function()
+            local col = {};
+            for r = 1, 16 do
+                col[#col+1] = virtualsRow(r);
+            end
+            return col;
+        end)()
+    }
+    };
+end
+function widget.virtualInputsPage()
+    lvgl.clear();
+    local page = lvgl.page({
+        title = titleString(),
+        subtitle = "Virtual-Inputs-Settings",
+        back = (function() askClose(true); end),
+    });
+    local uit = {{
+            type = "box",
+            flexFlow = lvgl.FLOW_COLUMN,
+            flexPad = lvgl.PAD_LARGE,
+            w = widget.zone.w,
+            children = virtualsRows()
          }};
     uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
@@ -984,9 +1100,9 @@ end
 
 function widget.update()
     if(updateFilename()) then
-        update_event = EVT_FILE_CHANCE;
+        eventPush(EVT_FILE_CHANCE);
     else 
-        widget_event = EVT_WIDGET_CHANGE;
+        eventPush(EVT_WIDGET_CHANGE);
     end
 end
 
@@ -1006,7 +1122,8 @@ end
 
 local st = nil;
 function widget.background()
-    local oldstate = bg_state;
+--    local oldstate = bg_state;
+    local e = EVT_NONE;
     if (bg_state == BG_STATE_UNDEF) then
         bg_state = BG_STATE_INIT;            
     elseif (bg_state == BG_STATE_INIT) then
@@ -1019,7 +1136,7 @@ function widget.background()
     elseif (bg_state == BG_STATE_HAS_FILE) then
         if (isValidSettingsTable(st)) then
             widget.settings = st;
-            resetState();
+--            resetState();
             bg_state = BG_STATE_UPDATE_MAPPINGS;
         else
             bg_state = BG_STATE_CONVERT;
@@ -1044,6 +1161,8 @@ function widget.background()
         end
     elseif (bg_state == BG_STATE_UPDATE_MAPPINGS) then
         updateAddressButtonLookup();
+        updateVirtualInputButtons();
+        resetState();
         bg_state = BG_STATE_ACTIVATE_VS;
     elseif (bg_state == BG_STATE_ACTIVATE_VS) then
         activateVirtualSwitches();
@@ -1053,8 +1172,9 @@ function widget.background()
             bg_state = BG_STATE_RUN;        
         end
     elseif (bg_state == BG_STATE_RUN) then
-        if (update_event == EVT_FILE_CHANCE) then
-            update_event = EVT_NONE;
+        e = eventPop();
+        if (e == EVT_FILE_CHANCE) then
+            e = EVT_NONE;
             bg_state = BG_STATE_SAVE;
         end
         if (gotConnected()) then
@@ -1064,35 +1184,28 @@ function widget.background()
         readPhysical();
         shm.encode();
     end
-    if (oldstate ~= bg_state) then
-        widget_event = EVT_STATE_CHANGE;
-    end
+    return e;
 end
 
 function widget.refresh(event, touchState)
-    if (lvgl == nil) then
-        lcd.drawText(widget.zone.x, widget.zone.y, "Lvgl support required", COLOR_THEME_WARNING);
-    else
-        if (widget_event ~= EVT_NONE) then
-            widget_event = EVT_NONE;
-            if ((bg_state == BG_STATE_RUN) or (bg_state == BG_STATE_SAVE)) then
-                if (lvgl.isFullScreen() or lvgl.isAppMode()) then
-                    if (widget.activePage > 0) then
-                        widget.switchPage(widget.activePage, true);
-                    else                    
-                        widget.switchPage(PAGE_CONTROL, true);
-                    end
-                else
-                    widget.activePage = 0;
-                    widget.widgetPage();
+    local e = widget.background();
+    if (e == EVT_WIDGET_CHANGE) then
+        if ((bg_state == BG_STATE_RUN) or (bg_state == BG_STATE_SAVE)) then
+            if (lvgl.isFullScreen() or lvgl.isAppMode()) then
+                if (widget.activePage > 0) then
+                    widget.switchPage(widget.activePage, true);
+                else                    
+                    widget.switchPage(PAGE_CONTROL, true);
                 end
             else
                 widget.activePage = 0;
                 widget.widgetPage();
             end
+        else
+            widget.activePage = 0;
+            widget.widgetPage();
         end
     end
-    widget.background();
 end
 
 return widget;
