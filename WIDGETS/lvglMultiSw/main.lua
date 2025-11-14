@@ -21,7 +21,9 @@ local longname = "MultiSwitch-ELRS/L"
 
 local function create(zone, options, dir)
     if (lvgl == nil) then
-        return {zone = zone, options = options, name = name};
+        return {zone = zone, 
+                options = options, 
+                name = name};
     end
     if (dir == nil) then
         dir = "/WIDGETS/lvglMultiSw/";
@@ -34,9 +36,6 @@ local function refresh(widget, event, touchState)
 end
 
 local function background(widget)
-    if (lvgl == nil) then 
-        return;
-    end
     widget.background();
 end
 
@@ -44,7 +43,6 @@ local options = {
     { "CRSF",  BOOL, 1 },
     { "Address",  VALUE, 0, 0, 255 },
     { "Intervall",  VALUE, 100, 10, 100 },
---    { "Autoconf", BOOL,  0 }, -- not fully implemented
     { "ShmEncoding", BOOL,  0 },
     { "ShmVarStart",  VALUE, 1, 1, 16 }, -- first shm var to be used: number of different addresses in widget gives number of contiguous shm vars 
     { "ShmSync", VALUE, 0, 0, 16}, -- shm var used for sync with crsfch.lua, 0 means no sync
@@ -56,9 +54,6 @@ local options = {
   
 local function update(widget, options)
     widget.options = options;
-    if (lvgl == nil) then 
-        return;
-    end
     widget.update();
 end
 
