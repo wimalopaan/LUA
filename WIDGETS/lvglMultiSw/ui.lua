@@ -34,6 +34,7 @@
 --- text placing if images are used
 
 -- done
+--- introduce state counter to visualize longer loading/saving times
 --- split UI in different files (control, settings, global)
 --- increase max height of buttons (e.g. for 2x1 design)
 --- visualize states of state-machine
@@ -124,7 +125,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 27;
+local version = 28;
 local settingsVersion = 28;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -167,6 +168,7 @@ local BG_STATE_LOAD_VIRTUAL   = 20;
 local BG_STATE_LOAD_TELEMETRY = 21;
 
 local bg_state = BG_STATE_UNDEF;
+local stateCounter = 0;
 
 local function addressString() 
     local min = widget.options.Address;
@@ -438,7 +440,7 @@ function widget.loadingPage()
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
-            { type = "label", text = (function() return "Loading ... " .. bg_state; end), w = widget.zone.x, align = CENTER }
+            { type = "label", text = (function() return "Loading ... " .. bg_state .. "/" .. stateCounter; end), w = widget.zone.x, align = CENTER }
         }}
     });
 end
@@ -489,6 +491,7 @@ end
 local st = nil;
 function widget.background()
     local oldstate = bg_state;
+    stateCounter = stateCounter + 1;
     if (bg_state == BG_STATE_UNDEF) then
         bg_state = BG_STATE_LOAD_UTILS1;       
     elseif (bg_state == BG_STATE_LOAD_UTILS1) then
@@ -584,6 +587,7 @@ function widget.background()
         widget.shm.encode();
     end
     if (oldstate ~= bg_state) then
+        stateCounter = 0;
         -- print("state", oldstate, "->", bg_state);
     end
 end
