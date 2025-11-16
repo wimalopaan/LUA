@@ -23,7 +23,7 @@
 -- bugs
 
 -- todo
---- introduce config option to disable features: e.g. telemetry status bits 
+--- introduce config page (remove widget options)
 --- global page: nicer (rectangle for line heigth and column width, columns)
 --- move some (all) Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
@@ -120,7 +120,7 @@ widget.C = C;
 widget.ui = nil;
 widget.activePage    = C.PAGE_NONE;
 widget.settings = {};
-widget.hasVirtualInputs = (xgetVirtualSwitch ~= nil);
+widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
