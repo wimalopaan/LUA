@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local state, widget, dir, util = ... 
+local state, widget, dir = ... 
 
 local CRSF_ADDRESS_CONTROLLER     = 0xC8; 
 local CRSF_ADDRESS_TRANSMITTER    = 0xEA;
@@ -197,7 +197,7 @@ local function sendNextColor()
     colorIter.adr, colorIter.btn = next(state.addresses);
   end
   local r = sendColorsForAddress(colorIter.adr, colorIter.btn);
-  print("sendNextColor", colorIter.adr, r);
+  -- print("sendNextColor", colorIter.adr, r);
   if (r) then
     colorIter.adr, colorIter.btn = next(state.addresses, colorIter.adr);
     if (colorIter.adr == nil) then

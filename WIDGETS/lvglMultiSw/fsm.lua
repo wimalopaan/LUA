@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local crsf, sport, widget, util, uistate = ... 
+local widget, uistate = ... 
 
 local state = 0;    
 local actual_item = 0;
@@ -25,8 +25,6 @@ local item_retries = 10;
 local item_try = 0;
 local items = 8;
 local event = 0;
-
-local EVT_UPDATE = 1;
 
 local sendTimeout = 100;
 local lastTimeSend = 0;
@@ -47,7 +45,7 @@ local function update()
     if (widget.options.ShmSync > 0) then
       setShmVar(widget.options.ShmSync, 1); -- stop crsfsh.lua from sending, better increment
     end
-    if (crsf.send() == true) then
+    if (widget.crsf.send() == true) then
       lastTimeSend = getTime();     
       setShmVar(widget.options.ShmSync, 0); -- better decrement
       --print("crsf OK");
@@ -57,7 +55,7 @@ local function update()
     end   
   end  
   if (widget.options.SPort == 1) then
-    if (sport.send() == true) then
+    if (widget.sport.send() == true) then
       lastTimeSend = getTime();
     else
       --print("sport not send");
@@ -68,7 +66,7 @@ local lastBits = 0;
 local rptp = 0;
 local function readStatusBits()
   if (widget.settings.statusPassthru > 0) then
-    local address, bits = crsf.readPassThru();
+    local address, bits = widget.crsf.readPassThru();
     while (bits ~= nil) do
       rptp = rptp + 1;
       local changedBits = bit32.bxor(bits, lastBits);
@@ -91,7 +89,7 @@ local function readStatusBits()
         end
         mask = mask * 2;
       end     
-      address, bits = crsf.readPassThru();
+      address, bits = widget.crsf.readPassThru();
     end
   end
 end
@@ -99,7 +97,7 @@ local receivingStatus = false;
 local function onTimeout(f)
     local t = getTime();
     if ((t - lastTimeSend) > sendTimeout) then
-      sport.invalidate();
+      widget.sport.invalidate();
       update();
       if (rptp > 0) then
         receivingStatus = true;
@@ -134,7 +132,7 @@ local function tick(configCallback)
     if (stateCounter > 3) then
       state = 0;
     end
-    if (crsf.sendNextColor()) then
+    if (widget.crsf.sendNextColor()) then
       state = 0;
     end
   end

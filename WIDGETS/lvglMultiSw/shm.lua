@@ -15,7 +15,7 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local widget, state, util = ... 
+local widget, state = ... 
 
 local function encode()
     if (widget.options.ShmEncoding > 0) then

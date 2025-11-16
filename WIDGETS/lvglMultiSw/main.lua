@@ -17,13 +17,18 @@
 -- for todo-list: see ui.lua
 
 local name = "MultiSwE/L"
-local longname = "MultiSwitch-ELRS/L"
+local longname = "MultiSwitch-ELRS/LVGL"
 
 local function create(zone, options, dir)
     if (lvgl == nil) then
         return {zone = zone, 
                 options = options, 
-                name = name};
+                name = name,
+                update = (function() end),
+                refresh = (function()
+                    lcd.drawText(zone.x, zone.y, "Lvgl support required", COLOR_THEME_WARNING);
+                end),
+                background = (function() end)};
     end
     if (dir == nil) then
         dir = "/WIDGETS/lvglMultiSw/";
@@ -58,7 +63,7 @@ local function update(widget, options)
 end
 
 return {
-    useLvgl = true,
+    useLvgl = (lvgl ~= nil),
     name = name,
     create = create,
     refresh = refresh,

@@ -23,7 +23,7 @@
 -- instance was no detected in EdgeTx as sensor, otherwise the S.Port packages are not pushed to the receiver 
 -- (and sportTelemetryPush() fails)
 
-local state, widget, dir, util = ... 
+local state, widget, dir = ... 
 
 -- todo: 
 -- allow up to 8 different addresses
