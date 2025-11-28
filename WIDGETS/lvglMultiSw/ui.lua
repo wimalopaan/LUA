@@ -21,8 +21,11 @@
 --- EdgeTx 2.11.3 
 
 -- bugs
+--- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- place logo image
+--- show loading error if config file errorneous
 --- introduce config page (remove widget options)
 --- global page: nicer (rectangle for line heigth and column width, columns)
 --- move some (all) Widget-settings to global config dialog
@@ -34,6 +37,7 @@
 --- text placing if images are used
 
 -- done
+--- auto-mutex-group, if virtula-inputs are used
 --- introduce state counter to visualize longer loading/saving times
 --- split UI in different files (control, settings, global)
 --- increase max height of buttons (e.g. for 2x1 design)
@@ -94,6 +98,7 @@ local widget = {}
 widget.options = options;
 widget.zone = zone;
 widget.name = name;
+widget.dir = dir;
 
 local C = {};
 C.PAGE_NONE       = 0;
@@ -125,8 +130,8 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 28;
-local settingsVersion = 28;
+local version = 30;
+local settingsVersion = 29;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -224,12 +229,48 @@ function widget.updateAddressButtonLookup()
     end
     local count = 0; 
     for _ in pairs(state.addresses) do
-        count = count + 1; -- need to count because #-op does count only contiguos tables 
+        count = count + 1; -- need to count because #-op does count only contiguous tables 
     end
     if (count > 1) then -- use SET4M protocol
         widget.crsf.switchProtocol(2);
     else
         widget.crsf.switchProtocol(1);
+    end
+end
+function widget.virtualInputAutoMutexGroup(btn)
+    if (widget.settings.buttons[btn].virtualAutoMutexGroup > 0) then
+        local vi = widget.settings.buttons[btn].setVirtualInput;
+        if (vi > 0) then
+            local count = 0;
+            local egr = 0;
+            local max_egr = 0;
+            for i, b in ipairs(widget.settings.buttons) do
+                if (b.exclusive_group > max_egr) then
+                    max_egr = b.exclusive_group;
+                end
+                if (i ~= btn) then
+                    if (vi == b.setVirtualInput) then
+                        count = count + 1;
+                        egr = b.exclusive_group;
+                    end                    
+                end
+            end
+            if (count > 0) then
+                if (egr > 0) then
+                    widget.settings.buttons[btn].exclusive_group = egr;
+                else
+                    egr = max_egr + 1;
+                    widget.settings.buttons[btn].exclusive_group = egr;
+                    for i, b in ipairs(widget.settings.buttons) do
+                        if (i ~= btn) then
+                            if (vi == b.setVirtualInput) then
+                                b.exclusive_group = egr;
+                            end                    
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 function widget.updateVirtualInputButtons()
@@ -248,7 +289,7 @@ local function resetButton(i)
     widget.settings.buttons[i] = { name = "Output " .. i, type = C.TYPE_BUTTON, switch = 0, switch2 = 0, source = 0, visible = 1,
                             exclusive_group = 0,
                             activation_switch = 0, external_switch = 0, image = "",
-                            setVirtualInput = 0, setVirtualValue = 0,
+                            setVirtualInput = 0, setVirtualValue = 0, virtualAutoMutexGroup = 1,
                             output = ((i - 1) % 8) + 1, address = widget.options.Address + ((i - 1) // 8),
                             sport = {pwm_on = 0xff, options = 0x00, type = 0x01},
                             color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
@@ -430,7 +471,8 @@ function widget.widgetPage()
                 end
                 end), 
                 w = widget.zone.x, align = CENTER }, 
-            { type = "label", text = "V: " .. versionString, w = widget.zone.x, align = CENTER, font = SMLSIZE}
+            { type = "label", text = "V: " .. versionString, w = widget.zone.x, align = CENTER, font = SMLSIZE},
+--            { type = "image", file = dir .. "Logo_small_64_8.png"}
             }
         }
     });
@@ -530,10 +572,12 @@ function widget.background()
         bg_state = BG_STATE_INIT;       
     elseif (bg_state == BG_STATE_INIT) then
         --updateFilename();
-        st = widget.serialize.load(settingsFilename);
+        local err;
+        st, err = widget.serialize.load(settingsFilename);
         if (st ~= nil) then
             bg_state = BG_STATE_HAS_FILE;
         else
+            print("loading error:", err);
             bg_state = BG_STATE_NO_FILE;
         end
     elseif (bg_state == BG_STATE_HAS_FILE) then

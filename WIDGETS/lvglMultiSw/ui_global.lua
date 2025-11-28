@@ -22,6 +22,7 @@ function widget.globalsPage()
     local page = lvgl.page({
         title = widget.titleString(),
         subtitle = "Global-Settings",
+        icon = widget.dir .. "Logo_30_inv.png",
         back = (function() widget.askClose(true); end),
     });
     local vswitch_box = {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {}};
@@ -88,7 +89,6 @@ function widget.globalsPage()
                         end) })
                     end) } 
                 }},
-                {type = "button", text = "Reset all Settings", press = (function() widget.resetSettings() end)},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "button", text = "Send Colors", press = (function() widget.sendColors() end)},
                     {type = "toggle", get = (function() return widget.settings.activate_color_proto; end), 
@@ -96,12 +96,15 @@ function widget.globalsPage()
                     }
                 },
                 {type = "hline", w = widget.zone.w / 2, h = 1 },
+                {type = "button", text = "Reset all Settings", press = (function() widget.resetSettings() end)},
+                {type = "hline", w = widget.zone.w / 2, h = 1 },
                 {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-                        {type = "button", text = "Settings", press = (function() widget.switchPage(widget.C.PAGE_SETTINGS); end)},
-                        {type = "button", text = "Control", press = (function() widget.switchPage(widget.C.PAGE_CONTROL); end)}, 
-                        {type = "button", text = "Telemetry", press = (function() widget.switchPage(widget.C.PAGE_TELEMETRY); end)} 
-                    }
-                }                        
+                    {type = "image", file = widget.dir .. "Logo_small_64_t.png", w = 32, h = 32},
+                    {type = "box", w = 40},
+                    {type = "button", text = "Settings", press = (function() widget.switchPage(widget.C.PAGE_SETTINGS); end)},
+                    {type = "button", text = "Control", press = (function() widget.switchPage(widget.C.PAGE_CONTROL); end)}, 
+                    {type = "button", text = "Telemetry", press = (function() widget.switchPage(widget.C.PAGE_TELEMETRY); end)} 
+                }}                        
             }}};
     uit[#uit + 1] = widget.saveIndicator();
     widget.ui = page:build(uit);

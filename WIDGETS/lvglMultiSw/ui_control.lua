@@ -94,9 +94,9 @@ local function createButton(i, width)
     end
     local ichild = {};
     if (widget.settings.buttons[i].image ~= "") then
-        ichild = {{ type = "image", file = widget.settings.imagesdir .. widget.settings.buttons[i].image, x = 0, y = -5, 
+        ichild = {{ type = "image", file = widget.settings.imagesdir .. widget.settings.buttons[i].image, x = 0, y = -1, 
                                                                                     w = widget.settings.line_height, 
-                                                                                    h = widget.settings.line_height}};        
+                                                                                    h = widget.settings.line_height - 7}};        
     end
     if (widget.settings.buttons[i].type == widget.C.TYPE_BUTTON) then
         return { type = "button", name = "b" .. i, text = (function() 
@@ -225,6 +225,7 @@ function widget.controlPage()
     local page = lvgl.page({
         title = widget.titleString(),
         subtitle = "Control",
+        icon = widget.dir .. "Logo_30_inv.png";
         back = (function() widget.askClose(); end),
     });
 
@@ -254,7 +255,9 @@ function widget.controlPage()
             end)(),
         },
         { type = "hline", w = widget.zone.w / 2, h = 1 },
-        { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+        { type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
+                {type = "image", file = widget.dir .. "Logo_small_64_t.png", w = 32, h = 32},
+                {type = "box", w = 40},
                 {type = "button", text = "Settings", press = (function() widget.switchPage(widget.C.PAGE_SETTINGS, true); end)},
                 {type = "button", text = "Global", press = (function() widget.switchPage(widget.C.PAGE_GLOBALS, true); end)},
                 {type = "button", text = "Telemetry", press = (function() widget.switchPage(widget.C.PAGE_TELEMETRY, true); end)} 

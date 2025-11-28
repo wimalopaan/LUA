@@ -50,6 +50,7 @@ function widget.virtualInputsPage()
     local page = lvgl.page({
         title = widget.titleString(),
         subtitle = "Virtual-Inputs-Settings",
+        icon = widget.dir .. "Logo_30_inv.png",
         back = (function() widget.askClose(true); end),
     });
     local uit = {{
@@ -61,6 +62,8 @@ function widget.virtualInputsPage()
          }};
     uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "image", file = widget.dir .. "Logo_small_64_t.png", w = 32, h = 32},
+            {type = "box", w = 40},
             {type = "button", text = "Control", press = (function() widget.switchPage(widget.C.PAGE_CONTROL); end)},
             {type = "button", text = "Global", press = (function() widget.switchPage(widget.C.PAGE_GLOBALS); end)},
             {type = "button", text = "Settings", press = (function() widget.switchPage(widget.C.PAGE_SETTINGS); end)} 

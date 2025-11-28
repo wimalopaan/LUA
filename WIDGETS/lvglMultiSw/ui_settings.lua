@@ -79,14 +79,21 @@ local function createSettingsDetails(i, edit_width)
                                                                               set = (function(v) widget.settings.buttons[i].output = v; widget.updateAddressButtonLookup(); end) }, 
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
-                            {type = "label", text = "VirtualInput:"},
+                            {type = "label", text = "Virtual-Input:"},
                             {type = "numberEdit", min = 0, max = 16, w = 60, get = (function() return widget.settings.buttons[i].setVirtualInput; end), 
-                                                                             set = (function(v) widget.settings.buttons[i].setVirtualInput = v; widget.updateVirtualInputButtons(); end),
+                                                                             set = (function(v) 
+                                                                                widget.settings.buttons[i].setVirtualInput = v; 
+                                                                                widget.updateVirtualInputButtons();
+                                                                                widget.virtualInputAutoMutexGroup(i);
+                                                                             end),
                                                                              active = (function() return widget.hasVirtualInputs; end)}, 
                             {type = "label", text = "Value:"},
                             {type = "numberEdit", min = -100, max = 100, w = 40, get = (function() return widget.settings.buttons[i].setVirtualValue; end), 
                                                                                  set = (function(v) widget.settings.buttons[i].setVirtualValue = v; end),
                                                                                  active = (function() return (widget.settings.buttons[i].setVirtualInput > 0) and widget.hasVirtualInputs; end) }, 
+                            {type = "label", text = "Auto Mutex-Grp:"},
+                            {type = "toggle", get = (function() return widget.settings.buttons[i].virtualAutoMutexGroup; end), 
+                                      set = (function(v) widget.settings.buttons[i].virtualAutoMutexGroup = v; end) }
                     }},
                     { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
                         { type = "label", text = " Color:" },
@@ -164,6 +171,7 @@ function widget.settingsPage()
     local page = lvgl.page({
         title = widget.titleString(),
         subtitle = "Function-Settings",
+        icon = widget.dir .. "Logo_30_inv.png",
         back = (function() widget.askClose(true); end),
     });
     local edit_width = widget.zone.w / 6;
@@ -178,6 +186,8 @@ function widget.settingsPage()
     };
     uit[1].children[#uit[1].children + 1] = { type = "hline", w = widget.zone.w / 2, h = 1 };
     uit[1].children[#uit[1].children + 1] = { type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "image", file = widget.dir .. "Logo_small_64_t.png", w = 32, h = 32},
+            {type = "box", w = 40},
             {type = "button", text = "Control", press = (function() widget.switchPage(widget.C.PAGE_CONTROL); end)},
             {type = "button", text = "Global", press = (function() widget.switchPage(widget.C.PAGE_GLOBALS); end)},
             {type = "button", text = "Telemetry", press = (function() widget.switchPage(widget.C.PAGE_TELEMETRY); end)}, 

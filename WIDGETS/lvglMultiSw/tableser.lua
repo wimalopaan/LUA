@@ -195,6 +195,9 @@ local function load(sfile)
     local ftables, err = loadfile(sfile)
     if err then return _, err end
     local tables = ftables()
+    if (tables == nil) then
+        return nil, "empty file";
+    end
     for idx = 1, #tables do
         local tolinki = {}
         for i, v in pairs(tables[idx]) do
