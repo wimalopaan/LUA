@@ -24,6 +24,7 @@
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- remove top-level box layout and use page directly (maybe need Edge PR 6841)
 --- place logo image
 --- show loading error if config file errorneous
 --- introduce config page (remove widget options)
@@ -37,7 +38,8 @@
 --- text placing if images are used
 
 -- done
---- auto-mutex-group, if virtula-inputs are used
+--- grey-out label if button unvisible
+--- auto-mutex-group, if virtual-inputs are used
 --- introduce state counter to visualize longer loading/saving times
 --- split UI in different files (control, settings, global)
 --- increase max height of buttons (e.g. for 2x1 design)
@@ -130,7 +132,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 30;
+local version = 31;
 local settingsVersion = 29;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 

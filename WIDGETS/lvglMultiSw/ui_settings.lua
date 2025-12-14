@@ -148,10 +148,16 @@ local function createSettingsRow(i, edit_width, maxLen)
         children = {
             {type = "label", text = "Output " .. i, font = BOLD },
             {type = "label", text = " Name:"},
-            {type = "textEdit", value = widget.settings.buttons[i].name, w = edit_width, maxLen = maxLen, set = (function(s) widget.settings.buttons[i].name = s; end) },
+            {type = "textEdit", value = widget.settings.buttons[i].name, w = edit_width, maxLen = maxLen, 
+                        set = (function(s) widget.settings.buttons[i].name = s; end), 
+                        active = (function() return widget.settings.buttons[i].visible == 1; end)
+                    },
             {type = "label", text = " Type:" },
             {type = "choice", title = "Type", values = {"Button", "Toggle", "3Pos", "Momentary", "Slider"}, w = edit_width,
-                               get = (function() return widget.settings.buttons[i].type; end), set = (function(t) widget.settings.buttons[i].type = t; end) }, 
+                               get = (function() return widget.settings.buttons[i].type; end), 
+                               set = (function(t) widget.settings.buttons[i].type = t; end),
+                               active = (function() return widget.settings.buttons[i].visible == 1; end)
+                            }, 
             {type = "button", text = "Details", textColor = (function() if (widget.settings.buttons[i].address ~= widget.options.Address) then return COLOR_THEME_WARNING; else return COLOR_THEME_SECONDARY1; end; end), 
                 press = (function() createSettingsDetails(i, edit_width); end)},
         }
