@@ -19,11 +19,14 @@
 --- EdgeTx 2.11.1
 --- Edgetx 2.11.2 momentary bug in EdgeTx, fix: PR 6460 
 --- EdgeTx 2.11.3 
+--- EdgeTx PR 6958 (physical switch does not set button in checked state)
 
--- bugs
+-- bugs 
+--- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- use explicit layout instead of box layout for less overhead
 --- remove top-level box layout and use page directly (maybe need Edge PR 6841)
 --- place logo image
 --- show loading error if config file errorneous
@@ -38,7 +41,8 @@
 --- text placing if images are used
 
 -- done
---- grey-out label if button unvisible
+--- produce logging data (optional)
+--- grey-out label in settings if button unvisible
 --- auto-mutex-group, if virtual-inputs are used
 --- introduce state counter to visualize longer loading/saving times
 --- split UI in different files (control, settings, global)
@@ -92,6 +96,11 @@
 -- Settings:
 
 local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version
+local logging = {
+    enabled = false,
+    file = "log.txt",
+    console = false;
+};
 
 -- End of Settings
 
@@ -101,6 +110,8 @@ widget.options = options;
 widget.zone = zone;
 widget.name = name;
 widget.dir = dir;
+widget.logging = {};
+function widget.logging.log() end;
 
 local C = {};
 C.PAGE_NONE       = 0;
@@ -122,6 +133,8 @@ C.EVT_FILE_CHANCE   = 1;
 C.EVT_WIDGET_CHANGE = 2;
 C.EVT_STATE_CHANGE  = 3;
 C.EVT_INIT          = 4;
+C.EVT_RESET         = 5;
+C.EVT_ALT_FILE      = 6;
 
 widget.C = C;
 
@@ -132,8 +145,8 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 31;
-local settingsVersion = 29;
+local version = 32;
+local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
 local settingsFilename = nil;
@@ -162,17 +175,20 @@ local BG_STATE_SAVE_OLD       = 6;
 local BG_STATE_UPDATE_MAPPINGS= 7;
 local BG_STATE_ACTIVATE_VS    = 8;
 local BG_STATE_RUN            = 10;
-local BG_STATE_LOAD_UTILS1    = 11;
-local BG_STATE_LOAD_UTILS2    = 12;
-local BG_STATE_LOAD_UTILS3    = 13;
-local BG_STATE_LOAD_UTILS4    = 14;
-local BG_STATE_LOAD_UTILS5    = 15;
-local BG_STATE_LOAD_UTILS6    = 16;
-local BG_STATE_LOAD_CONTROL   = 17;
-local BG_STATE_LOAD_SETTINGS  = 18;
-local BG_STATE_LOAD_GLOBAL    = 19;
-local BG_STATE_LOAD_VIRTUAL   = 20;
-local BG_STATE_LOAD_TELEMETRY = 21;
+local BG_STATE_LOAD_UTILS0    = 11;
+local BG_STATE_LOAD_UTILS1    = 12;
+local BG_STATE_LOAD_UTILS2    = 13;
+local BG_STATE_LOAD_UTILS3    = 14;
+local BG_STATE_LOAD_UTILS4    = 15;
+local BG_STATE_LOAD_UTILS5    = 16;
+local BG_STATE_LOAD_UTILS6    = 17;
+local BG_STATE_LOAD_CONTROL   = 18;
+local BG_STATE_LOAD_SETTINGS  = 19;
+local BG_STATE_LOAD_GLOBAL    = 20;
+local BG_STATE_LOAD_VIRTUAL   = 21;
+local BG_STATE_LOAD_TELEMETRY = 22;
+local BG_STATE_ERROR_STOP     = 23;
+local BG_STATE_SAVE_UPDATE    = 24;
 
 local bg_state = BG_STATE_UNDEF;
 local stateCounter = 0;
@@ -297,6 +313,7 @@ local function resetButton(i)
                             color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0 };
 end
 function widget.resetButtons()
+    widget.logging.log("resetButtons");
     widget.settings.buttons = {};
     widget.settings.telemActions = {};
     for i = 1, 8 do
@@ -317,6 +334,7 @@ function widget.resetButtons()
     eventPush(C.EVT_FILE_CHANCE);
 end
 local function resetSettingsOnly()
+    widget.logging.log("resetSettingsOnly");
     widget.settings.version = settingsVersion;
     widget.settings.imagesdir = "/IMAGES/";
     widget.settings.name = "Beleuchtung";
@@ -329,13 +347,16 @@ local function resetSettingsOnly()
     widget.settings.columns = 2;
     widget.settings.commandBroadcastAddress = 0xc8;
     widget.settings.statusPassthru = 0;
+    widget.settings.logging = 0;
 end
 function widget.resetSettings() 
+    widget.logging.log("resetSettings");
     resetSettingsOnly();
     widget.resetButtons();
 end
 --resetSettings();
 local function isValidSettingsTable(t) 
+    widget.logging.log("iSValidSettings");
     if (t.version ~= nil) then
         if (t.version == settingsVersion) then
             return true;
@@ -344,6 +365,7 @@ local function isValidSettingsTable(t)
     return false;
 end
 local function updateFilename()
+    widget.logging.log("updateFilename");
     local fname = dir .. model.getInfo().name .. "_" .. widget.options.Address .. ".lua";
     if (fname ~= settingsFilename) then
         settingsFilename = fname;
@@ -414,6 +436,7 @@ local function readPhysical()
 end
 
 function widget.switchPage(id, nosave)
+    widget.logging.log("switchPage %d %s", id, nosave);
     widget.fsm.sendEvent(2);
     if (id == widget.activePage) then
         return;
@@ -461,12 +484,14 @@ end
 
 local converted = false;
 function widget.widgetPage()
+    widget.logging.log("widgetPage");
     lvgl.clear();
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
             { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
             { type = "label", text = (function() 
                 if (converted) then
+                    converted = false;
                     return widget.settings.name .. "@" .. addressString() .. " (CV)";
                 else
                     return widget.settings.name .. "@" .. addressString();
@@ -480,6 +505,7 @@ function widget.widgetPage()
     });
 end
 function widget.loadingPage()
+    widget.logging.log("loadingPage");
     lvgl.clear();
     widget.ui = lvgl.build({
         { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
@@ -488,7 +514,57 @@ function widget.loadingPage()
         }}
     });
 end
+local alternatesettingsfilename = settingsFilename;
+local err_reason = "-";
+function widget.errorPage()
+    widget.logging.log("errorPage");
+    lvgl.clear();
+    widget.ui = lvgl.build({
+        { type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+            { type = "label", text = widget.name, w = widget.zone.x, align = CENTER},
+            { type = "label", text = "Error!", w = widget.zone.x, align = CENTER },
+            { type = "label", text = "Please switch to fullscreen!", w = widget.zone.x, align = CENTER }
+        }}
+    });
+end
+function widget.errorPageFull()
+    widget.logging.log("errorPageFull");
+    lvgl.clear();
+    local page = lvgl.page({
+        title = widget.titleString(),
+        subtitle = "Error Handling",
+        icon = widget.dir .. "Logo_30_inv.png";
+        back = (function() widget.askClose(false); end),
+    });
+    widget.ui = page:build({
+        {type = "box", flexFlow = lvgl.FLOW_COLUMN, children = {
+            {type = "label", text = "Sadly an error occurred. Now you have the following options:"},
+            {type = "label", text = "Reason: " .. err_reason},
+            {type = "button", text = "Reset and overwrite config file", 
+                    press = (function() 
+                        eventPush(C.EVT_RESET); 
+                        err_reason = "-";
+                    end)},
+            {type = "button", text = "Retry", press = (function() eventPush(C.EVT_INIT); end)},
+            {type = "button", text = "Stop widget", press = (function() widget.askClose(false); end)},
+            {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+                {type = "file", title = "Config file", folder = widget.dir, 
+                        set = (function(f) alternatesettingsfilename = widget.dir .. f; end),
+                        get = (function() return alternatesettingsfilename; end)},
+                {type = "button", text = "Reset with alternative config file", press = (function() 
+                    eventPush(C.EVT_ALT_FILE); 
+                    err_reason = "-";
+                end)},
+            }},
+            {type = "label",  
+                    visible = (function() return bg_state ~= BG_STATE_ERROR_STOP; end), 
+                    text = (function() return "Loading ... " .. bg_state .. "/" .. stateCounter; end), w = widget.zone.x, align = CENTER }
+            }
+        }
+    });
+end
 local function convertSettings(t)
+    widget.logging.log("conertSettings");
     if (t.version ~= nil) then
         resetSettingsOnly();
         for k, v in pairs(t) do
@@ -511,6 +587,7 @@ local function convertSettings(t)
 end
 
 function widget.update()
+    widget.logging.log("update");
     if(updateFilename()) then
         eventPush(C.EVT_FILE_CHANCE);
     else 
@@ -537,6 +614,9 @@ function widget.background()
     local oldstate = bg_state;
     stateCounter = stateCounter + 1;
     if (bg_state == BG_STATE_UNDEF) then
+        bg_state = BG_STATE_LOAD_UTILS0;       
+    elseif (bg_state == BG_STATE_LOAD_UTILS0) then
+        widget.logging = loadScript(dir .. "log.lua", "btd")(widget, logging);
         bg_state = BG_STATE_LOAD_UTILS1;       
     elseif (bg_state == BG_STATE_LOAD_UTILS1) then
         widget.serialize = loadScript(dir .. "tableser.lua", "btd")();
@@ -573,40 +653,43 @@ function widget.background()
         local s = loadScript(dir .. "ui_telemetry.lua", "btd")(state, widget);
         bg_state = BG_STATE_INIT;       
     elseif (bg_state == BG_STATE_INIT) then
-        --updateFilename();
         local err;
         st, err = widget.serialize.load(settingsFilename);
         if (st ~= nil) then
             bg_state = BG_STATE_HAS_FILE;
         else
-            print("loading error:", err);
-            bg_state = BG_STATE_NO_FILE;
+            widget.logging.log("loading error: %s", err);
+            if (err) then
+                err_reason = err;            
+            end
+            eventPush(C.EVT_WIDGET_CHANGE);
+            bg_state = BG_STATE_ERROR_STOP;
         end
     elseif (bg_state == BG_STATE_HAS_FILE) then
         if (isValidSettingsTable(st)) then
             widget.settings = st;
---            resetState();
             bg_state = BG_STATE_UPDATE_MAPPINGS;
         else
             bg_state = BG_STATE_CONVERT;
         end
     elseif (bg_state == BG_STATE_CONVERT) then
         if (not convertSettings(st)) then
-            bg_state = BG_STATE_NO_FILE;
+            eventPush(C.EVT_WIDGET_CHANGE);
+            bg_state = BG_STATE_ERROR_STOP;
         else
             converted = true;
             if (SAVE_OLD_CONFIG) then
                 bg_state = BG_STATE_SAVE_OLD;
             else
-                bg_state = BG_STATE_UPDATE_MAPPINGS;
+                bg_state = BG_STATE_SAVE_UPDATE;
             end
         end
     elseif (bg_state == BG_STATE_NO_FILE) then
         widget.resetSettings();
-        bg_state = BG_STATE_UPDATE_MAPPINGS;
+        bg_state = BG_STATE_SAVE_UPDATE;
     elseif (bg_state == BG_STATE_SAVE_OLD) then
         if (widget.serialize.saveIncremental(st, settingsFilename .. "." .. st.version)) then -- save old file with new name
-            bg_state = BG_STATE_UPDATE_MAPPINGS;
+            bg_state = BG_STATE_SAVE_UPDATE;
         end
     elseif (bg_state == BG_STATE_UPDATE_MAPPINGS) then
         widget.updateAddressButtonLookup();
@@ -615,7 +698,12 @@ function widget.background()
         bg_state = BG_STATE_ACTIVATE_VS;
     elseif (bg_state == BG_STATE_ACTIVATE_VS) then
         widget.activateVirtualSwitches();
-        bg_state = BG_STATE_SAVE;
+        eventPush(C.EVT_WIDGET_CHANGE);
+        bg_state = BG_STATE_RUN;
+    elseif (bg_state == BG_STATE_SAVE_UPDATE) then
+        if (saveSettingsIncremental()) then
+            bg_state = BG_STATE_UPDATE_MAPPINGS;  
+        end
     elseif (bg_state == BG_STATE_SAVE) then
         if (saveSettingsIncremental()) then
             eventPush(C.EVT_WIDGET_CHANGE);
@@ -631,10 +719,29 @@ function widget.background()
         widget.fsm.tick(configItemCallback);
         readPhysical();
         widget.shm.encode();
+    elseif (bg_state == BG_STATE_ERROR_STOP) then
+        if (eventPop(C.EVT_FILE_CHANCE)) then
+            err_reason = "-";
+            bg_state = BG_STATE_INIT;
+        elseif (eventPop(C.EVT_RESET)) then
+            err_reason = "-";
+            bg_state = BG_STATE_NO_FILE;
+        elseif (eventPop(C.EVT_ALT_FILE)) then
+            err_reason = "-";
+            local err;
+            st, err = widget.serialize.load(alternatesettingsfilename);
+            widget.logging.log("loading err: %s", err);
+            if (err) then
+                err_reason = err;
+            end
+            if (st ~= nil) then
+                bg_state = BG_STATE_HAS_FILE;
+            end
+        end
     end
     if (oldstate ~= bg_state) then
         stateCounter = 0;
-        -- print("state", oldstate, "->", bg_state);
+        widget.logging.log("state %d %s %d", oldstate, "->", bg_state);        
     end
 end
 
@@ -651,6 +758,14 @@ function widget.refresh(event, touchState)
             else
                 widget.activePage = 0;
                 widget.widgetPage();
+            end
+        elseif (bg_state == BG_STATE_ERROR_STOP) then
+            if (lvgl.isFullScreen() or lvgl.isAppMode()) then
+                widget.activePage = 0;
+                widget.errorPageFull();            
+            else
+                widget.activePage = 0;
+                widget.errorPage();            
             end
         else
             widget.activePage = 0;
