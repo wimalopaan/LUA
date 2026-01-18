@@ -22,10 +22,10 @@
 --- EdgeTx PR 6958 (physical switch does not set button in checked state)
 
 -- bugs 
---- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- adapt for larger screens (e.g. use percent based height of buttons)
 --- use explicit layout instead of box layout for less overhead
 --- remove top-level box layout and use page directly (maybe need Edge PR 6841)
 --- place logo image
@@ -41,6 +41,7 @@
 --- text placing if images are used
 
 -- done
+--- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
 --- produce logging data (optional)
 --- grey-out label in settings if button unvisible
 --- auto-mutex-group, if virtual-inputs are used
@@ -145,7 +146,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 32;
+local version = 33;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -338,13 +339,13 @@ local function resetSettingsOnly()
     widget.settings.version = settingsVersion;
     widget.settings.imagesdir = "/IMAGES/";
     widget.settings.name = "Beleuchtung";
-    widget.settings.line_height = 45;
     widget.settings.momentaryButton_radius = 20;
     widget.settings.show_physical = 1;
     widget.settings.activate_vswitches = 0;
     widget.settings.activate_color_proto = 0;
     widget.settings.rows = 4;
     widget.settings.columns = 2;
+    widget.settings.line_height = (LCD_H * 0.75) / widget.settings.rows;
     widget.settings.commandBroadcastAddress = 0xc8;
     widget.settings.statusPassthru = 0;
     widget.settings.logging = 0;
@@ -402,7 +403,22 @@ local function setButton(btnstate, v, v2)
     end
     return false;
 end
-
+function widget.setLSorVs(sw, on)
+    if (sw > 0) then
+        local swname = getSwitchName(sw);
+        local swtype = string.sub(swname, 1, 1);
+        if (swtype == "L") then
+            local lsnumber = string.sub(swname, 2, 3);
+            local lsn = tonumber(lsnumber) - 1;
+            setStickySwitch(lsn, on);
+        elseif (swtype == "V") then
+            if (widget.hasVirtualInputs) then
+                local vsnumber = string.sub(swname, 3, 4);
+                setVirtualSwitch(vsnumber, on);
+            end
+        end
+    end
+end
 function widget.checkButton(i, v)
     if (widget.ui ~= nil) then
         -- todo: caching ref

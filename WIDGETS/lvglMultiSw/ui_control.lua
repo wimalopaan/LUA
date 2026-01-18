@@ -25,23 +25,6 @@ local function invert(v)
     end    
 end
 
-local function setLSorVs(sw, on)
-    if (sw > 0) then
-        local swname = getSwitchName(sw);
-        local swtype = string.sub(swname, 1, 1);
-        if (swtype == "L") then
-            local lsnumber = string.sub(swname, 2, 3);
-            local lsn = tonumber(lsnumber) - 1;
-            setStickySwitch(lsn, on);
-        elseif (swtype == "V") then
-            if (widget.hasVirtualInputs) then
-                local vsnumber = string.sub(swname, 3, 4);
-                setVirtualSwitch(vsnumber, on);
-            end
-        end
-    end
-end
-
 local function processButtonGroup(bnum) 
     local egr = widget.settings.buttons[bnum].exclusive_group;
     if ((state.buttons[bnum].value > 0) and (egr > 0)) then
@@ -50,7 +33,7 @@ local function processButtonGroup(bnum)
                 if (state.buttons[i].value > 0) then
                     state.buttons[i].value = 0;
                     widget.checkButton(i, false);
-                    setLSorVs(widget.settings.buttons[i].external_switch, false);
+                    widget.setLSorVs(widget.settings.buttons[i].external_switch, false);
                 end
             end            
         end
@@ -60,7 +43,7 @@ end
 local function updateButton(i)
     processButtonGroup(i);
     widget.fsm.update();
-    setLSorVs(widget.settings.buttons[i].external_switch, (state.buttons[i].value > 0));
+    widget.setLSorVs(widget.settings.buttons[i].external_switch, (state.buttons[i].value > 0));
     if (widget.hasVirtualInputs) then
         if (state.buttons[i].value > 0) then
             if (widget.settings.buttons[i].setVirtualInput > 0) then

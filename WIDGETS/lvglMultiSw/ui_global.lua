@@ -50,7 +50,7 @@ function widget.globalsPage()
                 }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Line Height: "},
-                    {type = "numberEdit", min = 30, max = 80, w = 40, get = (function() return widget.settings.line_height; end), set = (function(v) widget.settings.line_height = v; end) }, 
+                    {type = "numberEdit", min = 30, max = 240, w = 40, get = (function() return widget.settings.line_height; end), set = (function(v) widget.settings.line_height = v; end) }, 
                     {type = "label", text = "Radius momentary Button: "},
                     {type = "numberEdit", min = 10, max = 30, w = 40, get = (function() return widget.settings.momentaryButton_radius; end), set = (function(v) widget.settings.momentaryButton_radius = v; end) } 
                 }},
