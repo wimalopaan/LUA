@@ -22,6 +22,7 @@
 --- EdgeTx PR 6958 (physical switch does not set button in checked state)
 
 -- bugs 
+--- prop-set with physical source does not work 
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
@@ -29,7 +30,6 @@
 --- use explicit layout instead of box layout for less overhead
 --- remove top-level box layout and use page directly (maybe need Edge PR 6841)
 --- place logo image
---- show loading error if config file errorneous
 --- introduce config page (remove widget options)
 --- global page: nicer (rectangle for line heigth and column width, columns)
 --- move some (all) Widget-settings to global config dialog
@@ -41,6 +41,7 @@
 --- text placing if images are used
 
 -- done
+--- show loading error if config file errorneous
 --- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
 --- produce logging data (optional)
 --- grey-out label in settings if button unvisible
@@ -146,7 +147,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 33;
+local version = 34;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -436,7 +437,10 @@ local function readPhysical()
             if (btn.source > 0) then
              local v = getSourceValue(btn.source) / 10.24;
                 if (v ~= nil) then
-                    btnstate.value = v;
+                    if (v ~= btnstate.value) then
+                        btnstate.value = v;
+                        widget.crsf.sendProp(i, v);                    
+                    end
                 end
             end
         else
