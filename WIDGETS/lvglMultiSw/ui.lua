@@ -435,9 +435,10 @@ local function readPhysical()
         local btnstate = state.buttons[i];
         if (btn.type == C.TYPE_SLIDER) then
             if (btn.source > 0) then
-             local v = getSourceValue(btn.source) / 10.24;
+                local v = getSourceValue(btn.source);
                 if (v ~= nil) then
-                    if (v ~= btnstate.value) then
+                    v = math.max(v / 10.24, 0);
+                    if (math.abs(v - btnstate.value) > 1) then
                         btnstate.value = v;
                         widget.crsf.sendProp(i, v);                    
                     end
