@@ -151,7 +151,7 @@ local function createButton(i, width)
         return {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
             { type = "label", text = (function() 
                 local so = widget.settings.buttons[i].source * widget.settings.show_physical;
-                if (so > 0) then
+                if (so ~= 0) then
                     return widget.settings.buttons[i].name .. " (" .. getSourceName(so) .. ")";
                 else
                     return widget.settings.buttons[i].name;
@@ -160,7 +160,7 @@ local function createButton(i, width)
               w = width / 3, font = widget.settings.buttons[i].font},
             { type = "slider", min = 0, max = 100, get = (function() return state.buttons[i].value; end),
                                                       set = (function(v) state.buttons[i].value = v; widget.crsf.sendProp(i, v); end), w = (2 * width) / 3,
-                                                      active = (function() if (widget.settings.buttons[i].source > 0) then return false; else return true; end; end),
+                                                      active = (function() if (widget.settings.buttons[i].source ~= 0) then return false; else return true; end; end),
                                                       color = widget.settings.buttons[i].color
                                                     }
         }};

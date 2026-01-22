@@ -22,7 +22,6 @@
 --- EdgeTx PR 6958 (physical switch does not set button in checked state)
 
 -- bugs 
---- prop-set with physical source does not work 
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
@@ -41,6 +40,7 @@
 --- text placing if images are used
 
 -- done
+--- prop-set with physical source does not work 
 --- show loading error if config file errorneous
 --- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
 --- produce logging data (optional)
@@ -434,7 +434,7 @@ local function readPhysical()
     for i, btn in ipairs(widget.settings.buttons) do
         local btnstate = state.buttons[i];
         if (btn.type == C.TYPE_SLIDER) then
-            if (btn.source > 0) then
+            if (btn.source ~= 0) then
                 local v = getSourceValue(btn.source);
                 if (v ~= nil) then
                     v = math.max(v / 10.24, 0);
