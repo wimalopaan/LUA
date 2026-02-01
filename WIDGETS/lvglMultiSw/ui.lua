@@ -100,7 +100,7 @@
 
 local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version
 local logging = {
-    enabled = false,
+    enabled = true,
     file = "log.txt",
     console = true;
 };
@@ -334,7 +334,7 @@ function widget.resetButtons()
     widget.updateAddressButtonLookup();
     widget.updateVirtualInputButtons();
     resetState();    
-    eventPush(C.EVT_FILE_CHANCE);
+--    eventPush(C.EVT_FILE_CHANCE);
 end
 local function resetSettingsOnly()
     widget.logging.log("resetSettingsOnly");
