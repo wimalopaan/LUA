@@ -148,7 +148,7 @@ local function saveIncremental(tbl, filename)
             save_table(s_i, t);
             return false;
         else
-            ef, es, en = io.write(s_file, "}");
+            ef, es, en = io.write(s_file, "}\n");
             if (ef == nil) then
                 log.log("save_table 12: %s, %d", es, en);
             end
