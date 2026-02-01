@@ -15,6 +15,8 @@
 -- along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+local log = ... 
+
 local function exportstring(s)
     return string.format("%q", s)
 end
@@ -31,86 +33,130 @@ local s_lookup;
 local s_i;
 
 local function save_table(idx, t)
-        io.write(s_file, "-- Table: {" .. idx .. "}" .. charE)
-        io.write(s_file, "{" .. charE)
-        local thandled = {}
+    local ef, es, en;
+    ef, es, en = io.write(s_file, "-- Table: {" .. idx .. "}" .. charE)
+    if (ef == nil) then
+        log.log("save_table 1: %s, %d", es, en);
+    end
+    ef, es, en = io.write(s_file, "{" .. charE)
+    if (ef == nil) then
+        log.log("save_table 2: %s, %d", es, en);
+    end
+    local thandled = {}
 
-        for i, v in ipairs(t) do
-            thandled[i] = true
-            local stype = type(v)
-            -- only handle value
+    for i, v in ipairs(t) do
+        thandled[i] = true
+        local stype = type(v)
+        -- only handle value
+        if stype == "table" then
+            if not s_lookup[v] then
+                table.insert(s_tables, v)
+                s_lookup[v] = #s_tables
+            end
+            ef, es, en = io.write(s_file, charS .. "{" .. s_lookup[v] .. "}," .. charE)
+            if (ef == nil) then
+                log.log("save_table 3: %s, %d", es, en);
+            end
+        elseif stype == "string" then
+            ef, es, en = io.write(s_file, charS .. exportstring(v) .. "," .. charE);
+            if (ef == nil) then
+                log.log("save_table 4: %s, %d", es, en);
+            end
+        elseif stype == "number" then
+            ef, es, en = io.write(s_file, charS .. tostring(v) .. "," .. charE)
+            if (ef == nil) then
+                log.log("save_table 5: %s, %d", es, en);
+            end
+        elseif stype == "boolean" then
+            ef, es, en = io.write(s_file, charS .. tostring(v) .. "," .. charE)
+            if (ef == nil) then
+                log.log("save_table 6: %s, %d", es, en);
+            end
+        end
+    end
+
+    for i, v in pairs(t) do
+        -- escape handled values
+        if (not thandled[i]) then
+            local str = ""
+            local stype = type(i)
+            -- handle index
             if stype == "table" then
-                if not s_lookup[v] then
-                    table.insert(s_tables, v)
-                    s_lookup[v] = #s_tables
+                if not s_lookup[i] then
+                    table.insert(s_tables, i)
+                    s_lookup[i] = #s_tables
                 end
-                io.write(s_file, charS .. "{" .. s_lookup[v] .. "}," .. charE)
+                str = charS .. "[{" .. s_lookup[i] .. "}]="
             elseif stype == "string" then
-                io.write(s_file, charS .. exportstring(v) .. "," .. charE)
+                str = charS .. "[" .. exportstring(i) .. "]="
             elseif stype == "number" then
-                io.write(s_file, charS .. tostring(v) .. "," .. charE)
-            elseif stype == "boolean" then
-                io.write(s_file, charS .. tostring(v) .. "," .. charE)
+                str = charS .. "[" .. tostring(i) .. "]="
             end
-        end
 
-        for i, v in pairs(t) do
-            -- escape handled values
-            if (not thandled[i]) then
-                local str = ""
-                local stype = type(i)
-                -- handle index
+            if str ~= "" then
+                stype = type(v)
+                -- handle value
                 if stype == "table" then
-                    if not s_lookup[i] then
-                        table.insert(s_tables, i)
-                        s_lookup[i] = #s_tables
+                    if not s_lookup[v] then
+                        table.insert(s_tables, v)
+                        s_lookup[v] = #s_tables
                     end
-                    str = charS .. "[{" .. s_lookup[i] .. "}]="
+                    ef, es, en = io.write(s_file, str .. "{" .. s_lookup[v] .. "}," .. charE)
+                    if (ef == nil) then
+                        log.log("save_table 7: %s, %d", es, en);
+                    end
                 elseif stype == "string" then
-                    str = charS .. "[" .. exportstring(i) .. "]="
+                    ef, es, en = io.write(s_file, str .. exportstring(v) .. "," .. charE)
+                    if (ef == nil) then
+                        log.log("save_table 8: %s, %d", es, en);
+                    end
                 elseif stype == "number" then
-                    str = charS .. "[" .. tostring(i) .. "]="
-                end
-
-                if str ~= "" then
-                    stype = type(v)
-                    -- handle value
-                    if stype == "table" then
-                        if not s_lookup[v] then
-                            table.insert(s_tables, v)
-                            s_lookup[v] = #s_tables
-                        end
-                        io.write(s_file, str .. "{" .. s_lookup[v] .. "}," .. charE)
-                    elseif stype == "string" then
-                        io.write(s_file, str .. exportstring(v) .. "," .. charE)
-                    elseif stype == "number" then
-                        io.write(s_file, str .. tostring(v) .. "," .. charE)
+                    ef, es, en = io.write(s_file, str .. tostring(v) .. "," .. charE)
+                    if (ef == nil) then
+                        log.log("save_table 9: %s, %d", es, en);
                     end
                 end
             end
         end
-        io.write(s_file, "}," .. charE)
+    end
+    ef, es, en = io.write(s_file, "}," .. charE)
+    if (ef == nil) then
+        log.log("save_table 10: %s, %d", es, en);
+    end
 end
 local function saveIncremental(tbl, filename)
+    local ef, es, en;
     if (s_state == S_IDLE) then
+        log.log("save_inc: IDLE: %s", filename);
         local err;
         s_file, err = io.open(filename, "wb")
         if err then 
             return err; 
         end
         s_tables, s_lookup = { tbl }, { [tbl] = 1 }
-        io.write(s_file, "return {" .. charE)
+        ef, es, en = io.write(s_file, "return {" .. charE)
+        if (ef == nil) then
+            log.log("save_table 11: %s, %d", es, en);
+        end
         s_state = S_SAVING;
         s_i = 0;
     elseif (s_state == S_SAVING) then
         s_i = s_i + 1;
         local t = s_tables[s_i];
+        log.log("save_inc: SAVE %d, %s", s_i, (t ~= nil));
         if (t) then
             save_table(s_i, t);
             return false;
         else
-            io.write(s_file, "}")
-            io.close(s_file)
+            ef, es, en = io.write(s_file, "}");
+            if (ef == nil) then
+                log.log("save_table 12: %s, %d", es, en);
+            end
+            ef, es, en = io.write(s_file, "-- end");
+            if (ef == nil) then
+                log.log("save_table 13: %s, %d", es, en);
+            end
+            io.close(s_file);
             s_state = S_IDLE;
             return true;
         end

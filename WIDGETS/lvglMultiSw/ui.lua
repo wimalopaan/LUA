@@ -25,6 +25,7 @@
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- option to transfer morse-text (like rgb-color)
 --- adapt for larger screens (e.g. use percent based height of buttons)
 --- use explicit layout instead of box layout for less overhead
 --- remove top-level box layout and use page directly (maybe need Edge PR 6841)
@@ -101,7 +102,7 @@ local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config fi
 local logging = {
     enabled = false,
     file = "log.txt",
-    console = false;
+    console = true;
 };
 
 -- End of Settings
@@ -632,6 +633,7 @@ end
 
 local st = nil;
 function widget.background()
+    --print("background");
     local oldstate = bg_state;
     stateCounter = stateCounter + 1;
     if (bg_state == BG_STATE_UNDEF) then
@@ -640,7 +642,7 @@ function widget.background()
         widget.logging = loadScript(dir .. "log.lua", "btd")(widget, logging);
         bg_state = BG_STATE_LOAD_UTILS1;       
     elseif (bg_state == BG_STATE_LOAD_UTILS1) then
-        widget.serialize = loadScript(dir .. "tableser.lua", "btd")();
+        widget.serialize = loadScript(dir .. "tableser.lua", "btd")(widget.logging);
         bg_state = BG_STATE_LOAD_UTILS2;       
     elseif (bg_state == BG_STATE_LOAD_UTILS2) then
         widget.util      = loadScript(dir .. "util.lua", "btd")();
