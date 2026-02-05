@@ -25,6 +25,7 @@ local charS, charE = "   ", "\n";
 
 local S_IDLE = 0;
 local S_SAVING = 1;
+local S_ERROR = 2;
 local s_state = S_IDLE;
 
 local s_file;
@@ -37,10 +38,12 @@ local function save_table(idx, t)
     ef, es, en = io.write(s_file, "-- Table: {" .. idx .. "}" .. charE)
     if (ef == nil) then
         log.log("save_table 1: %s, %d", es, en);
+        return false;
     end
     ef, es, en = io.write(s_file, "{" .. charE)
     if (ef == nil) then
         log.log("save_table 2: %s, %d", es, en);
+        return false;
     end
     local thandled = {}
 
@@ -56,21 +59,25 @@ local function save_table(idx, t)
             ef, es, en = io.write(s_file, charS .. "{" .. s_lookup[v] .. "}," .. charE)
             if (ef == nil) then
                 log.log("save_table 3: %s, %d", es, en);
+                return false;
             end
         elseif stype == "string" then
             ef, es, en = io.write(s_file, charS .. exportstring(v) .. "," .. charE);
             if (ef == nil) then
                 log.log("save_table 4: %s, %d", es, en);
+                return false;
             end
         elseif stype == "number" then
             ef, es, en = io.write(s_file, charS .. tostring(v) .. "," .. charE)
             if (ef == nil) then
                 log.log("save_table 5: %s, %d", es, en);
+                return false;
             end
         elseif stype == "boolean" then
             ef, es, en = io.write(s_file, charS .. tostring(v) .. "," .. charE)
             if (ef == nil) then
                 log.log("save_table 6: %s, %d", es, en);
+                return false;
             end
         end
     end
@@ -104,16 +111,19 @@ local function save_table(idx, t)
                     ef, es, en = io.write(s_file, str .. "{" .. s_lookup[v] .. "}," .. charE)
                     if (ef == nil) then
                         log.log("save_table 7: %s, %d", es, en);
+                        return false;
                     end
                 elseif stype == "string" then
                     ef, es, en = io.write(s_file, str .. exportstring(v) .. "," .. charE)
                     if (ef == nil) then
                         log.log("save_table 8: %s, %d", es, en);
+                        return false;
                     end
                 elseif stype == "number" then
                     ef, es, en = io.write(s_file, str .. tostring(v) .. "," .. charE)
                     if (ef == nil) then
                         log.log("save_table 9: %s, %d", es, en);
+                        return false;
                     end
                 end
             end
@@ -122,44 +132,58 @@ local function save_table(idx, t)
     ef, es, en = io.write(s_file, "}," .. charE)
     if (ef == nil) then
         log.log("save_table 10: %s, %d", es, en);
+        return false;
     end
+    return true;
 end
 local function saveIncremental(tbl, filename)
     local ef, es, en;
     if (s_state == S_IDLE) then
         log.log("save_inc: IDLE: %s", filename);
         local err;
-        s_file, err = io.open(filename, "wb")
-        if err then 
-            return err; 
+        s_file, err, en = io.open(filename, "wb")
+        if (err) then 
+            log.log("save_table open: %s, %d", err, en);
+            s_state = S_ERROR;
+            return false; 
         end
         s_tables, s_lookup = { tbl }, { [tbl] = 1 }
         ef, es, en = io.write(s_file, "return {" .. charE)
         if (ef == nil) then
             log.log("save_table 11: %s, %d", es, en);
+            s_state = S_ERROR;
+            return false;
         end
         s_state = S_SAVING;
         s_i = 0;
+        return false;
     elseif (s_state == S_SAVING) then
         s_i = s_i + 1;
         local t = s_tables[s_i];
         log.log("save_inc: SAVE %d, %s", s_i, (t ~= nil));
         if (t) then
-            save_table(s_i, t);
+            local rs = save_table(s_i, t);
+            if (not rs) then
+                s_state = S_ERROR;
+            end
             return false;
         else
-            ef, es, en = io.write(s_file, "}\n");
+            ef, es, en = io.write(s_file, "}\n--end\n");
             if (ef == nil) then
                 log.log("save_table 12: %s, %d", es, en);
-            end
-            ef, es, en = io.write(s_file, "-- end");
-            if (ef == nil) then
-                log.log("save_table 13: %s, %d", es, en);
+                s_state = S_ERROR;
+                return false;
             end
             io.close(s_file);
             s_state = S_IDLE;
             return true;
         end
+    elseif (s_state == S_ERROR) then
+        log.log("save_table: ERROR state");
+        if (s_file) then
+            io.close(s_file);        
+        end
+        s_state = S_IDLE;
     end
 end
 

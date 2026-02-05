@@ -22,7 +22,7 @@
 --- EdgeTx PR 6958 (physical switch does not set button in checked state)
 
 -- bugs 
---- pronlem in saving config file: stops after saving some tables, but does not a full saving
+--- problem in saving config file: stops after saving some tables, but does not a full saving
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
@@ -149,7 +149,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 34;
+local version = 351;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
