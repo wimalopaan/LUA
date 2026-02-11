@@ -26,6 +26,7 @@
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- arrange for numberEdit onEdited callback
 --- option to transfer morse-text (like rgb-color)
 --- adapt for larger screens (e.g. use percent based height of buttons)
 --- use explicit layout instead of box layout for less overhead
@@ -101,9 +102,9 @@
 
 local SAVE_OLD_CONFIG = true; -- saves old config if converting to new config file version
 local logging = {
-    enabled = true,
+    enabled = false,
     file = "log.txt",
-    console = true;
+    console = false;
 };
 
 -- End of Settings
@@ -149,7 +150,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 351;
+local version = 36;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
