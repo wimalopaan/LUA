@@ -1,5 +1,5 @@
 -- WM EdgeTx LUA 
--- Copyright (C) 2016 - 2026 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
+-- Copyright (C) 2016 - 2025 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
 --
 -- This program is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 
 local uilib, env = ... 
 
+local CRSF_ADDRESS_BROADCAST      = 0x00;
 local CRSF_ADDRESS_CONTROLLER     = 0xC8;
 local CRSF_ADDRESS_TRANSMITTER    = 0xEA;
 local CRSF_ADDRESS_CC             = 0xA0; -- non-standard
@@ -71,7 +72,7 @@ local function computeState4M(buttons)
 end
 local function sendSet4M()
   -- [N, A1, {H1, L1}, A2, {H2, L2}]
-  local payload = {CRSF_ADDRESS_CONTROLLER, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
+  local payload = {CRSF_ADDRESS_BROADCAST, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4M, 0};
   for adr, buttons in pairs(uilib.global.state.addresses) do
 --    print("adr:", adr, #buttons);
     payload[5] = payload[5] + 1;

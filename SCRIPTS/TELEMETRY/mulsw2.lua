@@ -1,5 +1,5 @@
 -- WM EdgeTx LUA 
--- Copyright (C) 2016 - 2026 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
+-- Copyright (C) 2016 - 2025 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
 --
 -- This program is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 -- better textEdit: highlight only actual cha being edited
 
 -- Done:
+-- use CRSF broadcast
 -- S.Port protocols
 -- immediate update (crsf may not be pushed immediately)
 -- more than 8 switches

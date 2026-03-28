@@ -1,5 +1,5 @@
 -- WM EdgeTx LUA 
--- Copyright (C) 2016 - 2026 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
+-- Copyright (C) 2016 - 2025 Wilhelm Meier <wilhelm.wm.meier@googlemail.com>
 --
 -- This program is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ local global = {
     state = {
         buttons = {}
     };
-    version = 7,
+    version = 8,
     settingsVersion = 4,
     settingsFilename = env.dir .. model.getInfo().name .. ".lua",
 --    crsfProto = 2, -- always use SET4M
