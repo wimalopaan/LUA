@@ -43,6 +43,7 @@
 --- text placing if images are used
 
 -- done
+--- fixed error checking problem with unused properties
 --- prop-set with physical source does not work 
 --- show loading error if config file errorneous
 --- saving/loading settings sometimes may not work: SD-card problem? CPU-limit?
@@ -150,7 +151,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 36;
+local version = 37;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 

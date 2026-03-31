@@ -54,8 +54,7 @@ local function createSettingsDetails(i, edit_width)
                         { type = "switch", filter = filter, 
                             active = (function() if ((widget.settings.buttons[i].type == widget.C.TYPE_SLIDER) or (widget.settings.buttons[i].type == widget.C.TYPE_MOMENTARY)) then return false; else return true; end; end), 
                             get = (function() return widget.settings.buttons[i].switch; end), set = (function(s) widget.settings.buttons[i].switch = s; end) },
-                        { type = "label", text = " Switch2:", 
-                            active = (function() if (widget.settings.buttons[i].type == widget.C.TYPE_3POS) then return true; else return false; end; end) },
+                        { type = "label", text = " Switch2:"},
                         { type = "switch", filter = filter, 
                             active = (function() if (widget.settings.buttons[i].type == widget.C.TYPE_3POS) then return true; else return false; end; end),
                             get = (function() return widget.settings.buttons[i].switch2; end), set = (function(s) widget.settings.buttons[i].switch2 = s; end) },
@@ -148,7 +147,7 @@ local function createSettingsRow(i, edit_width, maxLen)
         children = {
             {type = "label", text = "Output " .. i, font = BOLD },
             {type = "label", text = " Name:"},
-            {type = "textEdit", value = widget.settings.buttons[i].name, w = edit_width, maxLen = maxLen, 
+            {type = "textEdit", value = widget.settings.buttons[i].name, w = edit_width, length = maxLen, 
                         set = (function(s) widget.settings.buttons[i].name = s; end), 
                         active = (function() return widget.settings.buttons[i].visible == 1; end)
                     },

@@ -28,7 +28,7 @@ local function statusRow(r)
         children = {
             {type = "label", text = "In " .. r},
             {type = "textEdit", value = widget.settings.telemActions[r].name, 
-                    w = 50, maxLen = 16, set = (function(s) widget.settings.telemActions[r].name = s; end) },
+                    w = 50, length = 16, set = (function(s) widget.settings.telemActions[r].name = s; end) },
             {type = "label", text = " Bit:" },
             {type = "numberEdit", min = 1, max = 8, w = 30, get = (function() return widget.settings.telemActions[r].input; end), 
                                                             set = (function(v) widget.settings.telemActions[r].input = v; end)},

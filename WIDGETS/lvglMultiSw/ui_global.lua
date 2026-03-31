@@ -46,7 +46,7 @@ function widget.globalsPage()
             children = {
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Widget-Name: "},
-                    {type = "textEdit", value = widget.settings.name, w = 150, maxLen = 16, set = (function(s) widget.settings.name = s; end) } 
+                    {type = "textEdit", value = widget.settings.name, w = 150, length = 16, set = (function(s) widget.settings.name = s; end) } 
                 }},
                 {type = "box", flexFlow = lvgl.FLOW_ROW, flexPad = lvgl.PAD_LARGE, children = {
                     {type = "label", text = "Line Height: "},
