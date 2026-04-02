@@ -43,6 +43,7 @@
 --- text placing if images are used
 
 -- done
+--- defaults for ELRS V4
 --- fixed error checking problem with unused properties
 --- prop-set with physical source does not work 
 --- show loading error if config file errorneous
@@ -151,7 +152,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 37;
+local version = 38;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
@@ -351,7 +352,7 @@ local function resetSettingsOnly()
     widget.settings.rows = 4;
     widget.settings.columns = 2;
     widget.settings.line_height = (LCD_H * 0.75) / widget.settings.rows;
-    widget.settings.commandBroadcastAddress = 0xc8;
+    widget.settings.commandBroadcastAddress = 0x00;
     widget.settings.statusPassthru = 0;
     widget.settings.logging = 0;
 end
