@@ -70,7 +70,9 @@ This is intended to be used with my (very old) schottel / pod drive controller.
 
 == Widget for RC720E32 (Schottel-Controller)
 
-EdgeTx LUA Widget for the Schottel-Controller `RC720E32`
+EdgeTx LUA Widget for the Schottel-Controller `RC720E32`.
+
+There is also a _new_ Version of this Widget using `lvgl` controls: please visit `WIDGETS/lvglSchottel`. 
 
 == Voith-Schneider EdgeTx / OpenTx LUA mixer script 
 
