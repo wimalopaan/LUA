@@ -26,6 +26,7 @@
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- introduce option for ELRSV3 backward compatibility
 --- arrange for numberEdit onEdited callback
 --- option to transfer morse-text (like rgb-color)
 --- adapt for larger screens (e.g. use percent based height of buttons)
@@ -43,6 +44,7 @@
 --- text placing if images are used
 
 -- done
+--- fixed intervall problem (setting not used)
 --- defaults for ELRS V4
 --- fixed error checking problem with unused properties
 --- prop-set with physical source does not work 
@@ -152,7 +154,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 38;
+local version = 39;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
