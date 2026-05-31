@@ -26,6 +26,8 @@
 --- maybe: touch button press experience some delay to sending crsf package? hw-button maybe without delay?
 
 -- todo
+--- structure UI in tabs (group buttons inside the widget instead of multiple widgets)
+--- move some (all) Widget-settings to global config dialog
 --- introduce option for ELRSV3 backward compatibility
 --- arrange for numberEdit onEdited callback
 --- option to transfer morse-text (like rgb-color)
@@ -33,9 +35,7 @@
 --- use explicit layout instead of box layout for less overhead
 --- remove top-level box layout and use page directly (maybe need Edge PR 6841)
 --- place logo image
---- introduce config page (remove widget options)
 --- global page: nicer (rectangle for line heigth and column width, columns)
---- move some (all) Widget-settings to global config dialog
 --- implement 4-state switches(e.g. Led4x4) 
 --- remove switch picker workaround (special case if switch name is nil)
 --- S.Port queue for multiple addresses / do WM like ACW
