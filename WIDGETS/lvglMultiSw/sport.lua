@@ -30,16 +30,13 @@ local state, widget, dir = ...
 --- send upto 8 packages in sequence?
 
 -- move to util.lua
-local function computeState4()
+local function computeState4(address)
     local s = 0;
-    for i = 1, 8 do
-        s = s * 4;
-        if (state.buttons[8 - i + 1] ~= nil) then
-          if (state.buttons[8 - i + 1].value == 1) then
-            s = s + 1;
-          elseif (state.buttons[8 - i + 1].value == 2) then
-            s = s + 2;
-          end      
+    for _, btn in ipairs(state.addresses[address]) do
+        local value = state.buttons[btn].value;
+        if ((value == 1) or (value == 2)) then
+            local outnr = widget.settings.buttons[btn].output - 1;
+            s = bit32.bor(s, bit32.lshift(value, 2 * outnr));
         end
     end
     return s;
@@ -70,10 +67,11 @@ end
 local function send()
   if (widget.options.SPortProto <= 1) then
     return checkState((function(i) 
-      local value = computeState4();
+      local address = widget.settings.buttons[i].address;
+      local value = computeState4(address);
       local physicalId = widget.options.SPortPhy;
       local primId = 0x31; -- write command without read
-      local dataId = (widget.options.SPortApp * 256) + widget.settings.buttons[i].address;
+      local dataId = (widget.options.SPortApp * 256) + address;
       --print("sport send WM", physicalId, primId, dataId, value);
       return sportTelemetryPush(physicalId, primId, dataId, value);    
     end));
