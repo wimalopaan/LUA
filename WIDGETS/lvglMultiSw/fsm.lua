@@ -54,15 +54,21 @@ local function update()
     end    
   end
 end
-local lastBits = 0;
+local lastBits = {};
 local rptp = 0;
 local function readStatusBits()
   if (widget.settings.statusPassthru > 0) then
     local address, bits = widget.crsf.readPassThru();
     while (bits ~= nil) do
       rptp = rptp + 1;
-      local changedBits = bit32.bxor(bits, lastBits);
-      lastBits = bits;
+      local previous = lastBits[address];
+      local changedBits;
+      if (previous == nil) then
+        changedBits = 0xff;
+      else
+        changedBits = bit32.bxor(bits, previous);
+      end
+      lastBits[address] = bits;
       local mask = 1;
       for i = 1, 8 do
         local b = bit32.band(bits, mask);
