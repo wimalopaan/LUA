@@ -749,7 +749,7 @@ function widget.background()
         readPhysical();
         widget.shm.encode();
     elseif (bg_state == BG_STATE_ERROR_STOP) then
-        if (eventPop(C.EVT_FILE_CHANCE)) then
+        if (eventPop(C.EVT_FILE_CHANCE) or eventPop(C.EVT_INIT)) then
             err_reason = "-";
             bg_state = BG_STATE_INIT;
         elseif (eventPop(C.EVT_RESET)) then
