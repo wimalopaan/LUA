@@ -24,7 +24,8 @@ local function encode()
             local e = bit32.lshift(adr, 8); -- [0;3] -> 2bits (in total 10 bits )
             for _, btn in ipairs(buttons) do
                 if (state.buttons[btn].value > 0) then
-                    e = bit32.bor(e, bit32.lshift(1, (btn - 1)));
+                    local outnr = widget.settings.buttons[btn].output - 1;
+                    e = bit32.bor(e, bit32.lshift(1, outnr));
                 end
             end
             setShmVar(widget.options.ShmVarStart + sn, e);
@@ -34,5 +35,4 @@ local function encode()
 end
 
 return {encode = encode}
-
 
