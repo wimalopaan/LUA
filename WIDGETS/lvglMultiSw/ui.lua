@@ -463,10 +463,10 @@ local function readPhysical()
     end
 end
 
-function widget.switchPage(id, nosave)
+function widget.switchPage(id, nosave, force)
     widget.logging.log("switchPage %d %s", id, nosave);
     widget.fsm.sendEvent(2);
-    if (id == widget.activePage) then
+    if ((id == widget.activePage) and (not force)) then
         return;
     end
     lvgl.clear()
@@ -780,7 +780,9 @@ function widget.refresh(event, touchState)
         if ((bg_state == BG_STATE_RUN) or (bg_state == BG_STATE_SAVE)) then
             if (lvgl.isFullScreen() or lvgl.isAppMode()) then
                 if (widget.activePage > 0) then
-                    widget.switchPage(widget.activePage, true);
+                    if (widget.activePage ~= C.PAGE_SETTINGS_D) then
+                        widget.switchPage(widget.activePage, true, true);
+                    end
                 else                    
                     widget.switchPage(C.PAGE_CONTROL, true);
                 end
