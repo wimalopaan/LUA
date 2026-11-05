@@ -263,12 +263,48 @@ end
 
 local function load(sfile)
     local ftables, err = loadfile(sfile)
-    if err then return _, err end
-    local tables = ftables()
+    if (ftables == nil) then
+        return nil, err;
+    end
+    local ok, tables = pcall(ftables);
+    if (not ok) then
+        return nil, "Config execution failed: " .. tostring(tables);
+    end
     if (tables == nil) then
         return nil, "empty file";
     end
-    for idx = 1, #tables do
+    if (type(tables) ~= "table") then
+        return nil, "Invalid config: expected table";
+    end
+    local count = 0;
+    for i in pairs(tables) do
+        if ((type(i) ~= "number") or (i < 1) or (i % 1 ~= 0)) then
+            return nil, "Invalid config: expected table list";
+        end
+        count = count + 1;
+    end
+    if (count == 0) then
+        return nil, "Invalid config: empty table list";
+    end
+    local function isValidReference(ref)
+        local i = ref[1];
+        return (type(i) == "number") and (i >= 1) and (i <= count) and (i % 1 == 0)
+                and (next(ref) == 1) and (next(ref, 1) == nil);
+    end
+    for idx = 1, count do
+        if (type(tables[idx]) ~= "table") then
+            return nil, "Invalid config: expected table at index " .. idx;
+        end
+        for i, v in pairs(tables[idx]) do
+            if ((type(v) == "table") and (not isValidReference(v))) then
+                return nil, "Invalid config: invalid value reference in table " .. idx;
+            end
+            if ((type(i) == "table") and (not isValidReference(i))) then
+                return nil, "Invalid config: invalid key reference in table " .. idx;
+            end
+        end
+    end
+    for idx = 1, count do
         local tolinki = {}
         for i, v in pairs(tables[idx]) do
             if type(v) == "table" then
