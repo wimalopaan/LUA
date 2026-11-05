@@ -33,7 +33,19 @@ local function create(zone, options, dir)
     if (dir == nil) then
         dir = "/WIDGETS/lvglMultiSw/";
     end
-    return loadScript(dir .. "ui.lua", "btd")(zone, options, longname, dir);
+    local ui, err = loadScript(dir .. "ui.lua", "btd");
+    if (ui == nil) then
+        local message = "Cannot load ui.lua: " .. tostring(err);
+        return {zone = zone,
+                options = options,
+                name = name,
+                update = (function() end),
+                refresh = (function()
+                    lcd.drawText(zone.x, zone.y, message, COLOR_THEME_WARNING);
+                end),
+                background = (function() end)};
+    end
+    return ui(zone, options, longname, dir);
 end
 
 local function refresh(widget, event, touchState)
