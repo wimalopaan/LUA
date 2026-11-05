@@ -92,20 +92,17 @@ local function computeState2()
     end
     return s;
 end
--- fix: use output-value instead of i
 local function computeState4()
     local s = 0;
-    for i = 1, 8 do
-        s = s * 4;
-        if (state.buttons[8 - i + 1] ~= nil) then
-          if (state.buttons[8 - i + 1].value == 1) then
-            s = s + 1;
-          elseif (state.buttons[8 - i + 1].value == 2) then
-            s = s + 2;
-          end      
+    local address, buttons = next(state.addresses);
+    for _, btn in ipairs(buttons) do
+        local value = state.buttons[btn].value;
+        if ((value == 1) or (value == 2)) then
+            local outnr = widget.settings.buttons[btn].output - 1;
+            s = bit32.bor(s, bit32.lshift(value, 2 * outnr));
         end
     end
-    return s;
+    return s, address;
 end
 local function computeState4M(buttons)
   local s = 0;
@@ -129,11 +126,11 @@ local function sendSet()
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
 end
 local function sendSet4()
-  local state4 = computeState4();
+  local state4, address = computeState4();
   local state_high = bit32.rshift(state4, 8);
   local state_low = bit32.band(state4, 0xff);
   local payloadOut = {widget.settings.commandBroadcastAddress, CRSF_ADDRESS_TRANSMITTER, CRSF_REALM_SWITCH, CRSF_SUBCMD_SWITCH_SET4,
-                      widget.options.Address, state_high, state_low };
+                      address, state_high, state_low };
   return crossfireTelemetryPush(CRSF_FRAMETYPE_CMD, payloadOut);    
 end
 local function sendSet4M()
