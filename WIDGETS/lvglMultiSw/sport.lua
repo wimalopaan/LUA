@@ -54,13 +54,14 @@ end
 local function checkState(callback)
   for i = 1, (widget.settings.rows * widget.settings.columns) do
     if (state.buttons[i] ~= nil) then
-      if (lastState.buttons[i] == nil) then
-        lastState.buttons[i] = {value = 0};
-        return callback(i);
-      end
-      if (state.buttons[i].value ~= lastState.buttons[i].value) then
-        lastState.buttons[i].value = state.buttons[i].value;
-        return callback(i);
+      local value = state.buttons[i].value;
+      local previous = lastState.buttons[i];
+      if ((previous == nil) or (value ~= previous.value)) then
+        local sent = callback(i);
+        if (sent == true) then
+          lastState.buttons[i] = {value = value};
+        end
+        return sent;
       end
     end      
   end
