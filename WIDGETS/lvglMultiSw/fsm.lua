@@ -39,7 +39,9 @@ local function update()
     end
     if (widget.crsf.send() == true) then
       lastTimeSend = getTime();     
-      setShmVar(widget.options.ShmSync, 0); -- better decrement
+      if (widget.options.ShmSync > 0) then
+        setShmVar(widget.options.ShmSync, 0); -- better decrement
+      end
       --print("crsf OK");
     else
       lastTimeSend = 0; -- reset next cycle
