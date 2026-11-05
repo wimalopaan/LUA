@@ -272,7 +272,7 @@ local function readItem()
               t.ls = data[8 + strlength];
               t.type = data[9 + strlength];
               return t;                
-            elseif (app_id == ARDUPILOT_SWITCH_RESP_DI) then
+            elseif (rtype == ARDUPILOT_SWITCH_RESP_DI) then
               t.setProtocolVersion = data[7];
               t.remoteHwVersion = data[8];
               t.remoteSwVersion = data[9];
