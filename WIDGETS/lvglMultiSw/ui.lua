@@ -544,6 +544,21 @@ function widget.loadingPage()
 end
 local alternatesettingsfilename = settingsFilename;
 local err_reason = "-";
+local moduleRetryState = nil;
+local function loadModule(filename, ...)
+    local script, err = loadScript(dir .. filename, "btd");
+    if (script == nil) then
+        err_reason = "Cannot load " .. filename .. ": " .. tostring(err);
+        widget.logging.log("%s", err_reason);
+        moduleRetryState = bg_state;
+        bg_state = BG_STATE_ERROR_STOP;
+        eventPush(C.EVT_WIDGET_CHANGE);
+        return false;
+    end
+    local result = script(...);
+    moduleRetryState = nil;
+    return true, result;
+end
 function widget.errorPage()
     widget.logging.log("errorPage");
     lvgl.clear();
@@ -558,8 +573,13 @@ end
 function widget.errorPageFull()
     widget.logging.log("errorPageFull");
     lvgl.clear();
+    local configError = (moduleRetryState == nil);
+    local title = widget.name;
+    if (configError) then
+        title = widget.titleString();
+    end
     local page = lvgl.page({
-        title = widget.titleString(),
+        title = title,
         subtitle = "Error Handling",
         icon = widget.dir .. "Logo_30_inv.png";
         back = (function() widget.askClose(false); end),
@@ -569,13 +589,14 @@ function widget.errorPageFull()
             {type = "label", text = "Sadly an error occurred. Now you have the following options:"},
             {type = "label", text = "Reason: " .. err_reason},
             {type = "button", text = "Reset and overwrite config file", 
+                    visible = configError,
                     press = (function() 
                         eventPush(C.EVT_RESET); 
                         err_reason = "-";
                     end)},
             {type = "button", text = "Retry", press = (function() eventPush(C.EVT_INIT); end)},
             {type = "button", text = "Stop widget", press = (function() widget.askClose(false); end)},
-            {type = "box", flexFlow = lvgl.FLOW_ROW, children = {
+            {type = "box", flexFlow = lvgl.FLOW_ROW, visible = configError, children = {
                 {type = "file", title = "Config file", folder = widget.dir, 
                         set = (function(f) alternatesettingsfilename = widget.dir .. f; end),
                         get = (function() return alternatesettingsfilename; end)},
@@ -645,42 +666,68 @@ function widget.background()
     if (bg_state == BG_STATE_UNDEF) then
         bg_state = BG_STATE_LOAD_UTILS0;       
     elseif (bg_state == BG_STATE_LOAD_UTILS0) then
-        widget.logging = loadScript(dir .. "log.lua", "btd")(widget, logging);
-        bg_state = BG_STATE_LOAD_UTILS1;       
+        local ok, result = loadModule("log.lua", widget, logging);
+        if (ok) then
+            widget.logging = result;
+            bg_state = BG_STATE_LOAD_UTILS1;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS1) then
-        widget.serialize = loadScript(dir .. "tableser.lua", "btd")(widget.logging);
-        bg_state = BG_STATE_LOAD_UTILS2;       
+        local ok, result = loadModule("tableser.lua", widget.logging);
+        if (ok) then
+            widget.serialize = result;
+            bg_state = BG_STATE_LOAD_UTILS2;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS2) then
-        widget.util      = loadScript(dir .. "util.lua", "btd")();
-        bg_state = BG_STATE_LOAD_UTILS3;       
+        local ok, result = loadModule("util.lua");
+        if (ok) then
+            widget.util = result;
+            bg_state = BG_STATE_LOAD_UTILS3;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS3) then
-        widget.crsf      = loadScript(dir .. "crsf.lua", "btd")(state, widget, dir);
-        bg_state = BG_STATE_LOAD_UTILS4;       
+        local ok, result = loadModule("crsf.lua", state, widget, dir);
+        if (ok) then
+            widget.crsf = result;
+            bg_state = BG_STATE_LOAD_UTILS4;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS4) then
-        widget.sport     = loadScript(dir .. "sport.lua", "btd")(state, widget, dir);
-        bg_state = BG_STATE_LOAD_UTILS5;       
+        local ok, result = loadModule("sport.lua", state, widget, dir);
+        if (ok) then
+            widget.sport = result;
+            bg_state = BG_STATE_LOAD_UTILS5;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS5) then
-        widget.fsm       = loadScript(dir .. "fsm.lua", "btd")(widget, state);
-        bg_state = BG_STATE_LOAD_UTILS6;       
+        local ok, result = loadModule("fsm.lua", widget, state);
+        if (ok) then
+            widget.fsm = result;
+            bg_state = BG_STATE_LOAD_UTILS6;
+        end
     elseif (bg_state == BG_STATE_LOAD_UTILS6) then
-        widget.shm       = loadScript(dir .. "shm.lua", "btd")(widget, state);
-        widget.resetSettings();
-        bg_state = BG_STATE_LOAD_SETTINGS;       
+        local ok, result = loadModule("shm.lua", widget, state);
+        if (ok) then
+            widget.shm = result;
+            widget.resetSettings();
+            bg_state = BG_STATE_LOAD_SETTINGS;
+        end
     elseif (bg_state == BG_STATE_LOAD_SETTINGS) then
-        local s = loadScript(dir .. "ui_settings.lua", "btd")(state, widget);
-        bg_state = BG_STATE_LOAD_CONTROL;       
+        if (loadModule("ui_settings.lua", state, widget)) then
+            bg_state = BG_STATE_LOAD_CONTROL;
+        end
     elseif (bg_state == BG_STATE_LOAD_CONTROL) then
-        local s = loadScript(dir .. "ui_control.lua", "btd")(state, widget);
-        bg_state = BG_STATE_LOAD_GLOBAL;       
+        if (loadModule("ui_control.lua", state, widget)) then
+            bg_state = BG_STATE_LOAD_GLOBAL;
+        end
     elseif (bg_state == BG_STATE_LOAD_GLOBAL) then
-        local s = loadScript(dir .. "ui_global.lua", "btd")(state, widget);
-        bg_state = BG_STATE_LOAD_VIRTUAL;       
+        if (loadModule("ui_global.lua", state, widget)) then
+            bg_state = BG_STATE_LOAD_VIRTUAL;
+        end
     elseif (bg_state == BG_STATE_LOAD_VIRTUAL) then
-        local s = loadScript(dir .. "ui_virtual.lua", "btd")(state, widget);
-        bg_state = BG_STATE_LOAD_TELEMETRY;       
+        if (loadModule("ui_virtual.lua", state, widget)) then
+            bg_state = BG_STATE_LOAD_TELEMETRY;
+        end
     elseif (bg_state == BG_STATE_LOAD_TELEMETRY) then
-        local s = loadScript(dir .. "ui_telemetry.lua", "btd")(state, widget);
-        bg_state = BG_STATE_INIT;       
+        if (loadModule("ui_telemetry.lua", state, widget)) then
+            bg_state = BG_STATE_INIT;
+        end
     elseif (bg_state == BG_STATE_INIT) then
         local err;
         st, err = widget.serialize.load(settingsFilename);
@@ -751,11 +798,11 @@ function widget.background()
     elseif (bg_state == BG_STATE_ERROR_STOP) then
         if (eventPop(C.EVT_FILE_CHANCE) or eventPop(C.EVT_INIT)) then
             err_reason = "-";
-            bg_state = BG_STATE_INIT;
-        elseif (eventPop(C.EVT_RESET)) then
+            bg_state = moduleRetryState or BG_STATE_INIT;
+        elseif ((moduleRetryState == nil) and eventPop(C.EVT_RESET)) then
             err_reason = "-";
             bg_state = BG_STATE_NO_FILE;
-        elseif (eventPop(C.EVT_ALT_FILE)) then
+        elseif ((moduleRetryState == nil) and eventPop(C.EVT_ALT_FILE)) then
             err_reason = "-";
             local err;
             st, err = widget.serialize.load(alternatesettingsfilename);
