@@ -30,8 +30,8 @@ erscheinen Englisch. Eine fehlende oder fehlerhafte deutsche Katalogdatei
 wird dagegen ausdrücklich als Startfehler angezeigt. Frühe Startfehler vor
 der Sprachinitialisierung sowie native Lua-/Dateisystemmeldungen können
 Englisch bleiben. Das separate Speicherdiagnosewerkzeug bleibt Englisch.
-Die folgende Bedienungsbeschreibung verwendet die englischen Beschriftungen;
-die Bildschirmfotos zeigen die deutsche Oberfläche.
+Die folgende Bedienungsbeschreibung verwendet die deutschen Beschriftungen
+aus `lang/de.lua`, passend zu den Bildschirmfotos.
 
 == Installation und Bedienung
 
@@ -55,10 +55,10 @@ Die Bedienung, Konfiguration und vollständige Statusanzeige erfolgen im Vollbil
 image::.images/w1.png[Widget-Ansicht mit Logo und Statusanzeige]
 
 Die automatische Elementhöhe füllt beim Standardlayout mit zwei Spalten
-den sichtbaren Bedienbereich mit genau den acht Buttons. `Setup` und
+den sichtbaren Bedienbereich mit genau den acht Buttons. `Einstellungen` und
 die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
 
-.Beispiel einer Bedienseite mit Schalter, Slider, 3-Pos-Tasten und Gruppenmarkierungen.
+.Beispiel einer Bedienseite mit Schalter, Schieberegler, 3-Positions-Tasten und Gruppenmarkierungen.
 image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgruppe G1]
 
 * Die Kopfzeile zeigt den aktiven Tab mit seiner Position, etwa `Licht (2/4)`.
@@ -68,25 +68,25 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   die Tab-Umschalter ausgeblendet.
   Nur die Bedienelemente des aktiven Tabs werden aufgebaut.
 * Unter den Bedienelementen trennt eine Linie den Konfigurationsbereich ab.
-  Standardmäßig ist dort nur `Setup` sichtbar. Der Button blendet
-  `Tab settings`, `New tab`, `Global` und `Save` ein; `Hide setup` klappt sie
+  Standardmäßig ist dort nur `Einstellungen` sichtbar. Der Button blendet
+  `Tabs`, `Neuer Tab`, `Global` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
   wieder ein. Nach Verlassen des Vollbilds ist der Bereich wieder geschlossen.
   Die Statusanzeige bleibt sichtbar; auf den Konfigurationsseiten ist
-  `Save` weiterhin direkt erreichbar.
-* `New tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
+  `Speichern` weiterhin direkt erreichbar.
+* `Neuer Tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
   Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
-* `Tab settings` zeigt eine kompakte Elementliste mit Name,
-  Adresse/Ausgang und `Edit`-Button nebeneinander in einer Zeile.
-  `Edit tab` öffnet die Tab-Einstellungen, `Add control` einen neuen Elemententwurf.
-  `Delete tab` befindet sich im Tab-Editor; `Delete control` im Elementeditor.
+* `Tabs` zeigt eine kompakte Elementliste mit Name,
+  Adresse/Ausgang und `Bearbeiten`-Button nebeneinander in einer Zeile.
+  `Tab bearbeiten` öffnet die Tab-Einstellungen, `Element anlegen` einen neuen Elemententwurf.
+  `Tab löschen` befindet sich im Tab-Editor; `Element löschen` im Elementeditor.
   Der letzte Tab kann nicht gelöscht werden. Beim Löschen eines Tabs werden
   auch seine Elemente entfernt.
 * Ein Element besitzt Name, Art, Adresse, Ausgang, Sichtbarkeit,
   Exklusivgruppe, Farben, Schrift, optionales Button-Bild und
-  physische Schalter-/Quellenzuordnung. `Move` im Elementeditor öffnet
+  physische Schalter-/Quellenzuordnung. `Verschieben` im Elementeditor öffnet
   eine separate Verschiebeansicht mit Ziel-Tab, Adressvorschau und
   Bestätigung bzw. Abbruch. Der Item-Editor enthält keine Tab-Auswahl.
-  Mit nur einem Tab ist `Move` deaktiviert; bei neuen, noch nicht angewendeten
+  Mit nur einem Tab ist `Verschieben` deaktiviert; bei neuen, noch nicht angewendeten
   Elementen sind Verschieben und Löschen nicht verfügbar.
   Abbrechen der Verschiebeansicht kehrt zum unveränderten Entwurf zurück.
   Bestätigen übernimmt den aktuellen Entwurf und die neue Tab-Zuordnung gemeinsam.
@@ -97,30 +97,30 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
 * Kombinationen aus Adresse und Ausgang müssen über alle Tabs eindeutig
   sein, auch für unsichtbare Elemente. Konflikte werden beim Anwenden
   angezeigt; die bisherige Konfiguration bleibt aktiv.
-* `Apply` prüft und bereitet einen Editorentwurf schrittweise vor.
+* `Anwenden` prüft und bereitet einen Editorentwurf schrittweise vor.
   Erst nach erfolgreichem Abschluss wird die neue Konfiguration aktiviert.
-  Währenddessen zeigt die Ansicht den Fortschritt und `Cancel update`;
+  Währenddessen zeigt die Ansicht den Fortschritt und `Änderung abbrechen`;
   ein Abbruch lässt die bisherige Konfiguration und den Entwurf unverändert.
-  `Cancel` verwirft den Entwurf. `Save` schreibt die angewendete Konfiguration.
+  `Abbrechen` verwirft den Entwurf. `Speichern` schreibt die angewendete Konfiguration.
   Beim Verlassen des Vollbilds wird das Speichern angeboten. Die Speicherung
   läuft auch nach Schließen des Vollbilds im Hintergrund weiter.
-* Unter `Global` aktiviert `Auto-Save` das automatische Speichern.
+* Unter `Global` aktiviert `Auto-Speichern` das automatische Speichern.
   Die Vorgabe für neue Konfigurationen ist eingeschaltet. Bereits gespeicherte
-  Einstellungen werden nicht geändert. Nach `Apply`, Hinzufügen, Löschen oder
+  Einstellungen werden nicht geändert. Nach `Anwenden`, Hinzufügen, Löschen oder
   Verschieben werden Änderungen automatisch im Hintergrund gespeichert.
   Unangewendete Editorentwürfe und Schaltzustände werden nicht gespeichert.
   Weitere Änderungen während einer Speicherung werden anschließend
-  nachgespeichert. Auch das Ausschalten von Auto-Save wird noch gespeichert.
-  Bei aktivem Auto-Save entfällt die Speicherabfrage beim Schließen.
+  nachgespeichert. Auch das Ausschalten von Auto-Speichern wird noch gespeichert.
+  Bei aktivem Auto-Speichern entfällt die Speicherabfrage beim Schließen.
   Nach einem Speicherfehler bleibt die Änderung ungespeichert und der Fehler
-  sichtbar; ein erneuter Versuch erfolgt über `Save` oder eine neue Änderung,
+  sichtbar; ein erneuter Versuch erfolgt über `Speichern` oder eine neue Änderung,
   nicht in einer unbegrenzten Wiederholungsschleife.
 
 Die Fußzeile zeigt Konfigurations-/Speicherstatus und Betriebsstatus auf
 zwei getrennten Zeilen. Eine laufende Speicherung verdeckt daher keine
 ausstehende Abschaltung. Speicherfehler, Quellenfehler und Übertragungsfehler
 werden unabhängig verwaltet: Ein erfolgreicher Vorgang löscht nur den
-zugehörigen Fehler. Nicht verfügbare Slider-Quellen setzen den Ausgang auf 0;
+zugehörigen Fehler. Nicht verfügbare Schieberegler-Quellen setzen den Ausgang auf 0;
 ihre Fehlermeldung verschwindet beim begrenzten Eingabepolling, sobald die
 Quelle wieder gültige Werte liefert oder ihre Zuordnung deaktiviert wird.
 Bei mehreren betroffenen Elementen nennt der Status zusätzlich deren Anzahl.
@@ -133,7 +133,7 @@ acht Elemente anhand von Bildschirmgröße und Spaltenzahl, einschließlich
 Zeilenabständen und Innenrändern. Zusätzliche Elemente werden gescrollt.
 Manuelle Höhen von 30 bis 240 bleiben möglich und werden nicht automatisch
 angepasst. Für vorhandene Tabs lässt sich die Automatik im Tab-Editor durch
-Setzen von `Height` auf `0` aktivieren.
+Setzen von `Höhe` auf `0` aktivieren.
 
 == Einstellungsseiten
 
@@ -144,8 +144,8 @@ Alle drei Masken werden direkt aus dem farbigen 64-Pixel-Original abgeleitet,
 nicht aus einer bereits verkleinerten Variante.
 Die Navigation bleibt unverändert.
 
-Die Kopfzeile nennt die jeweilige Einstellungsseite: `Global widget settings`,
-`Tab settings`, `Control settings` oder `Move control to another tab`.
+Die Kopfzeile nennt die jeweilige Einstellungsseite: `Widget-Einstellungen`,
+`Tab-Einstellungen`, `Element-Einstellungen` oder `Element verschieben`.
 Darunter steht der Name des Widgets, Tabs beziehungsweise Elements.
 Die kurzen Beschriftungen der Navigationsbuttons bleiben unverändert.
 Auf der Bedienseite werden weiterhin Widget-Name und aktiver Tab angezeigt.
@@ -153,9 +153,9 @@ Auf der Bedienseite werden weiterhin Widget-Name und aktiver Tab angezeigt.
 Alle Formulare verwenden gleich hohe Zeilen mit einer festen
 Beschriftungsspalte links und dem Eingabefeld rechts. Überschriften gliedern
 die Einstellungen; ergänzende Hinweise werden kleiner dargestellt.
-Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Apply`
-und `Cancel` sowie die zweizeilige Statusanzeige bleiben unten fest stehen.
-`Save` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
+Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Anwenden`
+und `Abbrechen` sowie die zweizeilige Statusanzeige bleiben unten fest stehen.
+`Speichern` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 
 .Elementliste eines Tabs mit Adresse und Ausgang sowie direktem Zugang zum Elementeditor.
 image::.images/w3.png[Tab-Einstellungen mit Elementliste und Bearbeiten-Buttons]
@@ -163,29 +163,29 @@ image::.images/w3.png[Tab-Einstellungen mit Elementliste und Bearbeiten-Buttons]
 .Tab-Editor mit Name, Standardadresse und Layout-Einstellungen.
 image::.images/w4.png[Tab-Editor mit allgemeinen Einstellungen und Anordnung]
 
-Die globalen Einstellungen sind in `General` und einen protokollspezifischen
+Die globalen Einstellungen sind in `Allgemein` und einen protokollspezifischen
 Bereich (`CRSF`, `S.Port WM` oder `S.Port ACW`) gegliedert,
-die Tab-Einstellungen in `General`, `Layout` und `Management`.
-Der Elementeditor hat drei Unterseiten: `Basic` für Name, Art, Adresse,
-Ausgang und Verwaltungsaktionen; `Inputs` für physische Zuordnungen,
-Aktivierung und Exklusivgruppe; `Appearance` für Sichtbarkeit, Farben,
+die Tab-Einstellungen in `Allgemein`, `Anordnung` und `Verwaltung`.
+Der Elementeditor hat drei Unterseiten: `Allgemein` für Name, Art, Adresse,
+Ausgang und Verwaltungsaktionen; `Eingänge` für physische Zuordnungen,
+Aktivierung und Exklusivgruppe; `Aussehen` für Sichtbarkeit, Farben,
 Schrift und Bilder. Wechsel zwischen Unterseiten erhalten den gesamten Entwurf.
 
-Unter CRSF wird `Send colors now` im globalen Editor sofort durch die Einstellung
-`LED colors` aktiviert bzw. deaktiviert, ohne dass vorher `Apply` nötig ist.
+Unter CRSF wird `Farben jetzt senden` im globalen Editor sofort durch die Einstellung
+`LED-Farben` aktiviert bzw. deaktiviert, ohne dass vorher `Anwenden` nötig ist.
 Der Button sendet die aktuell angewendeten Elementfarben einmalig.
 Die dauerhafte Einstellung und andere globale Editoränderungen bleiben
-bis `Apply` unverändert.
+bis `Anwenden` unverändert.
 Ist aktuell S.Port aktiv, muss zuerst CRSF angewendet werden.
 Ein Wechsel der Protokollauswahl erhält den gesamten Entwurf und die
-Einstellungen des jeweils anderen Protokolls, aktiviert aber erst mit `Apply`
+Einstellungen des jeweils anderen Protokolls, aktiviert aber erst mit `Anwenden`
 den neuen Transport.
 
-.Globale Widget-Einstellungen mit Auto-Save und Protokollauswahl.
+.Globale Widget-Einstellungen mit Auto-Speichern und Protokollauswahl.
 image::.images/w8.png[Widget-Einstellungen mit Name, automatischem Speichern und CRSF-Auswahl]
 
-Nur passende Felder werden angezeigt: `Switch 2` bei `3Pos`, `Source`
-bei Slidern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
+Nur passende Felder werden angezeigt: `Schalter 2` bei `3-Positionen`, `Quelle`
+bei Schiebereglern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
 bzw. Touch-Tastern. Ausgeblendete Eigenschaften bleiben im Entwurf erhalten;
 ein Unterseiten- oder Typwechsel speichert nichts automatisch.
 
@@ -200,42 +200,42 @@ image::.images/w7.png[Elementeditor auf der Unterseite Aussehen]
 
 == Elemente und physische Bedienung
 
-`Button` rastet ein, `Toggle` ist ein Ein/Aus-Schalter, `3Pos` verwendet
+`Button` rastet ein, `Schalter` ist ein Ein/Aus-Schalter, `3-Positionen` verwendet
 die Zustände Mitte = 0, rechts = 1, links = 2.
-`3Pos` erscheint als Dreier-Tastengruppe mit hervorgehobener aktiver Position.
-Im Elementeditor unter `Basic` legen `Left text` und `Right text` die beiden
+`3-Positionen` erscheint als Dreier-Tastengruppe mit hervorgehobener aktiver Position.
+Im Elementeditor unter `Allgemein` legen `Text links` und `Text rechts` die beiden
 äußeren Beschriftungen fest (je höchstens 32 Bytes). Diese Benutzertexte
 werden unverändert gespeichert und nicht übersetzt oder durch `L`/`R` ersetzt.
-Die mittlere Taste zeigt übersetzt `Off` bzw. `Aus`. Eine Überschrift über
+Die mittlere Taste zeigt übersetzt `Aus`. Eine Überschrift über
 der Gruppe entfällt; der Elementname bleibt für die Verwaltung erhalten.
 Bei wenig Platz wird zunächst eine kleinere Schrift verwendet.
 Alte Konfigurationen ohne die neuen Felder erhalten beim Laden passende
 Standardtexte; nach dem Speichern bleiben auch diese sprachunabhängig erhalten.
 Die Position wird direkt angewählt; erneutes Antippen derselben Taste ändert sie nicht.
 Ist einer der beiden physischen Schalter zugeordnet, dient die Gruppe nur als Anzeige.
-`Momentary` ist nur während der Betätigung aktiv, `Slider` liefert 0 bis 100 %.
+`Taster` ist nur während der Betätigung aktiv, `Schieberegler` liefert 0 bis 100 %.
 Touch-Taster werden beim Seiten-/Tabwechsel, Neuaufbau und Verlassen des
 Vollbilds zurückgesetzt.
 
 Eine Schalterzuordnung deaktiviert die Touch-Bedienung des betreffenden
-Schaltelements. Bei `3Pos` hat der erste Schalter Vorrang; der zweite aktiviert
+Schaltelements. Bei `3-Positionen` hat der erste Schalter Vorrang; der zweite aktiviert
 Zustand 2. Negative Schalterkennungen werden unterstützt.
-Eine Slider-Quelle verwendet wie beim bisherigen Widget den positiven
+Eine Schieberegler-Quelle verwendet wie beim bisherigen Widget den positiven
 Quellenbereich: 0 bis 1024 entsprechen 0 bis 100 %; negative Werte ergeben 0 %.
 Quellenwerte werden begrenzt und auf ganze Prozent gerundet.
-Eine fehlende Quelle wird angezeigt und setzt den Slider auf 0 %.
-Bei zugeordneter Quelle ist die Touch-Bedienung des Sliders deaktiviert.
+Eine fehlende Quelle wird angezeigt und setzt den Schieberegler auf 0 %.
+Bei zugeordneter Quelle ist die Touch-Bedienung des Schiebereglers deaktiviert.
 
 Ein Aktivierungsschalter sperrt bei inaktivem Zustand die Bedienung und
 setzt den Ausgang zurück. Exklusivgruppen gelten tabübergreifend für
 Schaltelemente; 0 bedeutet keine Gruppe. Physische Gruppenanforderungen
 werden flankengesteuert verarbeitet: Bei gleichzeitig gehaltenen Schaltern
 bleibt die zuletzt eingelesene Einschaltflanke maßgebend, ohne Oszillation.
-Slider nehmen nicht an Exklusivgruppen teil.
+Schieberegler nehmen nicht an Exklusivgruppen teil.
 Sobald eine Gruppe mindestens zwei Schaltelemente enthält, steht rechts
 an ihren sichtbaren Elementen eine kleine Markierung wie `G1`.
 Dabei zählen auch Mitglieder anderer Tabs und ausgeblendete Schaltelemente,
-nicht jedoch Slider. Die Markierungen folgen der angewendeten Konfiguration;
+nicht jedoch Schieberegler. Die Markierungen folgen der angewendeten Konfiguration;
 Elementnamen und gespeicherte Beschriftungen bleiben unverändert.
 
 Auch in inaktiven Tabs werden physische Eingänge verarbeitet und
@@ -258,7 +258,7 @@ und Realm `0xa1`. CRCs fügt EdgeTX hinzu.
 * `Set4` (`0x07`) für eine Schaltadresse.
 * `Set4M` (`0x09`) für mehrere Adressen, maximal 18 Adressen pro Paket.
   Größere Konfigurationen werden über mehrere Pakete verteilt.
-* `Prop` (`0x02`) für Slider, Ausgangsnummer im Paket 0 bis 7.
+* `Prop` (`0x02`) für Schieberegler, Ausgangsnummer im Paket 0 bis 7.
   Im Editor werden Ausgänge 1 bis 8 angezeigt.
 * Optional `SetRGB` (`0x0a`) mit RGB444-Farben aus den Elementfarben.
   Aktivierung unter `Global`. Farben werden nach Konfigurationsänderungen
@@ -275,7 +275,7 @@ CRSF-Bandbreite die tatsächliche Wiederholrate.
 
 Auf dem Sender muss für die native CRSF-Schnittstelle ein internes oder
 externes HF-Modul auf CRSF/ELRS eingestellt sein. Ohne aktives CRSF-Protokoll
-liefert EdgeTX `nil`; das Widget meldet dann `CRSF inactive`, nicht einen
+liefert EdgeTX `nil`; das Widget meldet dann `CRSF inaktiv: CRSF-/ELRS-HF-Modul wählen`, nicht einen
 vollen Sendepuffer. Ein Rückgabewert `false` bedeutet dagegen, dass EdgeTX
 das Paket nicht annehmen konnte.
 
@@ -288,18 +288,18 @@ Die native globale CRSF-Funktion wird dabei nicht überschrieben.
 Die serielle Ausgabe des Simulators muss für einen angeschlossenen Empfänger
 separat eingerichtet werden. Eine HF-Modulauswahl allein genügt dafür nicht.
 `serialWrite` liefert keine Zustellbestätigung; der Status zeigt daher
-`Simulator: serial CRSF (delivery unconfirmed)`.
+`Simulator: serielles CRSF (Zustellung unbestätigt)`.
 Fehlt die API, wird ein Fehler angezeigt und der Ausgangszustand bleibt
 zur Übertragung vorgemerkt. Ein serieller Telemetrieempfang ist nicht enthalten.
 
-Slider werden im Schaltzustandswort bei einem Wert größer 0 eingeschaltet.
+Schieberegler werden im Schaltzustandswort bei einem Wert größer 0 eingeschaltet.
 Nach Schaltzustandspaketen werden die PWM-Werte erneut übertragen.
 Entfernte oder umadressierte Ausgänge erhalten explizit einen Nullzustand;
-entfernte Slider zusätzlich `Prop` mit 0 %.
+entfernte Schieberegler zusätzlich `Prop` mit 0 %.
 
 == S.Port WM
 
-Unter `Global` wählt `Protocol` zwischen `CRSF`, `S.Port WM`,
+Unter `Global` wählt `Protokoll` zwischen `CRSF`, `S.Port WM`,
 `S.Port ACW 1.5` und `S.Port ACW 1.4`.
 Pro Modell ist genau ein Ausgabeprotokoll aktiv; alle Tabs verwenden es.
 CRSF bleibt die Vorgabe, auch für bestehende NG-Konfigurationsdateien.
@@ -310,23 +310,23 @@ S.Port-WM übernimmt das Telegrammformat aus `../lvglMultiSw/sport.lua`:
 sportTelemetryPush(physicalId, 0x31, appId * 256 + address, state)
 ----
 
-`Physical ID` ist von 0 bis 27 einstellbar, Vorgabe 0.
-`App ID` bezeichnet das obere Byte der Data-ID, von 0 bis 255;
+`Physical-ID` ist von 0 bis 27 einstellbar, Vorgabe 0.
+`App-ID` bezeichnet das obere Byte der Data-ID, von 0 bis 255;
 Vorgabe 81 (`0x51`). Das untere Byte ist die effektive Element-/Tab-Adresse
 von 0 bis 255. Je Adresse enthält `state` acht Ausgänge mit jeweils zwei Bits:
 Ausgang 1 belegt Bits 0/1, Ausgang 8 Bits 14/15.
 Die Zustände 0, 1 und 2 werden unverändert übertragen.
 
-Unterstützt werden `Button`, `Toggle`, `3Pos` und `Momentary`, einschließlich
+Unterstützt werden `Button`, `Schalter`, `3-Positionen` und `Taster`, einschließlich
 physischer Schalter, Aktivierung und tabübergreifender Exklusivgruppen.
-Slider und LED-Farbübertragung sind im WM-Format nicht enthalten.
-Die Typauswahl enthält daher keine Slider; vorhandene Slider verhindern
+Schieberegler und LED-Farbübertragung sind im WM-Format nicht enthalten.
+Die Typauswahl enthält daher keine Schieberegler; vorhandene Schieberegler verhindern
 das Anwenden einer S.Port-Konfiguration mit einer Fehlermeldung.
 Die bisherige Konfiguration bleibt dabei aktiv.
 CRSF-Farbeinstellungen bleiben gespeichert, sind unter S.Port aber ohne Wirkung.
 Die Farben der Bedienoberfläche sind weiterhin frei einstellbar.
 
-Änderungen werden zeitnah übertragen; das gemeinsame `Interval` bestimmt
+Änderungen werden zeitnah übertragen; das gemeinsame `Intervall` bestimmt
 die Wiederholung in Einheiten von 10 ms. Pro Hintergrundschritt werden
 höchstens acht Adressen geprüft und höchstens ein Telegramm gesendet.
 Ein rotierender Cursor sorgt für faire Verarbeitung aller Adressen.
@@ -362,7 +362,7 @@ wird entschieden, welche Abschaltungen noch nötig sind.
 Beim Protokollwechsel werden alte Ausgänge über ihren ursprünglichen
 Transport ausgeschaltet; ausstehende Telegramme bleiben auch über weitere
 Konfigurationsänderungen erhalten. Ist der alte Transport nicht mehr erreichbar,
-zeigt der Status `Retired output pending`; das neue Protokoll wird trotzdem
+zeigt der Status `Alte Abschaltung ausstehend`; das neue Protokoll wird trotzdem
 weiter bedient. Insgesamt bleibt es bei höchstens einem Telegramm pro Tick.
 Für eine sichere Abschaltung das HF-Modul erst nach erfolgreicher Übertragung
 der alten Nulltelegramme umstellen. Ein nicht mehr erreichbarer Empfänger
@@ -382,11 +382,11 @@ Die Data-ID ist `0xac00` für ACW 1.5 und `0xfa07` für ACW 1.4.
 Die konfigurierbaren WM-IDs sind bei ACW ohne Wirkung und bleiben für einen
 späteren Wechsel zurück zu WM erhalten.
 
-Jedes Element besitzt unter `Basic` einen Bereich `ACW output`:
+Jedes Element besitzt unter `Allgemein` einen Bereich `ACW-Ausgang`:
 
-* `ACW type` (`sportType`): Typbyte, Vorgabe 1.
-* `ACW options` (`sportOptions`): Optionsbyte, Vorgabe 0.
-* `On PWM` (`sportPwmOn`): Einschaltwert, Vorgabe 255.
+* `ACW-Typ` (`sportType`): Typbyte, Vorgabe 1.
+* `ACW-Optionen` (`sportOptions`): Optionsbyte, Vorgabe 0.
+* `Einschalt-PWM` (`sportPwmOn`): Einschaltwert, Vorgabe 255.
 
 Alle drei Werte liegen zwischen 0 und 255 und werden unverändert übertragen.
 Typ und Optionen sind Rohwerte; ihre Bedeutung richtet sich nach dem
@@ -400,11 +400,11 @@ Adresse 31/Ausgang 8 und höhere effektive Adressen werden beim Laden
 oder Anwenden ausdrücklich abgewiesen, nicht durch Maskieren verändert.
 Die automatische Ausgangsvergabe berücksichtigt diese Grenze.
 
-Unterstützt werden `Button`, `Toggle` und `Momentary`, einschließlich
+Unterstützt werden `Button`, `Schalter` und `Taster`, einschließlich
 physischer Schalter, Aktivierung und Exklusivgruppen. Die Auswahl
-`Momentary` bleibt intern Elementart 4. `3Pos`, Slider und LED-Farbübertragung
+`Taster` bleibt intern Elementart 4. `3-Positionen`, Schieberegler und LED-Farbübertragung
 sind für ACW nicht umgesetzt; entsprechende Elementarten verhindern das
-Anwenden der Konfiguration. Zwei aktive 3Pos-Zustände werden nicht
+Anwenden der Konfiguration. Zwei aktive 3-Positions-Zustände werden nicht
 stillschweigend auf denselben Einschaltwert reduziert.
 
 Je Element wird ein eigenes Telegramm gesendet. Wiederholintervall,
@@ -437,7 +437,7 @@ Messlauf gestartet. `EXIT` bricht einen laufenden Versuch ab; erneut
 `EXIT` schließt das Tool. Zunächst die Profile mit 8 Elementen verwenden,
 danach schrittweise 32, 64 und 128 testen. 256 ist ein weiteres, manuell
 auszuwählendes Profil; ACW verwendet wegen seines Nummernbereichs 255.
-Es gibt Profile für CRSF-Buttons, CRSF-Slider, WM und beide ACW-Varianten.
+Es gibt Profile für CRSF-Buttons, CRSF-Schieberegler, WM und beide ACW-Varianten.
 Je acht Elemente wird ein Tab erzeugt. Das zusätzliche Profil `Empty tabs`
 misst 8 bis 256 leere Tabs unabhängig von der Elementanzahl.
 
@@ -527,11 +527,11 @@ Eingänge und Ausgänge des bisherigen Protokolls weiter. Unveränderte Zuordnun
 aktuellen Werte und Schaltflanken, auch wenn diese sich während der
 Vorbereitung ändern. Fehler und Abbruch lassen die bisherige Laufzeit aktiv.
 Weitere Konfigurationsänderungen sind während der Vorbereitung gesperrt;
-Auto-Save und angeforderte Speicherungen warten auf deren erfolgreichen Abschluss.
+Auto-Speichern und angeforderte Speicherungen warten auf deren erfolgreichen Abschluss.
 
 Auch der UI-Aufbau besitzt eine eigene Zustandsmaschine und läuft nur in
 `refresh()`: höchstens vier einfache Objektdefinitionen pro Aufruf,
-einschließlich verschachtelter Labels und Slider. Reine Zustandswechsel
+einschließlich verschachtelter Labels und Schieberegler. Reine Zustandswechsel
 laufen im gleichen Refresh weiter; spätestens nach 16 Zustandsmaschinenschritten
 wird unterbrochen. Seitenrahmen und Bilder werden jeweils allein in einem
 Refresh erzeugt, damit sie nicht mit weiteren Konstruktoraufrufen zusammenfallen.
@@ -561,16 +561,16 @@ Schreibfehler und unvollständige Dateien werden angezeigt. Der andere,
 zuletzt vollständig gespeicherte Slot bleibt erhalten.
 Ein vorhandener beschädigter Slot führt bei erfolgreicher Wiederherstellung
 zu einem Hinweis. Sind beide lesbaren Dateien ungültig, stoppt das Laden;
-`Retry loading` oder ein ausdrücklich bestätigter Neustart mit
+`Erneut laden` oder ein ausdrücklich bestätigter Neustart mit
 Standardkonfiguration sind möglich. Fehlende Slots werden anhand des
 Fehlercodes oder der EdgeTX-Funktion `fstat` erkannt und sind kein
 Wiederherstellungsfehler. Fehlen beide Dateien, startet die Standardkonfiguration.
 Können beide Dateien aus einem anderen Grund nicht geöffnet werden, stoppt
 das Laden mit den Dateifehlern. Vorhandene, nicht lesbare Konfigurationen
-werden nicht durch Auto-Save überschrieben; neue Standardwerte müssen
-ausdrücklich über `Create default configuration` bestätigt werden.
-Bei aktivem Auto-Save wird auch die neu erzeugte Startkonfiguration
-automatisch gespeichert und geprüft. Ohne Auto-Save bleibt sie bis `Save`
+werden nicht durch Auto-Speichern überschrieben; neue Standardwerte müssen
+ausdrücklich über `Standardkonfiguration anlegen` bestätigt werden.
+Bei aktivem Auto-Speichern wird auch die neu erzeugte Startkonfiguration
+automatisch gespeichert und geprüft. Ohne Auto-Speichern bleibt sie bis `Speichern`
 oder zur Speicherbestätigung beim Verlassen des Vollbilds ungespeichert.
 
 == Entwicklung
