@@ -36,13 +36,19 @@ Die folgende Bedienungsbeschreibung verwendet die englischen Beschriftungen.
 
 Das Verzeichnis als `/WIDGETS/lvglMultiSwNG/` auf die SD-Karte kopieren.
 Bei einem Update auch `i18n.lua`, das gesamte Verzeichnis `lang/` und alle
-geänderten Widget-Module übertragen.
+geänderten Widget-Module sowie `Logo_small_64_t.png`, `Logo_30_inv.png`,
+`Logo_40_inv.png` und `Logo_56_inv.png` übertragen.
 `tests/` wird auf dem Sender nicht benötigt. Das Widget heißt `MultiSw NG`.
 Es gibt keine funktionalen Widget-Options.
 
 Die erste Konfiguration enthält einen Tab mit acht rastenden Buttons,
-Standardadresse 0 und Ausgängen 1 bis 8. Im normalen Widget-Fenster erscheint
-eine Statusanzeige; die Bedienung und Konfiguration erfolgen im Vollbild.
+Standardadresse 0 und Ausgängen 1 bis 8. Im normalen Widget-Fenster erscheinen
+das farbige wimalopaan-Logo, der konfigurierte Widget-Name und bis zu zwei
+Statuszeilen. Der Statusbereich wird dafür nach oben erweitert, ohne Logo
+und Name zu überlagern. In flachen Widget-Fenstern passt nur eine Statuszeile;
+in sehr flachen Fenstern haben Logo und Name Vorrang vor dem Status.
+Die frühe Ladeanzeige bleibt einzeilig.
+Die Bedienung, Konfiguration und vollständige Statusanzeige erfolgen im Vollbild.
 Die automatische Elementhöhe füllt beim Standardlayout mit zwei Spalten
 den sichtbaren Bedienbereich mit genau den acht Buttons. `Setup` und
 die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
@@ -122,6 +128,13 @@ angepasst. Für vorhandene Tabs lässt sich die Automatik im Tab-Editor durch
 Setzen von `Height` auf `0` aktivieren.
 
 == Einstellungsseiten
+
+Die Standard-Kopfzeile verwendet links das einfarbige wimalopaan-Logo als
+Zurück-Symbol. Je nach Kopfzeilenhöhe wird die 30-, 40- oder 56-Pixel-Variante
+verwendet, damit das Logo den verfügbaren Platz besser ausnutzt.
+Alle drei Masken werden direkt aus dem farbigen 64-Pixel-Original abgeleitet,
+nicht aus einer bereits verkleinerten Variante.
+Die Navigation bleibt unverändert.
 
 Die Kopfzeile nennt die jeweilige Einstellungsseite: `Global widget settings`,
 `Tab settings`, `Control settings` oder `Move control to another tab`.

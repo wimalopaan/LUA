@@ -28,7 +28,8 @@ local function button(text, press, active)
 end
 
 local function row(children, width)
-    return {type = "box", flexFlow = lvgl.FLOW_ROW, w = width, children = children}
+    return {type = "box", flexFlow = lvgl.FLOW_ROW, w = width,
+            scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = children}
 end
 
 local function scaled(value)
@@ -36,6 +37,37 @@ local function scaled(value)
     if LCD_W > LCD_H and LCD_W == 320 then return math.floor((value * 4 + 3) / 5) end
     if LCD_W > LCD_H and LCD_W == 800 then return math.floor((value * 3 + 1) / 2) end
     return value
+end
+
+local function compactView(view)
+    local pad = math.min(scaled(4), math.floor(view.zone.h / 16))
+    local width, height = view.zone.w - 2 * pad, view.zone.h - 2 * pad
+    local _, smallHeight = lcd.sizeText("M", SMLSIZE)
+    local _, lineHeight = lcd.sizeText("M", TINSIZE)
+    local _, titleHeight = lcd.sizeText("M", BOLD)
+    local statusLines = math.max(0, math.min(2, math.floor((height - smallHeight - pad) / lineHeight)))
+    local statusHeight = statusLines * lineHeight
+    local showStatus = statusLines > 0
+    local headerHeight = showStatus and height - statusHeight - pad or height
+    local font = headerHeight >= titleHeight and BOLD or SMLSIZE
+    titleHeight = math.min(headerHeight, font == BOLD and titleHeight or smallHeight)
+    local size = math.min(scaled(64), headerHeight, math.floor(width / 3))
+    local titleX = pad + size + pad
+    local items = {
+        {type = "image", file = app.dir .. "Logo_small_64_t.png",
+         x = pad, y = pad + math.floor((headerHeight - size) / 2), w = size, h = size},
+        {type = "label", x = titleX, y = pad + math.floor((headerHeight - titleHeight) / 2),
+         w = math.max(1, view.zone.w - pad - titleX), h = titleHeight, font = font,
+         text = function() return app.data and app.data.header.name or "MultiSwitch NG" end},
+    }
+    if showStatus then
+        items[#items + 1] = {
+            type = "label", x = pad, y = view.zone.h - pad - statusHeight,
+            w = width, h = statusHeight, font = TINSIZE,
+            text = function() return (string.gsub(app.status(), "[%c]", " ")) end,
+        }
+    end
+    return items
 end
 
 local function actionRow(items, width)
@@ -137,13 +169,13 @@ local function controlWidget(view, control, width, height)
             input.get = function() return app.values[id] == 2 and -1 or app.values[id] end
             input.set = function(value) set(value == -1 and 2 or value) end
         else
-            input.min, input.max = 0, control.type == 5 and 100 or 1
+            if control.type == 5 then input.min, input.max = 0, 100 end
             input.get = function() return app.values[id] end
             input.set = set
         end
         return {type = "box", w = width, h = height, flexFlow = lvgl.FLOW_COLUMN,
                 children = {{type = "label", text = control.name, font = control.font,
-                             color = control.textColor, w = width - 8}, input}}
+                             color = control.textColor, w = width - 8, align = CENTER}, input}}
     end
     if control.image ~= "" then
         common.children = {{type = "image", file = "/IMAGES/" .. control.image,
@@ -460,10 +492,14 @@ local function beginBuild(view, full)
 end
 
 local function pageHeader(view, job)
+    local headerHeight = LCD_H - job.height
+    local icon = headerHeight >= 60 and "Logo_56_inv.png"
+        or headerHeight >= 44 and "Logo_40_inv.png" or "Logo_30_inv.png"
     local params = {
         title = app.data and app.data.header.name or "MultiSwitch NG",
         subtitle = t("Controls"), back = function() exit(view) end,
-        flexFlow = lvgl.FLOW_COLUMN, flexPad = job.pad,
+        icon = app.dir .. icon,
+        flexFlow = lvgl.FLOW_COLUMN, flexPad = job.pad, scrollDir = lvgl.SCROLL_VER,
     }
     if job.fixed then
         params.flexFlow, params.scrollBar, params.scrollDir = nil, false, lvgl.SCROLL_OFF
@@ -575,12 +611,7 @@ local function stepBuild(view)
             job.objects, job.batchObjects, job.pause = job.objects + 1, job.batchObjects + 1, true
             job.phase = "progress"
         else
-            nodes(job, {
-                {type = "label", x = 4, y = 4, w = view.zone.w - 8,
-                 text = app.data and app.data.header.name or "MultiSwitch NG"},
-                {type = "label", x = 4, y = 30, w = view.zone.w - 8, text = app.status},
-                {type = "label", x = 4, y = 60, w = view.zone.w - 8, text = t("Open full screen to control")},
-            }, nil, "finish")
+            nodes(job, compactView(view), nil, "finish")
         end
     elseif job.phase == "progress" then
         buildOne(view, job, job.page, {

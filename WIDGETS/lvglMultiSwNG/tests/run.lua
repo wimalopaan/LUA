@@ -12,7 +12,8 @@ local readCount, writeCount, loads, dialogs, quality, objectCount, createdTypes
 local sportFrames, sportBlocked
 COLOR_THEME_SECONDARY3, COLOR_THEME_PRIMARY3, COLOR_THEME_WARNING = 3, 4, 5
 LCD_W, LCD_H = 480, 272
-LEFT, VCENTER, SMLSIZE, BOLD = 0, 32, 1, 2
+LEFT, VCENTER, SMLSIZE, BOLD, TINSIZE = 0, 32, 1, 2, 3
+CENTER = 16
 
 local function equal(actual, expected, message)
     if actual ~= expected then
@@ -37,6 +38,8 @@ local function collect(defs)
         for _, item in ipairs(items) do
             if item.type == "momentaryButton" then
                 assert(item.checked == nil, "Invalid property 'checked' on momentaryButton")
+            elseif item.type == "toggle" then
+                assert(item.min == nil and item.max == nil, "Invalid range properties on toggle")
             end
             if item.name then
                 local ref = {definition = item}
@@ -111,6 +114,9 @@ local function reset()
     lcd = {
         getColor = function() return 0x07e08000 end,
         drawText = function() end,
+        sizeText = function(text, font)
+            return #text * 8, font == TINSIZE and 12 or font == SMLSIZE and 16 or 22
+        end,
     }
     crossfireTelemetryPush = function(kind, payload)
         equal(kind, 0x32)
@@ -875,6 +881,27 @@ test("Control setup actions collapse without changing switches and reset on full
     assert(not visible("Tab settings"))
 end)
 
+test("Expanded setup footer never scrolls horizontally in either language or screen size", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("scrollbar-" .. language)
+        ready(app)
+        for _, screen in ipairs({{480, 272, 227}, {320, 240, 204}, {800, 480, 412}}) do
+            LCD_W, LCD_H, lvgl.PAGE_BODY_HEIGHT = screen[1], screen[2], screen[3]
+            lvgl.UI_ELEMENT_HEIGHT = LCD_W == 800 and 48 or nil
+            local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control", setupOpen = true}
+            render(app, view)
+            local footer = assert(find(function(item)
+                return item.type == "box" and item.children
+                    and item.children[1].text == app.t("Save")
+            end))
+            equal(footer.scrollBar, false)
+            equal(footer.scrollDir, lvgl.SCROLL_OFF)
+            equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+        end
+    end
+end)
+
 test("Tabbed UI supports create, edit, move, delete and checked updates", function()
     local app = appInstance()
     ready(app)
@@ -918,6 +945,54 @@ test("Tabbed UI supports create, edit, move, delete and checked updates", functi
     render(app, view)
     equal(#app.data.tabs, 1)
     equal(#app.data.controls, 9)
+end)
+
+test("Changing an item to Schalter builds a native toggle without slider properties", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "editor",
+                  editKind = "control", edit = config.copy(app.controls[1]), editRevision = app.revision}
+    render(app, view)
+    equal(form("Art:").values[2], "Schalter")
+    form("Art:").set(2)
+    render(app, view)
+    press("Anwenden")
+    render(app, view)
+    press("Bedienung")
+    render(app, view)
+    equal(app.controls[1].type, 2)
+    local toggle = assert(find(function(item) return item.type == "toggle" end))
+    equal(toggle.get(), 0)
+    toggle.set(1)
+    equal(app.values[1], 1)
+    toggle.set(0)
+    equal(app.values[1], 0)
+    app.set(1, 1)
+    equal(toggle.get(), 1)
+    equal(app.error, nil)
+end)
+
+test("Toggle, three-position and slider captions stay centered above their inputs", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls = {data.controls[1], data.controls[2], data.controls[3]}
+    data.controls[1].type, data.controls[2].type, data.controls[3].type = 2, 3, 5
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    for _, control in ipairs(app.data.controls) do
+        local box = assert(find(function(item)
+            return item.type == "box" and item.children and item.children[1].text == control.name
+        end))
+        local caption, input = box.children[1], box.children[2]
+        equal(box.flexFlow, lvgl.FLOW_COLUMN)
+        equal(caption.align, CENTER)
+        equal(caption.w, input.w)
+        equal(input.type, control.type == 2 and "toggle" or "slider")
+    end
 end)
 
 test("Move action previews inherited address, cancels, and preserves element identity", function()
@@ -1012,6 +1087,65 @@ test("Momentary releases on navigation and leaving fullscreen; small view is pas
     render(app, view)
     equal(app.values[1], 0)
     assert(not find(function(item) return item.type == "button" end))
+end)
+
+test("Compact widgets reserve up to two status lines above the bottom without overlapping logo or name", function()
+    full = false
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("compact-" .. language)
+        ready(app)
+        local header = config.copy(app.data.header)
+        header.name = "My switches"
+        assert(commit(app, "config", header))
+        app.error = "A long diagnostic\nwith another line\r\nand details"
+        for _, zone in ipairs({{w = 200, h = 100}, {w = 150, h = 60}, {w = 90, h = 40}, {w = 90, h = 24}}) do
+            local view = {zone = zone, app = app, page = "control"}
+            render(app, view)
+            local logo, title, status = definitions[1], definitions[2], definitions[3]
+            equal(logo.type, "image")
+            equal(logo.file, root .. "Logo_small_64_t.png")
+            equal(logo.w, logo.h)
+            equal(title.type, "label")
+            equal(title.text(), "My switches")
+            assert(title.x >= logo.x + logo.w)
+            for _, item in ipairs(definitions) do
+                assert(item.x >= 0 and item.y >= 0 and item.w > 0 and item.h > 0)
+                assert(item.x + item.w <= zone.w and item.y + item.h <= zone.h)
+            end
+            if zone.h >= 40 then
+                equal(#definitions, 3)
+                equal(status.type, "label")
+                equal(status.font, TINSIZE)
+                local _, lineHeight = lcd.sizeText("M", status.font)
+                equal(status.h, lineHeight * (zone.h >= 60 and 2 or 1))
+                assert(status.y >= logo.y + logo.h and status.y >= title.y + title.h)
+                contains(status.text(), "A long diagnostic with another line")
+                assert(not string.find(status.text(), "[%c]"))
+                app.saveError = "Later storage error"
+                contains(status.text(), "Later storage error")
+            else
+                equal(#definitions, 2)
+            end
+            assert(not find(function(item) return item.type == "button" end))
+        end
+    end
+end)
+
+test("Early loading text stays inside one line before UI modules are available", function()
+    full = false
+    local main = assert(loadfile(root .. "main.lua"))()
+    local view = main.create({w = 120, h = 45}, {}, root)
+    main.refresh(view)
+    equal(#definitions, 1)
+    local label = definitions[1]
+    equal(label.type, "label")
+    local _, lineHeight = lcd.sizeText("M", label.font)
+    equal(label.h, lineHeight)
+    assert(label.x + label.w <= view.zone.w and label.y + label.h <= view.zone.h)
+    contains(label.text(), "Loading:")
+    view.app.error = "Loading failed\nextra details"
+    equal(label.text(), "Loading failed extra details")
 end)
 
 test("Missing simulator model identity waits and retries without loading or writing", function()
@@ -1384,6 +1518,7 @@ test("Settings page headers describe the page and identify its widget, tab or co
         local params = view.uiJob.page.params
         equal(params.title, title)
         equal(params.subtitle, subtitle)
+        equal(params.icon, root .. "Logo_40_inv.png")
     end
     render(app, view)
     header("Model switches", "Exterior lights (1/2)")
@@ -1498,6 +1633,13 @@ test("Settings forms align fields and keep actions outside the scrolling area on
                       edit = config.copy(app.data.header), editKind = "config", editRevision = app.revision}
         render(app, view)
         local content, actions, status = view.refs.settings.definition, view.refs.actions.definition, view.refs.status.definition
+        local iconFile = assert(hostIO.open(view.uiJob.page.params.icon, "rb"))
+        local iconHeader = iconFile:read(24)
+        iconFile:close()
+        local iconWidth, iconHeight = string.unpack(">I4I4", iconHeader, 17)
+        equal(iconWidth, iconHeight)
+        assert(iconHeight <= LCD_H - view.uiJob.height)
+        if LCD_W >= 480 then assert(iconWidth > 30, "Header logo still uses the small variant") end
         equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_OFF)
         equal(view.uiJob.page.params.flexFlow, nil)
         equal(content.scrollDir, lvgl.SCROLL_VER)

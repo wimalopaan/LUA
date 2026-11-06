@@ -59,9 +59,14 @@ local function refresh(widget)
     if widget.app.ui then widget.app.ui.refresh(widget)
     elseif not widget.loading then
         lvgl.clear()
-        lvgl.build({{type = "label", text = function()
-            if widget.app.status then return widget.app.status() end
-            return widget.app.error or "Loading MultiSwitch NG ..."
+        local full = lvgl.isFullScreen() or lvgl.isAppMode()
+        local width, height = full and LCD_W or widget.zone.w, full and LCD_H or widget.zone.h
+        local _, lineHeight = lcd.sizeText("M", SMLSIZE)
+        lvgl.build({{type = "label", x = 4, y = 4, w = math.max(1, width - 8),
+            h = math.max(1, math.min(lineHeight, height - 8)), font = SMLSIZE, text = function()
+            local status = widget.app.status and widget.app.status()
+                or widget.app.error or "Loading MultiSwitch NG ..."
+            return (string.gsub(status, "[%c]", " "))
         end}})
         widget.loading = true
     end
