@@ -1,6 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Wilhelm Meier
 
+local app = ...
+local t = app.t
 local M = {}
 
 function M.new()
@@ -130,7 +132,7 @@ function M.tickOff(sender)
                 sender.offIndex[protocol] = sender.offIndex[protocol] + 1
                 sender.offErrors[protocol] = nil
                 if protocol ~= own then M.invalidate(sender) end
-            else sender.offErrors[protocol] = "Retired output pending: " .. off.error end
+            else sender.offErrors[protocol] = t("Retired output pending: %s", off.error) end
             break
         end
     end

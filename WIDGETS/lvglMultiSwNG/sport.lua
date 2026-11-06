@@ -2,9 +2,10 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
+local t = app.t
 local outputs = app.outputs
 local M = {invalidate = outputs.invalidate}
-local REQUEST_ERROR = "S.Port packet not accepted: check RF module, queue and sensor conflict"
+local REQUEST_ERROR = t("S.Port packet not accepted: check RF module, queue and sensor conflict")
 
 function M.new()
     local sender = outputs.new()
@@ -47,7 +48,7 @@ function M.set(sender, id, value)
 end
 
 local function available(sender)
-    sender.apiError = type(sportTelemetryPush) ~= "function" and "S.Port API unavailable" or nil
+    sender.apiError = type(sportTelemetryPush) ~= "function" and t("S.Port API unavailable") or nil
     return sender.apiError == nil
 end
 

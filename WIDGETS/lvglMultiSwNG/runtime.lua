@@ -111,7 +111,7 @@ function M.step(job)
             if kind == "tab" then nextPhase(job, "controls")
             else
                 if change and change.remove and not job.found then
-                    job.done, job.error = true, "Configuration record no longer exists"
+                    job.done, job.error = true, app.t("Configuration record no longer exists")
                     return
                 end
                 local valid, err = app.config.finish(job.builder)

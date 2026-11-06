@@ -2,34 +2,40 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
-app.modules = {"config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
+app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0
 app.values, app.inputIndex = {}, 1
 app.inputErrors, app.inputErrorCount = {}, 0
+function app.t(message, ...)
+    if app.i18n then return app.i18n.t(message, ...) end
+    if select("#", ...) == 0 then return message end
+    return string.format(message, ...)
+end
+local t = app.t
 
 function app.storageStatus()
-    local status = app.saveError or (app.saveJob and "Saving configuration ...")
-        or (not app.data and "Configuration not loaded")
-        or app.warning or (app.dirty and "Unsaved changes" or "Configuration saved")
+    local status = app.saveError or (app.saveJob and t("Saving configuration ..."))
+        or (not app.data and t("Configuration not loaded"))
+        or app.warning or (app.dirty and t("Unsaved changes") or t("Configuration saved"))
     if app.error then return app.error .. "; " .. status end
     return status
 end
 
 function app.operationStatus()
-    local progress = app.prepare and ("Preparing " .. app.prepare.phase .. ": " .. app.prepare.index)
-    if not app.sender then return progress or ("Loading: " .. app.phase) end
+    local progress = app.prepare and t("Preparing %s: %d", t(app.prepare.phase), app.prepare.index)
+    if not app.sender then return progress or t("Loading: %s", t(app.phase)) end
     local status = app.sender.offError
     if app.sender.error then
         status = status and (status .. "; " .. app.sender.error) or app.sender.error
     end
     if app.inputErrorCount > 0 then
         local control = app.inputErrorId and app.controls[app.inputErrorId]
-        local detail = control and control.name or (app.inputErrorCount .. " control(s)")
-        if control and app.inputErrorCount > 1 then detail = detail .. " (" .. app.inputErrorCount .. " controls)" end
-        local error = "Source unavailable: " .. detail
+        local detail = control and control.name or t("%d control(s)", app.inputErrorCount)
+        if control and app.inputErrorCount > 1 then detail = t("%s (%d controls)", detail, app.inputErrorCount) end
+        local error = t("Source unavailable: %s", detail)
         status = status and (status .. "; " .. error) or error
     end
-    status = status or "Outputs ready"
+    status = status or t("Outputs ready")
     if progress then status = progress .. "; " .. status end
     if app.sender.notice then return status .. "; " .. app.sender.notice end
     return status
@@ -89,13 +95,13 @@ end
 
 function app.commit(kind, record, remove, callback)
     if app.phase ~= "ready" or app.prepare then
-        app.error = "Configuration preparation already in progress"
+        app.error = t("Configuration preparation already in progress")
         return
     end
     local ok, err = app.config.validateRecord(record)
     if not ok or kind ~= record.kind or kind == "config" and remove then
-        app.error = err or (kind == "config" and remove and "Cannot remove configuration header")
-            or "Incorrect configuration record kind"
+        app.error = err or (kind == "config" and remove and t("Cannot remove configuration header"))
+            or t("Incorrect configuration record kind")
         return
     end
     app.error = nil
@@ -104,7 +110,7 @@ end
 
 function app.cancelUpdate(job)
     if app.prepare ~= job or not job.change then return end
-    job.done, job.error = true, "Configuration update cancelled"
+    job.done, job.error = true, t("Configuration update cancelled")
     completePrepare(job)
 end
 
@@ -148,9 +154,9 @@ end
 function app.newTab()
     local address, count = 0, app.data.header.protocol >= 2 and 32 or 256
     while app.usedAddresses[address] and address < count do address = address + 1 end
-    if address == count then app.error = "No unused switch address"; return end
+    if address == count then app.error = t("No unused switch address"); return end
     local id = app.maxTabId + 1
-    return {kind = "tab", id = id, name = "Tab " .. id, address = address, columns = 2, height = 0}
+    return {kind = "tab", id = id, name = t("Tab %d", id), address = address, columns = 2, height = 0}
 end
 
 function app.newControl(tab)
@@ -169,7 +175,7 @@ function app.newControl(tab)
             end
         end
     end
-    app.error = "All switch outputs are assigned"
+    app.error = t("All switch outputs are assigned")
 end
 
 function app.save()
@@ -178,7 +184,7 @@ function app.save()
     if app.saveJob then app.saveAgain = true; return end
     app.autoSaveRevision, app.autoSavePending = app.revision, nil
     local generation = app.generation + 1
-    if generation > 2147483647 then app.saveError = "Configuration generation overflow"; return end
+    if generation > 2147483647 then app.saveError = t("Configuration generation overflow"); return end
     local slot = app.slot == "a" and "b" or "a"
     app.saveRevision, app.saveSlot, app.saveGeneration = app.revision, slot, generation
     app.saveSnapshot = app.data
@@ -207,13 +213,13 @@ local function loadComplete()
         app.phase = "prepare"
         local broken = slot == "a" and b or a
         if not broken.result and not broken.missing then
-            app.warning = "Recovered configuration; other slot: " .. broken.error
+            app.warning = t("Recovered configuration; other slot: %s", broken.error)
         end
     elseif a.missing and b.missing then
         app.reset()
     else
-        app.phase, app.error = "error", "Cannot load configuration: A: " ..
-            tostring(a.error or "missing") .. "; B: " .. tostring(b.error or "missing")
+        app.phase, app.error = "error", t("Cannot load configuration: A: %s; B: %s",
+            tostring(a.error or t("missing")), tostring(b.error or t("missing")))
     end
     app.loads = nil
 end
@@ -275,12 +281,17 @@ function app.tick()
     if app.lastTick == now then return end
     app.lastTick = now
     if app.phase == "modules" then
+        if app.i18n and not app.i18n.ready then
+            local ok, err = app.i18n.step()
+            if not ok then app.error, app.phase = err, "error" end
+            return
+        end
         local name = app.modules[app.moduleIndex]
         local script, err = loadScript(app.dir .. name .. ".lua", "t")
-        if not script then app.error = "Cannot load " .. name .. ": " .. tostring(err); app.phase = "error"; return end
+        if not script then app.error = t("Cannot load %s: %s", name, tostring(err)); app.phase = "error"; return end
         local ok, result = pcall(script, name == "storage" and app.config or app)
         if not ok or type(result) ~= "table" then
-            app.error, app.phase = "Module " .. name .. ": " .. tostring(result), "error"
+            app.error, app.phase = t("Module %s: %s", name, tostring(result)), "error"
             return
         end
         app[name] = result
@@ -323,7 +334,7 @@ function app.tick()
             else app.storage.stepSave(app.saveJob) end
             if app.saveJob.done then
                 local saved = false
-                if app.saveJob.error then app.saveError = "Save failed: " .. app.saveJob.error
+                if app.saveJob.error then app.saveError = t("Save failed: %s", app.saveJob.error)
                 elseif not app.saveVerify then
                     app.saveJob = app.storage.load(app.path .. "." .. app.saveSlot .. ".lua",
                                                   app.saveSnapshot, app.saveGeneration)
@@ -335,7 +346,7 @@ function app.tick()
                     app.warning = nil
                     saved = true
                 else
-                    app.saveError = "Save verification failed"
+                    app.saveError = t("Save verification failed")
                 end
                 app.saveJob, app.saveVerify = nil, nil
                 app.saveSnapshot = nil

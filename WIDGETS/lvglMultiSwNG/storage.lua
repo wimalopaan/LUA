@@ -2,6 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local config = ...
+local t = config.t
 local M = {}
 local MAX_LINE = 2048
 
@@ -19,7 +20,7 @@ local function close(job)
         local ok, err = io.close(job.file)
         job.file = nil
         -- EdgeTX io.close has no return values; desktop Lua returns true on success.
-        if ok == false or err then return nil, err or "Cannot close configuration file" end
+        if ok == false or err then return nil, err or t("Cannot close configuration file") end
     end
     return true
 end
@@ -38,7 +39,7 @@ function M.load(path, expected, generation)
         -- EdgeTX may report only "file error", without an ENOENT error code.
         if not missing and type(fstat) == "function" then missing = fstat(path) == nil end
         return {done = true, unavailable = true, missing = missing,
-                error = err or "Cannot open " .. path}
+                error = err or t("Cannot open %s", path)}
     end
     return {file = file, buffer = "", builder = config.builder(), phase = "start",
             expected = expected, generation = generation, recordIndex = 0}
@@ -63,12 +64,12 @@ local function readLine(job)
     if err then return nil, err end
     if not data or #data == 0 then job.eof = true else job.buffer = job.buffer .. data end
     if #job.buffer > MAX_LINE and not string.find(job.buffer, "\n", 1, true) then
-        return nil, "Configuration line exceeds " .. MAX_LINE .. " bytes"
+        return nil, t("Configuration line exceeds %d bytes", MAX_LINE)
     end
 end
 
 local function parseRecord(line)
-    if #line > MAX_LINE then return nil, "Configuration record too long" end
+    if #line > MAX_LINE then return nil, t("Configuration record too long") end
     -- Only literal scalar tables are accepted, never executable configuration code.
     local outside, i = {}, 1
     while i <= #line do
@@ -82,7 +83,7 @@ local function parseRecord(line)
                 elseif c == '"' then ended = true; break
                 else i = i + 1 end
             end
-            if not ended then return nil, "Unterminated configuration string" end
+            if not ended then return nil, t("Unterminated configuration string") end
             outside[#outside + 1] = '""'
         else
             outside[#outside + 1] = c
@@ -90,10 +91,10 @@ local function parseRecord(line)
         i = i + 1
     end
     local text = table.concat(outside)
-    if not string.match(text, "^%s*{[^{}]*}%s*,%s*$") then return nil, "Expected a scalar Lua record" end
+    if not string.match(text, "^%s*{[^{}]*}%s*,%s*$") then return nil, t("Expected a scalar Lua record") end
     text = string.gsub(string.gsub(text, '""', "0"), "[%a_][%w_]*%s*=", "")
     if string.find(text, "[^%s%d{},=%.%-]") or string.find(text, "%-%-") then
-        return nil, "Only literal configuration values are allowed"
+        return nil, t("Only literal configuration values are allowed")
     end
     local chunk, err = load("return " .. string.gsub(line, ",%s*$", ""), "config record", "t", {})
     if not chunk then return nil, err end
@@ -107,9 +108,9 @@ function M.stepLoad(job)
     local line, err = readLine(job)
     if not line then
         if err == "eof" then
-            if job.phase ~= "end" then return fail(job, "Incomplete configuration file") end
+            if job.phase ~= "end" then return fail(job, t("Incomplete configuration file")) end
             if job.expected and recordAt(job.expected, job.recordIndex + 1, job.generation) then
-                return fail(job, "Saved configuration is missing records")
+                return fail(job, t("Saved configuration is missing records"))
             end
             local result, reason = config.finish(job.builder)
             if not result then return fail(job, reason) end
@@ -121,10 +122,10 @@ function M.stepLoad(job)
         return
     end
     if job.phase == "start" then
-        if line ~= "return {" then return fail(job, "Expected 'return {'") end
+        if line ~= "return {" then return fail(job, t("Expected 'return {'")) end
         job.phase = "records"
     elseif job.phase == "end" then
-        if string.match(line, "%S") then fail(job, "Data after configuration end") end
+        if string.match(line, "%S") then fail(job, t("Data after configuration end")) end
     elseif line == "}" then
         job.phase = "end"
     else
@@ -133,9 +134,9 @@ function M.stepLoad(job)
         job.recordIndex = job.recordIndex + 1
         if job.expected then
             local expected = recordAt(job.expected, job.recordIndex, job.generation)
-            if not expected then return fail(job, "Unexpected saved record") end
+            if not expected then return fail(job, t("Unexpected saved record")) end
             for key, value in pairs(expected) do
-                if record[key] ~= value then return fail(job, "Saved value differs: " .. key) end
+                if record[key] ~= value then return fail(job, t("Saved value differs: %s", key)) end
             end
         end
         local ok
@@ -155,7 +156,7 @@ end
 
 function M.save(path, data, generation)
     local file, err = io.open(path, "w")
-    if not file then return {done = true, error = err or "Cannot open " .. path} end
+    if not file then return {done = true, error = err or t("Cannot open %s", path)} end
     return {file = file, data = data, generation = generation, index = 0}
 end
 
@@ -167,7 +168,7 @@ function M.stepSave(job)
         text = serialize(recordAt(job.data, job.index, job.generation))
     else text = "}\n" end
     local ok, err = io.write(job.file, text)
-    if not ok then return fail(job, err or "Cannot write configuration") end
+    if not ok then return fail(job, err or t("Cannot write configuration")) end
     job.index = job.index + 1
     if job.index > #job.data.tabs + #job.data.controls + 2 then
         ok, err = close(job)

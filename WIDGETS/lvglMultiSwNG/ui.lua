@@ -2,8 +2,9 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
+local t = app.t
 local M = {}
-local editorTitles = {config = "Global widget settings", tab = "Tab settings", control = "Control settings"}
+local editorTitles = {config = t("Global widget settings"), tab = t("Tab settings"), control = t("Control settings")}
 
 local function release(view)
     if view.held then app.set(view.held, 0); view.held = nil end
@@ -23,7 +24,7 @@ local function commit(view, kind, record, remove, accepted)
 end
 
 local function button(text, press, active)
-    return {type = "button", text = text, press = press, active = active}
+    return {type = "button", text = app.i18n.p("button", text), press = press, active = active}
 end
 
 local function row(children, width)
@@ -54,23 +55,23 @@ local function field(caption, input, width)
     input.w, input.h = math.min(input.w or scaled(180), width - captionWidth - gap), height
     return {type = "box", w = width, h = height + gap, scrollBar = false,
             scrollDir = lvgl.SCROLL_OFF, children = {
-                {type = "label", text = caption, x = 0, y = gap / 2, w = captionWidth,
+                {type = "label", text = t(caption), x = 0, y = gap / 2, w = captionWidth,
                  h = height, align = LEFT | VCENTER},
                 input,
             }}
 end
 
 local function heading(text, width)
-    return {type = "label", text = text, w = width, h = scaled(26), font = BOLD}
+    return {type = "label", text = t(text), w = width, h = scaled(26), font = BOLD}
 end
 
 local function hint(text, width)
-    return {type = "label", text = text, w = width, font = SMLSIZE}
+    return {type = "label", text = type(text) == "string" and t(text) or text, w = width, font = SMLSIZE}
 end
 
 local function unchanged(revision)
     if app.revision ~= revision then
-        app.error = "Configuration changed in another view; cancel and reopen editor"
+        app.error = t("Configuration changed in another view; cancel and reopen editor")
         return false
     end
     return true
@@ -206,7 +207,7 @@ local function movePage(view, width, targets)
     local control = view.moveControl
     local names, ids = targets.names, targets.ids
     if not view.moveTarget then view.moveTarget = ids[1] end
-    local children = {heading("Move " .. control.name, width)}
+    local children = {heading(t("Move %s", control.name), width)}
     if #ids > 0 then
         children[#children + 1] = field("Target tab:", {
             type = "choice", values = names, w = 180,
@@ -217,12 +218,11 @@ local function movePage(view, width, targets)
         }, width)
         children[#children + 1] = hint(function()
             local target = app.tabs[view.moveTarget]
-            if not target then return "Target tab no longer exists" end
+            if not target then return t("Target tab no longer exists") end
             if control.address == -1 then
-                return "Inherited address: " .. view.moveAddress .. " -> " .. target.address ..
-                       "; output: " .. control.output
+                return t("Inherited address: %d -> %d; output: %d", view.moveAddress, target.address, control.output)
             end
-            return "Explicit address stays " .. control.address .. "; output: " .. control.output
+            return t("Explicit address stays %d; output: %d", control.address, control.output)
         end, width)
     else children[#children + 1] = hint("No other tab available", width) end
     children[#children + 1] = hint("Moving also applies the current editor draft.", width)
@@ -304,7 +304,7 @@ local function editorPage(view, width)
             children[#children + 1] = actionRow({
                 button("Delete tab", function()
                     if not unchanged(revision) then return end
-                    lvgl.confirm({title = "Delete tab", message = "Delete this tab and all its controls?",
+                    lvgl.confirm({title = t("Delete tab"), message = t("Delete this tab and all its controls?"),
                         confirm = function()
                             if not unchanged(revision) then return end
                             commit(view, "tab", record, true, function()
@@ -341,7 +341,7 @@ local function editorPage(view, width)
         add("Font:", {type = "font", w = scaled(100),
             get = function() return record.font end, set = function(value) record.font = value end})
         if record.type == 1 or record.type == 4 then
-            add("Image:", {type = "file", folder = "/IMAGES", title = "Button image",
+            add("Image:", {type = "file", folder = "/IMAGES", title = t("Button image"),
                 get = function() return record.image end, set = function(value) record.image = value end})
             children[#children + 1] = actionRow({
                 button("Clear image", function() record.image = ""; view.renderRevision = nil end,
@@ -376,7 +376,7 @@ local function editorPage(view, width)
                 end, function() return #app.data.tabs > 1 end),
                 button("Delete control", function()
                     if not unchanged(revision) then return end
-                    lvgl.confirm({title = "Delete control", message = "Delete " .. record.name .. "?",
+                    lvgl.confirm({title = t("Delete control"), message = t("Delete %s?", record.name),
                         confirm = function()
                             if not unchanged(revision) then return end
                             commit(view, "control", record, true, function() navigate(view, "tab") end)
@@ -408,7 +408,7 @@ local function moveActions(view)
     return {
         button("Move", function()
             if app.revision ~= view.moveRevision then
-                app.error = "Configuration changed in another view; cancel and reopen move"
+                app.error = t("Configuration changed in another view; cancel and reopen move")
                 return
             end
             local moved = app.config.copy(control)
@@ -428,7 +428,7 @@ local function exit(view)
         app.save()
         lvgl.exitFullScreen()
     elseif app.dirty then
-        lvgl.confirm({title = "Save configuration", message = "Save changes before closing?",
+        lvgl.confirm({title = t("Save configuration"), message = t("Save changes before closing?"),
             confirm = function() app.save(); lvgl.exitFullScreen() end,
             cancel = function() lvgl.exitFullScreen() end})
     else lvgl.exitFullScreen() end
@@ -462,7 +462,7 @@ end
 local function pageHeader(view, job)
     local params = {
         title = app.data and app.data.header.name or "MultiSwitch NG",
-        subtitle = "Controls", back = function() exit(view) end,
+        subtitle = t("Controls"), back = function() exit(view) end,
         flexFlow = lvgl.FLOW_COLUMN, flexPad = job.pad,
     }
     if job.fixed then
@@ -471,9 +471,9 @@ local function pageHeader(view, job)
     if view.page == "editor" and view.edit then
         params.title, params.subtitle = editorTitles[view.editKind], view.edit.name
     elseif view.page == "tab" and app.tabs and app.tabs[view.tab] then
-        params.title, params.subtitle = "Tab settings", app.tabs[view.tab].name
+        params.title, params.subtitle = t("Tab settings"), app.tabs[view.tab].name
     elseif view.page == "move" and view.moveControl then
-        params.title, params.subtitle = "Move control to another tab", view.moveControl.name
+        params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
     end
     if app.phase == "ready" and view.page == "control" and not view.pending then
         local tabs, selected = app.data.tabs, app.tabOrder[view.tab]
@@ -531,7 +531,7 @@ local function buildOne(view, job, parent, definition)
     if parent then refs = lvgl.build(parent, {node})
     else refs = lvgl.build({node}) end
     if type(refs) ~= "table" or not refs[node.name] then
-        app.error, job.failed = "LVGL object creation failed: " .. node.type, true
+        app.error, job.failed = t("LVGL object creation failed: %s", node.type), true
         return
     end
     job.objects = job.objects + 1
@@ -571,7 +571,7 @@ local function stepBuild(view)
     if job.phase == "shell" then
         if view.full then
             job.page = lvgl.page(pageHeader(view, job))
-            if not job.page then app.error, job.failed = "Cannot create LVGL page", true end
+            if not job.page then app.error, job.failed = t("Cannot create LVGL page"), true end
             job.objects, job.batchObjects, job.pause = job.objects + 1, job.batchObjects + 1, true
             job.phase = "progress"
         else
@@ -579,7 +579,7 @@ local function stepBuild(view)
                 {type = "label", x = 4, y = 4, w = view.zone.w - 8,
                  text = app.data and app.data.header.name or "MultiSwitch NG"},
                 {type = "label", x = 4, y = 30, w = view.zone.w - 8, text = app.status},
-                {type = "label", x = 4, y = 60, w = view.zone.w - 8, text = "Open full screen to control"},
+                {type = "label", x = 4, y = 60, w = view.zone.w - 8, text = t("Open full screen to control")},
             }, nil, "finish")
         end
     elseif job.phase == "progress" then
@@ -587,8 +587,8 @@ local function stepBuild(view)
             type = "label", x = job.fixed and 12 or 0,
             y = job.fixed and job.height - scaled(26) or 0,
             w = job.width, visible = function() return not view.uiReady end,
-            text = function() return "Building " .. view.page .. ": " .. job.index ..
-                (job.list and ("/" .. #job.list) or "") .. " (" .. job.objects .. " objects)" end,
+            text = function() return t("Building %s: %d%s (%d objects)", t(view.page), job.index,
+                job.list and ("/" .. #job.list) or "", job.objects) end,
         })
         job.phase = "layout"
     elseif job.phase == "layout" then
@@ -629,7 +629,7 @@ local function stepBuild(view)
                     app.loads = {a = app.storage.load(app.path .. ".a.lua"), b = app.storage.load(app.path .. ".b.lua")}
                 end)
                 items[#items + 1] = button("Create default configuration", function()
-                    lvgl.confirm({title = "Reset configuration", message = "Start with one tab and eight buttons?",
+                    lvgl.confirm({title = t("Reset configuration"), message = t("Start with one tab and eight buttons?"),
                                   confirm = app.reset})
                 end)
             end

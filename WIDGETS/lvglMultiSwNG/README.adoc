@@ -8,9 +8,35 @@ mit LVGL-Unterstützung. Die vorhandene Implementierung in `../lvglMultiSw`
 wird nicht verändert. Ein Test auf dem Sender bzw. im EdgeTX-Simulator ist
 vor dem Einsatz am Modell erforderlich.
 
+== Sprache
+
+Das Widget verwendet automatisch die EdgeTX-Menüsprache: Deutsch (`DE`)
+oder Englisch (`EN`). Andere Sprachen oder ältere APIs ohne Sprachangabe
+verwenden Englisch. Die Sprachausgabe-Einstellung ist dafür nicht maßgeblich.
+Die Menüsprache wird nur einmal beim Start der gemeinsam genutzten
+Widget-Instanz eines Modells gelesen, nicht bei Seitenwechseln oder im
+Hintergrund. Eine spätere Änderung wird erst nach einem Neustart der
+Lua-Umgebung, etwa durch Neustart von Sender bzw. Simulator, übernommen.
+
+Beschriftungen, Einstellungsseiten, Hinweise und widgeteigene Status- und
+Fehlermeldungen werden übersetzt. Namen vorhandener Widgets, Tabs und Elemente
+bleiben unverändert; nur neu erzeugte Standardnamen verwenden die gewählte
+Sprache. Konfigurationsformat, Kennungen und Protokolldaten bleiben
+sprachunabhängig. Die Sprache wird nicht in der Konfiguration gespeichert.
+
+Die englischen Texte sind zugleich Übersetzungsschlüssel und Rückfalltexte;
+der deutsche Katalog liegt in `lang/de.lua`. Fehlende einzelne Übersetzungen
+erscheinen Englisch. Eine fehlende oder fehlerhafte deutsche Katalogdatei
+wird dagegen ausdrücklich als Startfehler angezeigt. Frühe Startfehler vor
+der Sprachinitialisierung sowie native Lua-/Dateisystemmeldungen können
+Englisch bleiben. Das separate Speicherdiagnosewerkzeug bleibt Englisch.
+Die folgende Bedienungsbeschreibung verwendet die englischen Beschriftungen.
+
 == Installation und Bedienung
 
 Das Verzeichnis als `/WIDGETS/lvglMultiSwNG/` auf die SD-Karte kopieren.
+Bei einem Update auch `i18n.lua`, das gesamte Verzeichnis `lang/` und alle
+geänderten Widget-Module übertragen.
 `tests/` wird auf dem Sender nicht benötigt. Das Widget heißt `MultiSw NG`.
 Es gibt keine funktionalen Widget-Options.
 

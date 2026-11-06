@@ -44,6 +44,8 @@ local function background(widget)
         end
         local ok, result = pcall(script, app)
         if not ok then app.phase, app.error = "error", tostring(result); return end
+        app.lastTick = getTime()
+        return
     end
     if app.tick then app.tick() end
 end
@@ -58,6 +60,7 @@ local function refresh(widget)
     elseif not widget.loading then
         lvgl.clear()
         lvgl.build({{type = "label", text = function()
+            if widget.app.status then return widget.app.status() end
             return widget.app.error or "Loading MultiSwitch NG ..."
         end}})
         widget.loading = true

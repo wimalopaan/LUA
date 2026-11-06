@@ -121,6 +121,11 @@ local function step()
         state.index, state.phase = 1, "modules"
     elseif state.phase == "modules" then
         local app = state.app
+        if app.i18n and not app.i18n.ready then
+            local ok, err = app.i18n.step("tx")
+            if not ok then error(err) end
+            return
+        end
         local name = app.modules[state.index]
         app[name] = module(name, name == "storage" and app.config or app)
         state.index = state.index + 1

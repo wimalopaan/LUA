@@ -99,6 +99,7 @@ local function reset()
     end
     getTime = function() return now end
     getVersion = function() return "3.0.0", "tx16s" end
+    getGeneralSettings = function() return {language = "EN", voice = "de"} end
     serialWrite = nil
     getSwitchValue = function(id) return switches[id] or false end
     getSourceValue = function(id) return sources[id] end
@@ -157,11 +158,14 @@ local function reset()
     }
 end
 
-local config = assert(loadfile(root .. "config.lua"))()
+local english = assert(loadfile(root .. "i18n.lua"))({dir = root})
+local moduleContext = {t = english.t}
+local config = assert(loadfile(root .. "config.lua"))(moduleContext)
 local storage = assert(loadfile(root .. "storage.lua"))(config)
-local outputs = assert(loadfile(root .. "outputs.lua"))()
-local crsf = assert(loadfile(root .. "crsf.lua"))({outputs = outputs})
-local sport = assert(loadfile(root .. "sport.lua"))({outputs = outputs})
+local outputs = assert(loadfile(root .. "outputs.lua"))(moduleContext)
+moduleContext.outputs = outputs
+local crsf = assert(loadfile(root .. "crsf.lua"))(moduleContext)
+local sport = assert(loadfile(root .. "sport.lua"))(moduleContext)
 
 local function finish(job, step)
     for _ = 1, 20000 do
@@ -3069,6 +3073,235 @@ test("Restored transport APIs clear availability errors without requiring anothe
     equal(writes, 1)
 end)
 
+test("Shared widgets read menu language once at startup and preserve stored names and revisions", function()
+    local language, reads = "DE", 0
+    getGeneralSettings = function() reads = reads + 1; return {language = language, voice = "en"} end
+    local main = assert(loadfile(root .. "main.lua"))()
+    local a = main.create({w = 480, h = 272}, {}, root)
+    local b = main.create({w = 480, h = 272}, {}, root)
+    equal(a.app, b.app)
+    local data = config.defaults()
+    data.header.name, data.header.autoSave = "Setup", 0
+    data.tabs[1].name, data.controls[1].name = "Inputs", "Save"
+    finish(storage.save(a.app.path .. ".a.lua", data, 1), storage.stepSave)
+    local loader = loadScript
+    local calls = 0
+    loadScript = function(...)
+        calls = calls + 1
+        return loader(...)
+    end
+    for _ = 1, 200 do
+        now, calls = now + 1, 0
+        main.background(a)
+        main.background(b)
+        assert(calls <= 1, "Multiple module/catalog loads in one shared tick")
+        if a.app.phase == "ready" then break end
+    end
+    local app = a.app
+    equal(app.phase, "ready")
+    equal(reads, 1)
+    equal(app.i18n.language, "de")
+    render(app, a)
+    equal(a.uiJob.page.params.title, "Setup")
+    equal(a.uiJob.page.params.subtitle, "Inputs (1/1)")
+    equal(a.refs.c1.definition.text, "Save")
+    press("Einstellungen")
+    render(app, a)
+    press("Global")
+    render(app, a)
+    equal(a.uiJob.page.params.title, "Widget-Einstellungen")
+    local revision, writes = app.revision, writeCount
+    form("Name:").set("Unsaved draft")
+    language = "EN"
+    advance(app, 120)
+    render(app, a)
+    equal(reads, 1)
+    equal(app.i18n.language, "de")
+    equal(a.edit.name, "Unsaved draft")
+    equal(app.data.header.name, "Setup")
+    equal(app.revision, revision)
+    equal(writeCount, writes)
+    equal(app.data.header.language, nil)
+    equal(app.t("An untranslated message: %s", "test"), "An untranslated message: test")
+end)
+
+test("English fallback uses menu rather than voice language and supports older missing settings APIs", function()
+    for index, menu in ipairs({"EN", "FR", ""}) do
+        getGeneralSettings = function() return {language = menu, voice = "de"} end
+        local app = appInstance("language" .. index)
+        ready(app)
+        equal(app.phase, "ready")
+        equal(app.i18n.language, "en")
+        equal(app.t("Save"), "Save")
+        settleAutosave(app)
+    end
+    getGeneralSettings = nil
+    local app = appInstance("without-language-api")
+    ready(app)
+    equal(app.phase, "ready")
+    equal(app.i18n.language, "en")
+    equal(app.t("Save"), "Save")
+end)
+
+test("German catalog failures stop initialization explicitly before configuration or output changes", function()
+    getGeneralSettings = function() return {language = "de"} end
+    local loader = loadScript
+    for _, failure in ipairs({"missing", "broken", "invalid"}) do
+        loadScript = function(path, mode)
+            if not string.find(path, "lang/de.lua", 1, true) then return loader(path, mode) end
+            if failure == "missing" then return nil, "catalog missing" end
+            return function()
+                if failure == "broken" then error("catalog broken") end
+                return "not a catalog"
+            end
+        end
+        local app = appInstance("catalog-" .. failure)
+        ready(app)
+        equal(app.phase, "error")
+        contains(app.error, failure == "missing" and "Cannot load language" or "Invalid language catalog")
+        if failure ~= "invalid" then contains(app.error, "catalog " .. failure) end
+        equal(writeCount, 0)
+        equal(#frames, 0)
+        equal(#sportFrames, 0)
+    end
+end)
+
+test("German editors keep section and type identifiers stable and serialize only applied configuration", function()
+    local data = config.defaults()
+    data.header.autoSave, data.controls[1].name = 0, "My output"
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    getGeneralSettings = function() return {language = "DE", voice = "en"} end
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    press("Einstellungen")
+    render(app, view)
+    press("Tabs")
+    render(app, view)
+    equal(view.uiJob.page.params.title, "Tab-Einstellungen")
+    press("Bearbeiten")
+    render(app, view)
+    equal(view.uiJob.page.params.title, "Element-Einstellungen")
+    equal(view.uiJob.page.params.subtitle, "My output")
+    form("Name:").set("Tür links")
+    equal(form("Art:").values[4], "Taster")
+    form("Art:").set(4)
+    render(app, view)
+    equal(view.edit.type, 4)
+    press("Eingänge")
+    render(app, view)
+    equal(view.editSection, "Inputs")
+    form("Schalter:").set(23)
+    press("Aussehen")
+    render(app, view)
+    equal(view.editSection, "Appearance")
+    assert(form("Farbe:"))
+    press("Allgemein")
+    render(app, view)
+    equal(view.editSection, "Basic")
+    equal(form("Name:").value, "Tür links")
+    press("Anwenden")
+    render(app, view)
+    equal(app.controls[1].name, "Tür links")
+    equal(app.controls[1].type, 4)
+    equal(app.controls[1].switch, 23)
+    press("Speichern")
+    finish({done = false}, function(job)
+        advance(app)
+        job.done = not app.saveJob
+    end)
+    equal(app.saveError, nil)
+    contains(fs["model.b.lua"], 'kind="control"')
+    local reader = storage.load("model.b.lua")
+    finish(reader, storage.stepLoad)
+    assert(reader.result, reader.error)
+    equal(reader.result.controls[1].name, "Tür links")
+    equal(reader.result.controls[1].type, 4)
+    equal(reader.result.header.protocol, 0)
+    equal(reader.result.header.language, nil)
+end)
+
+test("German runtime, storage and validation errors retain independent recovery", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls[1].type, data.controls[1].source = 5, 9
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    getGeneralSettings = function() return {language = "DE"} end
+    local app = appInstance()
+    ready(app)
+    advance(app, 8)
+    contains(app.operationStatus(), "Quelle nicht verfügbar")
+    blocked, writeFailure = true, true
+    app.set(2, 1)
+    save(app)
+    contains(app.storageStatus(), "Speichern fehlgeschlagen")
+    contains(app.operationStatus(), "CRSF-Sendewarteschlange belegt")
+    sources[9] = 512
+    advance(app, 8)
+    equal(app.inputErrorCount, 0)
+    contains(app.storageStatus(), "Speichern fehlgeschlagen")
+    local control = app.config.copy(app.controls[1])
+    control.output = 9
+    assert(not app.commit("control", control))
+    contains(app.error, "Ungültig: control.output")
+    local native = crossfireTelemetryPush
+    crossfireTelemetryPush = nil
+    advance(app)
+    equal(app.sender.error, "CRSF-API nicht verfügbar")
+    crossfireTelemetryPush, blocked = native, false
+    advance(app, 8)
+    equal(app.sender.error, nil)
+    contains(app.storageStatus(), "Speichern fehlgeschlagen")
+    fs["bad.a.lua"] = "return {\n"
+    local parser = app.storage.load("bad.a.lua")
+    finish(parser, app.storage.stepLoad)
+    contains(parser.error, "Unvollständige Konfigurationsdatei")
+end)
+
+test("German forms and fixed two-line footers retain layout bounds on supported screen sizes", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    for _, screen in ipairs({{480, 272, 227}, {320, 240, 204}, {800, 480, 412}}) do
+        LCD_W, LCD_H = screen[1], screen[2]
+        lvgl.PAGE_BODY_HEIGHT = screen[3]
+        if LCD_W == 800 then lvgl.UI_ELEMENT_HEIGHT = 48 else lvgl.UI_ELEMENT_HEIGHT = nil end
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "editor",
+                      editKind = "config", edit = app.config.copy(app.data.header), editRevision = app.revision}
+        render(app, view)
+        equal(view.uiJob.page.params.title, "Widget-Einstellungen")
+        assert(form("Auto-Speichern:") and form("Protokoll:"))
+        local content, actions, status = view.refs.settings.definition, view.refs.actions.definition, view.refs.status.definition
+        assert(content.h > 0 and content.y + content.h < actions.y)
+        assert(actions.y + actions.h <= status.y)
+        assert(status.y + status.h <= screen[3])
+        contains(status.text(), "Konfiguration gespeichert")
+    end
+end)
+
+test("German catalog formatting preserves source placeholders and literal percentages", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local i18n = assert(loadfile(root .. "i18n.lua"))({dir = root})
+    assert(i18n.step())
+    local catalog = assert(loadfile(root .. "lang/de.lua"))()
+    for source, translation in pairs(catalog) do
+        local arguments, sourceFormats, translatedFormats = {}, {}, {}
+        for format in string.gmatch(source, "%%[sd]") do
+            sourceFormats[#sourceFormats + 1] = format
+            arguments[#arguments + 1] = format == "%d" and 3 or "value"
+        end
+        for format in string.gmatch(translation, "%%[sd]") do translatedFormats[#translatedFormats + 1] = format end
+        equal(table.concat(sourceFormats), table.concat(translatedFormats), source)
+        equal(i18n.t(source, table.unpack(arguments)), #arguments == 0 and translation
+            or string.format(translation, table.unpack(arguments)), source)
+    end
+    equal(i18n.p("button", "Tab settings"), "Tabs")
+    equal(i18n.t("Tab settings"), "Tab-Einstellungen")
+    contains(i18n.t("Source: 0..1024 = 0..100%; negative values = 0%."), "100%")
+end)
+
 local function memoryTool()
     EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT, EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV = 1001, 1002, 1003, 1004
     getAvailableMemory = function() return 8 * 1024 * 1024 - collectgarbage("count") * 1024 end
@@ -3084,7 +3317,7 @@ local function memoryTool()
     loadScript = function(path, mode)
         counters.modules = counters.modules + 1
         equal(mode, "tx", "Diagnostic must not generate binary cache files")
-        local name = assert(string.match(path, "^/WIDGETS/lvglMultiSwNG/([%a]+)%.lua$"))
+        local name = assert(string.match(path, "^/WIDGETS/lvglMultiSwNG/([%w/]+)%.lua$"))
         local chunk = assert(loadfile(root .. name .. ".lua"))
         return function(argument)
             local result = chunk(argument)

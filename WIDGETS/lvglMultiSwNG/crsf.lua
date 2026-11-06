@@ -2,9 +2,12 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
+local t = app.t
 local outputs = app.outputs
 local M = {addControl = outputs.addControl, set = outputs.set, invalidate = outputs.invalidate}
 local push
+local SERIAL_UNAVAILABLE = t("Simulator serialWrite API unavailable")
+local CRSF_UNAVAILABLE = t("CRSF API unavailable")
 
 function M.new()
     local simulator = false
@@ -14,7 +17,7 @@ function M.new()
     end
     local sender = outputs.new()
     sender.protocol, sender.simulator = 0, simulator
-    sender.notice = simulator and "Simulator: serial CRSF (delivery unconfirmed)" or nil
+    sender.notice = simulator and t("Simulator: serial CRSF (delivery unconfirmed)") or nil
     return sender
 end
 
@@ -156,12 +159,12 @@ end
 local function available(sender)
     local error
     if sender.simulator and type(serialWrite) ~= "function" then
-        error = "Simulator serialWrite API unavailable"
+        error = SERIAL_UNAVAILABLE
     elseif not sender.simulator and type(crossfireTelemetryPush) ~= "function" then
-        error = "CRSF API unavailable"
+        error = CRSF_UNAVAILABLE
     end
     if error then sender.error = error; return end
-    if sender.error == "Simulator serialWrite API unavailable" or sender.error == "CRSF API unavailable" then
+    if sender.error == SERIAL_UNAVAILABLE or sender.error == CRSF_UNAVAILABLE then
         sender.error = nil
     end
     return true
@@ -177,8 +180,8 @@ push = function(sender, payload)
         -- EdgeTX appends both CRCs. A full transmit FIFO must not lose state.
         queued = crossfireTelemetryPush(0x32, payload)
     end
-    if queued == nil then sender.error = "CRSF inactive: select a CRSF/ELRS RF module"
-    elseif not queued then sender.error = "CRSF transmit queue busy"
+    if queued == nil then sender.error = t("CRSF inactive: select a CRSF/ELRS RF module")
+    elseif not queued then sender.error = t("CRSF transmit queue busy")
     else sender.error = nil end
     return queued
 end

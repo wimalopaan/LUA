@@ -1,8 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Wilhelm Meier
 
-local M = {version = 1}
-M.types = {"Button", "Toggle", "3Pos", "Momentary", "Slider"}
+local app = ...
+local t = app.t
+local M = {version = 1, t = t}
+M.types = {t("Button"), t("Toggle"), t("3Pos"), t("Momentary"), t("Slider")}
 M.protocols = {"CRSF", "S.Port WM", "S.Port ACW 1.5", "S.Port ACW 1.4"}
 M.typeIds = {[0] = {1, 2, 3, 4, 5}, [1] = {1, 2, 3, 4}, [2] = {1, 2, 4}}
 M.typeIds[3] = M.typeIds[2]
@@ -34,25 +36,25 @@ local schemas = {
 
 function M.validateRecord(record)
     if type(record) ~= "table" or not schemas[record.kind] then
-        return nil, "Unknown configuration record"
+        return nil, t("Unknown configuration record")
     end
     local schema = schemas[record.kind]
     for key, rule in pairs(schema) do
         local value = record[key]
         if type(rule) == "number" then
             if type(value) ~= "string" or #value > rule or string.find(value, "[%z\1-\31]") then
-                return nil, "Invalid " .. record.kind .. "." .. key
+                return nil, t("Invalid %s.%s", record.kind, key)
             end
         elseif not integer(value, rule[1], rule[2]) then
-            return nil, "Invalid " .. record.kind .. "." .. key
+            return nil, t("Invalid %s.%s", record.kind, key)
         end
     end
     if record.kind == "tab" and record.height > 0 and record.height < 30 then
-        return nil, "Invalid tab.height: use 0 or 30..240"
+        return nil, t("Invalid tab.height: use 0 or 30..240")
     end
     for key in pairs(record) do
         if key ~= "kind" and schema[key] == nil then
-            return nil, "Unknown property: " .. tostring(key)
+            return nil, t("Unknown property: %s", tostring(key))
         end
     end
     return true
@@ -66,7 +68,7 @@ end
 
 function M.newControl(id, tab, output)
     return {
-        kind = "control", id = id, tab = tab, name = "Output " .. output,
+        kind = "control", id = id, tab = tab, name = t("Output %d", output),
         type = 1, address = -1, output = output,
         color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0,
         visible = 1, switch = 0, switch2 = 0, source = 0, activation = 0,
@@ -79,7 +81,7 @@ function M.defaults()
         header = {kind = "config", version = 1, generation = 0, name = "MultiSwitch NG",
                   destination = 0, interval = 100, sendColors = 0, autoSave = 1,
                   protocol = 0, sportPhysicalId = 0, sportAppId = 0x51},
-        tabs = {{kind = "tab", id = 1, name = "Tab 1", address = 0, columns = 2, height = 0}},
+        tabs = {{kind = "tab", id = 1, name = t("Tab %d", 1), address = 0, columns = 2, height = 0}},
         controls = {},
     }
     for i = 1, 8 do config.controls[i] = M.newControl(i, 1, i) end
@@ -113,30 +115,30 @@ function M.append(builder, record)
     if not ok then return nil, err end
     local config = builder.config
     if record.kind == "config" then
-        if config.header then return nil, "Duplicate configuration header" end
+        if config.header then return nil, t("Duplicate configuration header") end
         config.header = record
     elseif not config.header then
-        return nil, "Missing configuration header"
+        return nil, t("Missing configuration header")
     elseif record.kind == "tab" then
-        if builder.tabs[record.id] then return nil, "Duplicate tab ID" end
+        if builder.tabs[record.id] then return nil, t("Duplicate tab ID") end
         builder.tabs[record.id] = record
         config.tabs[#config.tabs + 1] = record
     else
         if config.header.protocol == 1 and record.type == 5 then
-            return nil, "Slider is not supported by S.Port WM: " .. record.name
+            return nil, t("Slider is not supported by S.Port WM: %s", record.name)
         end
         if config.header.protocol >= 2 and (record.type == 3 or record.type == 5) then
-            return nil, M.types[record.type] .. " is not supported by S.Port ACW: " .. record.name
+            return nil, t("%s is not supported by S.Port ACW: %s", M.types[record.type], record.name)
         end
         local tab = builder.tabs[record.tab]
-        if not tab then return nil, "Control refers to unknown tab" end
-        if builder.ids[record.id] then return nil, "Duplicate control ID" end
+        if not tab then return nil, t("Control refers to unknown tab") end
+        if builder.ids[record.id] then return nil, t("Duplicate control ID") end
         local endpoint = M.address(record, tab) * 8 + record.output
         if config.header.protocol >= 2 and endpoint > 255 then
-            return nil, "ACW switch number must be 1..255: " .. record.name
+            return nil, t("ACW switch number must be 1..255: %s", record.name)
         end
         if builder.endpoints[endpoint] then
-            return nil, "Address/output already assigned: " .. M.address(record, tab) .. "/" .. record.output
+            return nil, t("Address/output already assigned: %d/%d", M.address(record, tab), record.output)
         end
         builder.ids[record.id], builder.endpoints[endpoint] = true, true
         config.controls[#config.controls + 1] = record
@@ -146,7 +148,7 @@ end
 
 function M.finish(builder)
     if not builder.config.header or #builder.config.tabs == 0 then
-        return nil, "Configuration needs a header and at least one tab"
+        return nil, t("Configuration needs a header and at least one tab")
     end
     return builder.config
 end
