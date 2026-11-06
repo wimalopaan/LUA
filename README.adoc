@@ -40,6 +40,25 @@ New widget for the MultiSwitch-E32 based on LVGL UI controls.
 
 See also <<mswsb>> and <<mswib>>.
 
+[[lvglmswng]]
+== LVGL MultiSwitch NG Widget `lvglMultiSwNG`
+
+New implementation of the LVGL MultiSwitch widget, installed in `WIDGETS/lvglMultiSwNG`.
+The previous <<lvglmsw>> remains unchanged.
+
+Configurable tabs contain buttons, toggles, 3-position switches, momentary buttons and sliders.
+Each tab has a default address; individual controls can override it and configure their output,
+appearance, physical switch/source assignment and mutual-exclusion group.
+The initial layout has eight buttons sized automatically to fit the screen.
+
+Functional settings are stored in model-specific Lua configuration files shared by widget instances,
+not in widget options. Auto-Save is enabled by default for new configurations.
+Loading, saving and UI construction are processed incrementally.
+Currently only CRSF output is implemented, including serial output in the EdgeTX simulator;
+S.Port and other protocols are not yet supported.
+
+See link:WIDGETS/lvglMultiSwNG/README.adoc[installation instructions and detailed documentation].
+
 [[mswsb]]
 == SuperSimpleMultiswitch Mixer-Script `mswsb.lua`
 
@@ -136,4 +155,3 @@ Adaption of the `elrsv3.lua` to send/receive CRSF packets over serial (921600 ba
 The `elrsV3simu.lua` uses LUA implementations of `crossfireTelemetryPop()` and `crossfireTelemetryPush)()`. These replacements are broken out into the `crsfserial.lua` (in `WIDGETS/Schottel`). 
 Other scripts can load this file and make use of these functions, so that LUA widgets using crossfire telemetry will also work on `simulator`. Please refer to `elrsV3simu.lua` or
 `WIDGETS/Schottel/main.lua` to see how to use them.
-
