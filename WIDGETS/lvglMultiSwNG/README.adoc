@@ -69,15 +69,23 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   Nur die Bedienelemente des aktiven Tabs werden aufgebaut.
 * Unter den Bedienelementen trennt eine Linie den Konfigurationsbereich ab.
   Standardmäßig ist dort nur `Einstellungen` sichtbar. Der Button blendet
-  `Tabs`, `Neuer Tab`, `Global` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
+  `Tab Einstellungen`, `Neuer Tab`, `Global` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
   wieder ein. Nach Verlassen des Vollbilds ist der Bereich wieder geschlossen.
-  Die Statusanzeige bleibt sichtbar; auf den Konfigurationsseiten ist
+  Auf den Konfigurationsseiten ist
   `Speichern` weiterhin direkt erreichbar.
 * `Neuer Tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
   Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
-* `Tabs` zeigt eine kompakte Elementliste mit Name,
+* `Tab Einstellungen` zeigt eine kompakte Elementliste mit Name,
   Adresse/Ausgang und `Bearbeiten`-Button nebeneinander in einer Zeile.
   `Tab bearbeiten` öffnet die Tab-Einstellungen, `Element anlegen` einen neuen Elemententwurf.
+  In der Kopfzeile lässt sich wie auf der Bedienseite durch die Tabs blättern.
+  Die beiden oberen Aktionen bleiben außerhalb der scrollenden Elementliste
+  und sind gleich groß und spaltenweise mit `Bedienung` und `Speichern` unten ausgerichtet.
+  Eine Trennlinie grenzt die oberen Aktionen von der Liste ab.
+  Die unteren Aktionen stehen zunächst am sichtbaren unteren Rand.
+  Der Statustext folgt darunter hinter einer weiteren Trennlinie und wird
+  durch Scrollen der gesamten Seite erreichbar. Die Elementliste ist zusätzlich
+  innerhalb ihres eigenen Bereichs scrollbar.
   `Tab löschen` befindet sich im Tab-Editor; `Element löschen` im Elementeditor.
   Der letzte Tab kann nicht gelöscht werden. Beim Löschen eines Tabs werden
   auch seine Elemente entfernt.
@@ -135,6 +143,16 @@ Manuelle Höhen von 30 bis 240 bleiben möglich und werden nicht automatisch
 angepasst. Für vorhandene Tabs lässt sich die Automatik im Tab-Editor durch
 Setzen von `Höhe` auf `0` aktivieren.
 
+Unter `Global` lässt sich der `Button-Abstand` für alle Tabs einstellen.
+Die Vorgabe `-1` behält die bisherigen, bildschirmabhängigen Abstände bei;
+Werte von 0 bis 40 legen den horizontalen und vertikalen Abstand in Pixeln fest.
+Die Elementbreite und automatische Höhe berücksichtigen diesen Abstand.
+Bei einem eigenen Abstand beträgt die automatische Höhe mindestens 30 Pixel;
+passen acht Elemente dadurch nicht mehr auf den Bildschirm, wird gescrollt.
+Manuell eingestellte Elementhöhen bleiben unverändert. Die inneren Abstände
+der 3-Positions-Tastengruppe und die Abstände auf den Einstellungsseiten
+bleiben unverändert.
+
 == Einstellungsseiten
 
 Die Standard-Kopfzeile verwendet links das einfarbige wimalopaan-Logo als
@@ -145,16 +163,23 @@ nicht aus einer bereits verkleinerten Variante.
 Die Navigation bleibt unverändert.
 
 Die Kopfzeile nennt die jeweilige Einstellungsseite: `Widget-Einstellungen`,
-`Tab-Einstellungen`, `Element-Einstellungen` oder `Element verschieben`.
+`Tab bearbeiten`, `Element-Einstellungen` oder `Element verschieben`.
+Beim Anlegen eines neuen Tabs heißt die Seite weiterhin `Tab-Einstellungen`.
 Darunter steht der Name des Widgets, Tabs beziehungsweise Elements.
 Die kurzen Beschriftungen der Navigationsbuttons bleiben unverändert.
 Auf der Bedienseite werden weiterhin Widget-Name und aktiver Tab angezeigt.
 
-Alle Formulare verwenden gleich hohe Zeilen mit einer festen
-Beschriftungsspalte links und dem Eingabefeld rechts. Überschriften gliedern
-die Einstellungen; ergänzende Hinweise werden kleiner dargestellt.
-Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Anwenden`
-und `Abbrechen` sowie die zweizeilige Statusanzeige bleiben unten fest stehen.
+Alle Formulare verwenden gleich hohe Eingabefelder mit einer festen
+Beschriftungsspalte links. Kurze Hinweise, etwa zur geerbten Adresse,
+zur Intervalleinheit, zur Höhe oder zur Exklusivgruppe, stehen kleiner
+rechts neben dem Eingabefeld. Bei Bedarf werden sie umgebrochen und die
+Zeilenhöhe angepasst. Allgemeine Protokollhinweise bleiben separate Absätze.
+Überschriften gliedern die Einstellungen.
+Im Tab- und Elementeditor stehen `Anwenden`, `Abbrechen` und `Speichern`
+am sichtbaren unteren Rand. Der Statustext folgt darunter hinter einer
+Trennlinie und ist durch Scrollen der gesamten Seite erreichbar.
+In den globalen Widget-Einstellungen und in der Verschiebeansicht scrollt
+nur der Formularbereich; Aktionen und zweizeilige Statusanzeige bleiben sichtbar.
 `Speichern` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 
 .Elementliste eines Tabs mit Adresse und Ausgang sowie direktem Zugang zum Elementeditor.
@@ -188,6 +213,8 @@ Nur passende Felder werden angezeigt: `Schalter 2` bei `3-Positionen`, `Quelle`
 bei Schiebereglern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
 bzw. Touch-Tastern. Ausgeblendete Eigenschaften bleiben im Entwurf erhalten;
 ein Unterseiten- oder Typwechsel speichert nichts automatisch.
+Bei `Schalter` entfällt `Farbe`, da der native EdgeTX-Schalter die Farben
+des Sender-Themes verwendet. `Textfarbe` bleibt für seine Überschrift einstellbar.
 
 .Elementeditor: Allgemeine Einstellungen wie Name, Art und Adresse.
 image::.images/w5.png[Elementeditor auf der Unterseite Allgemein]
@@ -487,6 +514,7 @@ Datensätze und abschließendem `}`. Die Datensätze haben `kind="config"`,
 `kind="tab"` oder `kind="control"`. Der Header steht zuerst, danach Tabs,
 danach Elemente. Alle Schemafelder müssen vorhanden sein, mit diesen Ausnahmen:
 Ältere Dateien ohne `autoSave` im Header werden als `autoSave=0` geladen.
+Ein fehlendes Headerfeld `buttonSpacing` wird mit `-1` (bisherige Abstände) ergänzt.
 Fehlende Headerfelder `protocol`, `sportPhysicalId` und `sportAppId` werden
 mit 0 (CRSF), 0 und 81 ergänzt. `protocol=1` wählt S.Port-WM.
 `protocol=2` wählt ACW 1.5, `protocol=3` ACW 1.4.

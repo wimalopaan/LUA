@@ -17,6 +17,7 @@ local schemas = {
     config = {
         version = {1, 1}, generation = {0, 2147483647}, name = 32,
         destination = {0, 255}, interval = {5, 1000}, sendColors = {0, 1}, autoSave = {0, 1},
+        buttonSpacing = {-1, 40},
         protocol = {0, 3}, sportPhysicalId = {0, 0x1b}, sportAppId = {0, 255},
     },
     tab = {
@@ -81,6 +82,7 @@ function M.defaults()
     local config = {
         header = {kind = "config", version = 1, generation = 0, name = "MultiSwitch NG",
                   destination = 0, interval = 100, sendColors = 0, autoSave = 1,
+                  buttonSpacing = -1,
                   protocol = 0, sportPhysicalId = 0, sportAppId = 0x51},
         tabs = {{kind = "tab", id = 1, name = t("Tab %d", 1), address = 0, columns = 2, height = 0}},
         controls = {},
@@ -102,6 +104,7 @@ function M.append(builder, record)
     if type(record) == "table" and record.kind == "config" then
         record = M.copy(record)
         if record.autoSave == nil then record.autoSave = 0 end
+        if record.buttonSpacing == nil then record.buttonSpacing = -1 end
         if record.protocol == nil then record.protocol = 0 end
         if record.sportPhysicalId == nil then record.sportPhysicalId = 0 end
         if record.sportAppId == nil then record.sportAppId = 0x51 end

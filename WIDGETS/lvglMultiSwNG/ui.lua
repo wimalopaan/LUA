@@ -80,17 +80,47 @@ local function actionRow(items, width)
             scrollDir = lvgl.SCROLL_OFF, children = items}
 end
 
-local function field(caption, input, width)
+local function wrapHint(text, width)
+    local lines, line = {}, ""
+    for word in string.gmatch(t(text), "%S+") do
+        local candidate = line == "" and word or line .. " " .. word
+        if line ~= "" and lcd.sizeText(candidate, SMLSIZE) > width then
+            lines[#lines + 1], line = line, word
+        else
+            line = candidate
+        end
+    end
+    lines[#lines + 1] = line
+    return table.concat(lines, "\n"), #lines
+end
+
+local function field(caption, input, width, explanation)
     local height = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
     local captionWidth, gap = math.floor(width * 0.45), scaled(8)
-    input.x, input.y = captionWidth + gap, gap / 2
-    input.w, input.h = math.min(input.w or scaled(180), width - captionWidth - gap), height
+    local inset = math.floor(gap / 2)
+    local inputWidth = width - captionWidth - gap
+    if explanation then inputWidth = inputWidth - math.floor(width / 4) - gap end
+    input.x, input.y = captionWidth + gap, inset
+    input.w, input.h = math.min(input.w or scaled(180), inputWidth), height
+    local captionLabel = {type = "label", text = t(caption), x = 0, y = inset, w = captionWidth,
+                          h = height, align = LEFT | VCENTER}
+    local children = {captionLabel, input}
+    if explanation then
+        local x = input.x + input.w + gap
+        local text, lines = wrapHint(explanation, width - x)
+        local _, lineHeight = lcd.sizeText("M", SMLSIZE)
+        local hintHeight = lines * lineHeight
+        local rowHeight = math.max(height, hintHeight)
+        captionLabel.h = rowHeight
+        input.y = inset + math.floor((rowHeight - height) / 2)
+        children[#children + 1] = {
+            type = "label", text = text, x = x, y = inset + math.floor((rowHeight - hintHeight) / 2),
+            w = width - x, h = hintHeight, font = SMLSIZE,
+        }
+        height = rowHeight
+    end
     return {type = "box", w = width, h = height + gap, scrollBar = false,
-            scrollDir = lvgl.SCROLL_OFF, children = {
-                {type = "label", text = t(caption), x = 0, y = gap / 2, w = captionWidth,
-                 h = height, align = LEFT | VCENTER},
-                input,
-            }}
+            scrollDir = lvgl.SCROLL_OFF, children = children}
 end
 
 local function heading(text, width)
@@ -137,15 +167,14 @@ local function selectTab(view, id)
 end
 
 local function threePosition(control, width, height, active, set)
-    local pad, gap = scaled(2), scaled(2)
-    local buttonWidth = math.max(1, math.floor((width - 2 * pad - 2 * gap) / 3))
-    local buttonHeight = math.max(1, height - 2 * pad)
+    local textPad, gap = scaled(2), scaled(2)
+    local buttonWidth = math.max(1, math.floor((width - 2 * gap) / 3))
     local labels = {control.leftText, t("Off"), control.rightText}
     local font = control.font
     for _, candidate in ipairs({control.font, SMLSIZE, TINSIZE}) do
         font = candidate
         local _, fontHeight = lcd.sizeText("M", font)
-        local fits = fontHeight + 2 * pad <= buttonHeight
+        local fits = fontHeight + 2 * textPad <= height
         for _, label in ipairs(labels) do
             if lcd.sizeText(label, font) + 2 * scaled(4) > buttonWidth then fits = false; break end
         end
@@ -153,9 +182,10 @@ local function threePosition(control, width, height, active, set)
     end
     local buttons = {}
     for index, position in ipairs({2, 0, 1}) do
+        local x = (index - 1) * (buttonWidth + gap)
         buttons[index] = {
             type = "button", name = "c" .. control.id .. "p" .. position, text = labels[index],
-            x = pad + (index - 1) * (buttonWidth + gap), y = pad, w = buttonWidth, h = buttonHeight,
+            x = x, y = 0, w = index == 3 and math.max(1, width - x) or buttonWidth, h = height,
             font = font, color = control.color, textColor = control.textColor, active = active,
             checked = app.values[control.id] == position,
             press = function()
@@ -198,10 +228,18 @@ local function controlBody(view, control, width, height)
         return threePosition(control, width, height, active, set)
     else
         local input = {type = control.type == 2 and "toggle" or "slider", w = width - 8,
-                       h = math.max(20, height - 24), color = control.color, active = active}
-        if control.type == 5 then input.min, input.max = 0, 100 end
+                       h = math.max(20, height - 24), active = active}
+        if control.type == 5 then input.min, input.max, input.color = 0, 100, control.color end
         input.get = function() return app.values[id] end
         input.set = set
+        if control.type == 2 then
+            -- Native toggles ignore w/h and use a fixed size.
+            local inputWidth, toggleWidth = input.w, scaled(52)
+            input.x, input.y = math.floor((inputWidth - toggleWidth) / 2), 0
+            input.w, input.h = toggleWidth, lvgl.UI_ELEMENT_HEIGHT or scaled(32)
+            input = {type = "box", w = inputWidth, h = input.h,
+                     scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = {input}}
+        end
         return {type = "box", w = width, h = height, flexFlow = lvgl.FLOW_COLUMN,
                 children = {{type = "label", text = control.name, font = control.font,
                              color = control.textColor, w = width - 8, align = CENTER}, input}}
@@ -252,18 +290,15 @@ local function controlFooter(view, width)
     return children
 end
 
-local function tabPage(view, width)
+local function tabActions(view, width)
     local tab = app.tabs[view.tab]
-    local children = {
-        actionRow({
-            button("Edit tab", function() edit(view, "tab", tab) end),
-            button("Add control", function()
-                local control = app.newControl(tab)
-                if control then edit(view, "control", control) end
-            end),
-        }, width),
-    }
-    return children
+    return actionRow({
+        button("Edit tab", function() edit(view, "tab", tab) end),
+        button("Add control", function()
+            local control = app.newControl(tab)
+            if control then edit(view, "control", control) end
+        end),
+    }, width)
 end
 
 local function tabControlRow(view, width, control)
@@ -335,21 +370,22 @@ local function editorPage(view, width)
     local record, kind = view.edit, view.editKind
     local children = {}
     local function section(title) children[#children + 1] = heading(title, width) end
-    local function add(caption, input) children[#children + 1] = field(caption, input, width) end
+    local function add(caption, input, explanation)
+        children[#children + 1] = field(caption, input, width, explanation)
+    end
     if kind == "config" then
         section("General")
         add("Name:", text(record, "name", 32))
         add("Auto-Save:", toggle(record, "autoSave"))
+        add("Button spacing:", number(record, "buttonSpacing", -1, 40), "-1: default; 0..40 px")
         add("Protocol:", {type = "choice", values = app.config.protocols, w = scaled(180),
             get = function() return record.protocol + 1 end,
             set = function(value) record.protocol = value - 1; view.renderRevision = nil end})
         section(app.config.protocols[record.protocol + 1])
-        add("Interval:", number(record, "interval", 5, 1000))
-        children[#children + 1] = hint("Interval unit: 10 ms.", width)
+        add("Interval:", number(record, "interval", 5, 1000), "Unit: 10 ms")
         if record.protocol == 1 then
             add("Physical ID:", number(record, "sportPhysicalId", 0, 0x1b))
-            add("App ID:", number(record, "sportAppId", 0, 255))
-            children[#children + 1] = hint("App ID is the high byte; default: 81 (0x51).", width)
+            add("App ID:", number(record, "sportAppId", 0, 255), "High byte; default 81 (0x51)")
             children[#children + 1] = hint("S.Port WM: no sliders or LED color transmission.", width)
             children[#children + 1] = hint("Do not register the addressed device as a telemetry sensor.", width)
         elseif record.protocol >= 2 then
@@ -372,12 +408,10 @@ local function editorPage(view, width)
     elseif kind == "tab" then
         section("General")
         add("Name:", text(record, "name", 32))
-        add("Default address:", number(record, "address", 0, 255))
-        children[#children + 1] = hint("Address changes affect all inheriting controls.", width)
+        add("Default address:", number(record, "address", 0, 255), "Changes all -1 controls")
         section("Layout")
         add("Columns:", number(record, "columns", 1, 4))
-        add("Height:", number(record, "height", 0, 240))
-        children[#children + 1] = hint("Height: 0 = fit eight controls; otherwise 30..240.", width)
+        add("Height:", number(record, "height", 0, 240), "0: auto; 30..240")
         if app.tabs[record.id] then
             section("Management")
             local revision = view.editRevision
@@ -408,14 +442,15 @@ local function editorPage(view, width)
         add("Activation:", switchPicker(record, "activation"))
         if record.type ~= 5 then
             section("Exclusive group")
-            add("Mutex group:", number(record, "group", 0, 255))
-            children[#children + 1] = hint("Group 0: no mutual exclusion.", width)
+            add("Mutex group:", number(record, "group", 0, 255), "0: no group")
         end
     elseif view.editSection == "Appearance" then
         section("Appearance")
         add("Visible:", toggle(record, "visible"))
-        add("Color:", {type = "color",
-            get = function() return record.color end, set = function(value) record.color = value end})
+        if record.type ~= 2 then
+            add("Color:", {type = "color",
+                get = function() return record.color end, set = function(value) record.color = value end})
+        end
         add("Text color:", {type = "color",
             get = function() return record.textColor end, set = function(value) record.textColor = value end})
         add("Font:", {type = "font", w = scaled(100),
@@ -436,16 +471,14 @@ local function editorPage(view, width)
             add("Left text:", text(record, "leftText", 32))
             add("Right text:", text(record, "rightText", 32))
         end
-        add("Address:", number(record, "address", -1, 255))
-        add("Output:", number(record, "output", 1, 8))
-        children[#children + 1] = hint("Address -1: inherit the tab address.", width)
+        add("Address:", number(record, "address", -1, 255), "-1: tab address")
+        add("Output:", number(record, "output", 1, 8),
+            app.data.header.protocol >= 2 and "ACW: address * 8 + output; 1..255" or nil)
         if app.data.header.protocol >= 2 then
-            children[#children + 1] = hint("ACW number = address * 8 + output; range: 1..255.", width)
             section("ACW output")
             add("ACW type:", number(record, "sportType", 0, 255))
             add("ACW options:", number(record, "sportOptions", 0, 255))
-            add("On PWM:", number(record, "sportPwmOn", 0, 255))
-            children[#children + 1] = hint("Off PWM: 0; on-PWM default: 255.", width)
+            add("On PWM:", number(record, "sportPwmOn", 0, 255), "Off: 0; default: 255")
         end
         if app.controls[record.id] then
             section("Management")
@@ -534,11 +567,24 @@ local function beginBuild(view, full)
     local job = view.buildJob
     job.height = lvgl.PAGE_BODY_HEIGHT or LCD_H - scaled(45)
     job.pad = lvgl.PAD_OUTLINE or scaled(2)
+    job.gap, job.rowPad = job.pad, job.pad
+    if app.phase == "ready" and view.page == "control" and not view.pending
+        and app.data.header.buttonSpacing >= 0 then
+        job.gap = app.data.header.buttonSpacing
+        job.rowPad = 0
+    end
     job.fixed = app.phase == "ready" and view.page ~= "control" and not view.pending
+    job.scrollStatus = job.fixed and (view.page == "tab"
+        or view.page == "editor" and (view.editKind == "tab" or view.editKind == "control"))
     if job.fixed then
-        job.footerHeight = (lvgl.UI_ELEMENT_HEIGHT or scaled(32)) + scaled(66)
-        job.toolbarHeight = view.page == "editor" and view.editKind == "control"
-            and (lvgl.UI_ELEMENT_HEIGHT or scaled(32)) + scaled(8) or 0
+        local elementHeight = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
+        job.footerHeight = elementHeight + scaled(66)
+        job.toolbarHeight = (view.page == "tab" or view.page == "editor" and view.editKind == "control")
+            and elementHeight + scaled(8) or 0
+        if view.page == "tab" then
+            job.toolbarHeight = job.toolbarHeight + scaled(4)
+        end
+        if job.scrollStatus then job.footerHeight = elementHeight + scaled(12) end
     end
     view.uiJob = view.buildJob
 end
@@ -551,26 +597,33 @@ local function pageHeader(view, job)
         title = app.data and app.data.header.name or "MultiSwitch NG",
         subtitle = t("Controls"), back = function() exit(view) end,
         icon = app.dir .. icon,
-        flexFlow = lvgl.FLOW_COLUMN, flexPad = job.pad, scrollDir = lvgl.SCROLL_VER,
+        flexFlow = lvgl.FLOW_COLUMN, flexPad = job.gap, scrollDir = lvgl.SCROLL_VER,
     }
     if job.fixed then
         params.flexFlow, params.scrollBar, params.scrollDir = nil, false, lvgl.SCROLL_OFF
+        if job.scrollStatus then
+            params.scrollBar, params.scrollDir = true, lvgl.SCROLL_VER
+        end
     end
     if view.page == "editor" and view.edit then
         params.title, params.subtitle = editorTitles[view.editKind], view.edit.name
+        if view.editKind == "tab" and app.tabs and app.tabs[view.edit.id] then
+            params.title = t("Edit tab")
+        end
     elseif view.page == "tab" and app.tabs and app.tabs[view.tab] then
         params.title, params.subtitle = t("Tab settings"), app.tabs[view.tab].name
     elseif view.page == "move" and view.moveControl then
         params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
     end
-    if app.phase == "ready" and view.page == "control" and not view.pending then
+    if app.phase == "ready" and (view.page == "control" or view.page == "tab") and not view.pending then
+        local page = view.page
         local tabs, selected = app.data.tabs, app.tabOrder[view.tab]
         params.subtitle = tabs[selected].name .. " (" .. selected .. "/" .. #tabs .. ")"
         local function navigation(offset)
             local target = selected + offset
             local function active()
                 return view.uiReady and view.uiJob == job and view.renderRevision == app.revision
-                    and app.phase == "ready" and not app.prepare and view.page == "control"
+                    and app.phase == "ready" and not app.prepare and view.page == page
                     and target >= 1 and target <= #tabs
             end
             return {
@@ -686,17 +739,31 @@ local function stepBuild(view)
         else job.content, job.phase = job.page, "prefix" end
     elseif job.phase == "toolbar" then
         if job.toolbarHeight > 0 then
-            local items = {}
-            for _, section in ipairs({"Basic", "Inputs", "Appearance"}) do
-                local item = button(section, function()
-                    view.editSection, view.renderRevision = section, nil
-                end)
-                item.checked = (view.editSection or "Basic") == section
-                items[#items + 1] = item
+            local toolbar
+            if view.page == "tab" then
+                toolbar = tabActions(view, job.width)
+                toolbar.name = "tabActions"
+            else
+                local items = {}
+                for _, section in ipairs({"Basic", "Inputs", "Appearance"}) do
+                    local item = button(section, function()
+                        view.editSection, view.renderRevision = section, nil
+                    end)
+                    item.checked = (view.editSection or "Basic") == section
+                    items[#items + 1] = item
+                end
+                toolbar = actionRow(items, job.width)
+                toolbar.name = "sections"
             end
-            local toolbar = actionRow(items, job.width)
-            toolbar.name, toolbar.x, toolbar.y = "sections", 12, 0
-            nodes(job, {toolbar}, job.page, "prefix")
+            toolbar.x, toolbar.y = 12, 0
+            local items = {toolbar}
+            if view.page == "tab" then
+                items[#items + 1] = {
+                    type = "hline", name = "tabActionsSeparator", x = 12,
+                    y = toolbar.h + scaled(2), w = job.width, h = 1,
+                }
+            end
+            nodes(job, items, job.page, "prefix")
         else job.phase = "prefix" end
     elseif job.phase == "prefix" then
         if view.pending and not view.pending.done then
@@ -725,15 +792,18 @@ local function stepBuild(view)
                 job.phase = "targets"
             elseif view.page == "tab" then
                 job.list = app.tabControls[view.tab]
-                nodes(job, tabPage(view, width), job.content, "list")
+                job.phase = "list"
             else
                 job.list = app.visibleControls[view.tab]
                 local tab = app.tabs[view.tab]
                 job.rowIndex = 0
                 if tab.height == 0 then
                     local rows = math.ceil(8 / tab.columns)
-                    local available = job.height - 2 * job.pad - (rows - 1) * job.pad - rows * 2 * job.pad
+                    local available = job.height - 2 * job.pad - (rows - 1) * job.gap - rows * 2 * job.rowPad
                     job.autoHeight, job.extra = math.floor(available / rows), available % rows
+                    if app.data.header.buttonSpacing >= 0 and job.autoHeight < 30 then
+                        job.autoHeight, job.extra = 30, 0
+                    end
                 end
                 job.phase = "controls"
             end
@@ -758,12 +828,15 @@ local function stepBuild(view)
             job.buttonHeight = tab.height ~= 0 and tab.height
                 or job.autoHeight + (job.rowIndex <= job.extra and 1 or 0)
             job.row = buildOne(view, job, job.content, {
-                type = "box", w = width, h = job.buttonHeight + 2 * job.pad,
-                flexFlow = lvgl.FLOW_ROW, flexPad = job.pad, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
+                type = "box", w = width, h = job.buttonHeight + 2 * job.rowPad,
+                flexFlow = lvgl.FLOW_ROW, flexPad = job.gap, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
+                borderPad = job.rowPad == 0 and {left = job.pad, right = job.pad, top = 0, bottom = 0} or nil,
             })
             job.column = 0
         else
-            nodes(job, {controlWidget(view, control, math.floor((width - 16) / tab.columns) - 12, job.buttonHeight)},
+            local controlWidth = math.floor((width - 16 - (tab.columns - 1) * (job.gap - job.pad))
+                / tab.columns) - 12
+            nodes(job, {controlWidget(view, control, controlWidth, job.buttonHeight)},
                 job.row, "next-control")
         end
     elseif job.phase == "next-control" then
@@ -785,12 +858,25 @@ local function stepBuild(view)
             actions[#actions + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
             local bar = actionRow(actions, job.width)
             bar.name, bar.x, bar.y = "actions", 12, job.height - job.footerHeight + scaled(4)
-            nodes(job, {
+            local statusY = job.height - scaled(48)
+            if job.scrollStatus then
+                bar.y, statusY = job.height - bar.h, job.height + scaled(8)
+            end
+            local items = {
                 {type = "hline", x = 12, y = job.height - job.footerHeight, w = job.width, h = 1},
                 bar,
-                {type = "label", name = "status", x = 12, y = job.height - scaled(48),
-                 w = job.width, h = scaled(44), font = SMLSIZE, text = app.footerStatus},
-            }, job.page, "finish")
+            }
+            if job.scrollStatus then
+                items[#items + 1] = {
+                    type = "hline", name = "statusSeparator", x = 12,
+                    y = job.height + scaled(2), w = job.width, h = 1,
+                }
+            end
+            items[#items + 1] = {
+                type = "label", name = "status", x = 12, y = statusY,
+                w = job.width, h = scaled(44), font = SMLSIZE, text = app.footerStatus,
+            }
+            nodes(job, items, job.page, "finish")
         elseif view.setupOpen then
             nodes(job, {row({
                 button("Save", app.save, function() return app.dirty and not app.saveJob end),

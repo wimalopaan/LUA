@@ -973,7 +973,56 @@ test("Changing an item to Schalter builds a native toggle without slider propert
     equal(app.error, nil)
 end)
 
-test("Toggle and slider captions stay centered while three-position controls use only button labels", function()
+test("Toggle appearance hides ineffective color while preserving text color and stored type-change colors", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls[1].type, data.controls[1].color = 2, 0xf8008000
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "editor",
+                  editKind = "control", edit = config.copy(app.controls[1]), editRevision = app.revision}
+    render(app, view)
+    press("Aussehen")
+    render(app, view)
+    assert(not find(function(item) return item.text == "Farbe:" end))
+    form("Textfarbe:").set(0x07e08000)
+    press("Allgemein")
+    render(app, view)
+    form("Art:").set(1)
+    render(app, view)
+    press("Aussehen")
+    render(app, view)
+    equal(form("Farbe:").get(), 0xf8008000)
+    form("Farbe:").set(0x001f8000)
+    press("Allgemein")
+    render(app, view)
+    form("Art:").set(2)
+    render(app, view)
+    press("Aussehen")
+    render(app, view)
+    assert(not find(function(item) return item.text == "Farbe:" end))
+    equal(view.edit.color, 0x001f8000)
+    equal(form("Textfarbe:").get(), 0x07e08000)
+    press("Anwenden")
+    render(app, view)
+    press("Bedienung")
+    render(app, view)
+    local caption = assert(find(function(item)
+        return item.type == "label" and item.text == app.controls[1].name
+    end))
+    equal(caption.color, 0x07e08000)
+    save(app)
+    equal(app.saveError, nil)
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.controls[1].type, 2)
+    equal(fresh.controls[1].color, 0x001f8000)
+    equal(fresh.controls[1].textColor, 0x07e08000)
+end)
+
+test("Toggles align with centered captions while sliders and three-position labels retain their layout", function()
     local data = config.defaults()
     data.header.autoSave = 0
     data.controls = {data.controls[1], data.controls[2], data.controls[3]}
@@ -981,23 +1030,41 @@ test("Toggle and slider captions stay centered while three-position controls use
     finish(storage.save("model.a.lua", data, 1), storage.stepSave)
     local app = appInstance()
     ready(app)
-    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
-    render(app, view)
-    for _, control in ipairs(app.data.controls) do
-        if control.type == 3 then
-            local box = view.refs["c" .. control.id].definition
-            equal(#box.children, 3)
-            for _, item in ipairs(box.children) do equal(item.type, "button") end
-            assert(not find(function(item) return item.type == "label" and item.text == control.name end, box.children))
-        else
-            local box = assert(find(function(item)
-                return item.type == "box" and item.children and item.children[1].text == control.name
-            end))
-            local caption, input = box.children[1], box.children[2]
-            equal(box.flexFlow, lvgl.FLOW_COLUMN)
-            equal(caption.align, CENTER)
-            equal(caption.w, input.w)
-            equal(input.type, control.type == 2 and "toggle" or "slider")
+    for _, screen in ipairs({{320, 240, 42, 26}, {480, 272, 52, 32},
+                            {800, 480, 78, 48}, {480, 800, 52, 32}}) do
+        LCD_W, LCD_H = screen[1], screen[2]
+        lvgl.UI_ELEMENT_HEIGHT = screen[4]
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
+        render(app, view)
+        for _, control in ipairs(app.data.controls) do
+            if control.type == 3 then
+                local box = view.refs["c" .. control.id].definition
+                equal(#box.children, 3)
+                for _, item in ipairs(box.children) do equal(item.type, "button") end
+                assert(not find(function(item) return item.type == "label" and item.text == control.name end, box.children))
+            else
+                local box = assert(find(function(item)
+                    return item.type == "box" and item.children and item.children[1].text == control.name
+                end))
+                local caption, input = box.children[1], box.children[2]
+                equal(box.flexFlow, lvgl.FLOW_COLUMN)
+                equal(caption.align, CENTER)
+                equal(caption.w, input.w)
+                if control.type == 2 then
+                    equal(input.type, "box")
+                    equal(input.scrollDir, lvgl.SCROLL_OFF)
+                    local toggle = input.children[1]
+                    equal(toggle.type, "toggle")
+                    equal(toggle.w, screen[3])
+                    equal(toggle.h, screen[4])
+                    equal(input.h, toggle.h)
+                    equal(toggle.x, math.floor((caption.w - toggle.w) / 2))
+                    equal(toggle.y, 0)
+                    assert(toggle.x >= 0 and toggle.x + toggle.w <= input.w)
+                else
+                    equal(input.type, "slider")
+                end
+            end
         end
     end
 end)
@@ -1006,8 +1073,8 @@ test("Three-position groups select stable protocol states and fit wide and narro
     getGeneralSettings = function() return {language = "DE"} end
     local data = config.defaults()
     data.header.autoSave = 0
-    data.controls = {data.controls[1], data.controls[2]}
-    data.controls[1].type, data.controls[2].type = 3, 5
+    data.controls = {data.controls[1], data.controls[2], data.controls[3]}
+    data.controls[1].type, data.controls[3].type = 3, 5
     data.controls[1].leftText, data.controls[1].rightText = "Save", "Inputs"
     finish(storage.save("model.a.lua", data, 1), storage.stepSave)
     local app = appInstance()
@@ -1024,6 +1091,8 @@ test("Three-position groups select stable protocol states and fit wide and narro
         render(app, view)
         local group = view.refs.c1.definition
         equal(#group.children, 3)
+        equal(group.w, view.refs.c2.definition.w)
+        equal(group.h, view.refs.c2.definition.h)
         local expected = {"Save", "Aus", "Inputs"}
         local right = 0
         for index, position in ipairs({2, 0, 1}) do
@@ -1031,12 +1100,15 @@ test("Three-position groups select stable protocol states and fit wide and narro
             equal(button, view.refs["c1p" .. position].definition)
             equal(button.text, expected[index])
             equal(button.checked, position == 0)
-            assert(button.x >= right and button.x + button.w <= group.w)
-            assert(button.y >= 0 and button.y + button.h <= group.h)
+            equal(button.x, right + (index > 1 and (LCD_W == 800 and 3 or 2) or 0))
+            assert(button.x + button.w <= group.w)
+            equal(button.y, 0)
+            equal(button.h, group.h)
             local _, fontHeight = lcd.sizeText("M", button.font)
             assert(fontHeight <= button.h)
             right = button.x + button.w
         end
+        equal(right, group.w)
         local objects = objectCount
         for _, position in ipairs({2, 2, 1, 0}) do
             equal(view.refs["c1p" .. position].definition.press(), 1)
@@ -1049,7 +1121,7 @@ test("Three-position groups select stable protocol states and fit wide and narro
         equal(slider.min, 0)
         equal(slider.max, 100)
         slider.set(73)
-        equal(app.values[2], 73)
+        equal(app.values[3], 73)
         equal(slider.get(), 73)
     end
 end)
@@ -1783,10 +1855,10 @@ test("Settings page headers describe the page and identify its widget, tab or co
     render(app, view)
     press("Tab settings")
     render(app, view)
-    header("Tab settings", "Exterior lights")
+    header("Tab settings", "Exterior lights (1/2)")
     press("Edit tab")
     render(app, view)
-    header("Tab settings", "Exterior lights")
+    header("Edit tab", "Exterior lights")
     press("Cancel")
     render(app, view)
     press("Edit")
@@ -1878,6 +1950,252 @@ test("Header navigation changes tabs safely and updates their names and position
     equal(view.uiJob.page.params.subtitle, app.tabs[1].name .. " (1/2)")
 end)
 
+test("Tab list headers navigate safely and actions target the currently selected tab", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.tabs[2] = {kind = "tab", id = 7, name = "Lights", address = 1, columns = 2, height = 0}
+    data.tabs[3] = {kind = "tab", id = 9, name = "Aux", address = 2, columns = 2, height = 0}
+    data.controls[2].tab, data.controls[3].tab = 7, 9
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "tab"}
+    app.ui.refresh(view)
+    local partial = view.uiJob.page.params
+    assert(not partial.prevButton.active() and not partial.nextButton.active())
+    partial.nextButton.press()
+    equal(view.tab, 1)
+    render(app, view)
+    local first = view.uiJob.page.params
+    equal(first.title, "Tab settings")
+    equal(first.subtitle, app.tabs[1].name .. " (1/3)")
+    assert(not first.prevButton.active() and first.nextButton.active())
+    assert(find(function(item) return item.text == app.controls[1].name end))
+    assert(not find(function(item) return item.text == app.controls[2].name end))
+    first.nextButton.press()
+    render(app, view)
+    equal(view.page, "tab")
+    equal(view.tab, 7)
+    local middle = view.uiJob.page.params
+    equal(middle.subtitle, "Lights (2/3)")
+    assert(middle.prevButton.active() and middle.nextButton.active())
+    assert(not first.nextButton.active())
+    first.nextButton.press()
+    equal(view.tab, 7)
+    assert(find(function(item) return item.text == app.controls[2].name end))
+    assert(not find(function(item) return item.text == app.controls[1].name end))
+    press("Edit tab")
+    render(app, view)
+    equal(view.edit.id, 7)
+    equal(view.uiJob.page.params.prevButton, nil)
+    equal(view.uiJob.page.params.nextButton, nil)
+    press("Cancel")
+    render(app, view)
+    view.uiJob.page.params.nextButton.press()
+    render(app, view)
+    equal(view.tab, 9)
+    local last = view.uiJob.page.params
+    equal(last.subtitle, "Aux (3/3)")
+    assert(last.prevButton.active() and not last.nextButton.active())
+    last.nextButton.press()
+    equal(view.tab, 9)
+    press("Add control")
+    render(app, view)
+    equal(view.edit.tab, 9)
+    equal(view.uiJob.page.params.prevButton, nil)
+    equal(view.uiJob.page.params.nextButton, nil)
+    press("Cancel")
+    render(app, view)
+    last = view.uiJob.page.params
+    local header = config.copy(app.data.header)
+    header.name = "Preparing"
+    local job = assert(app.commit("config", header))
+    assert(not last.prevButton.active())
+    last.prevButton.press()
+    equal(view.tab, 9)
+    app.cancelUpdate(job)
+    last.prevButton.press()
+    render(app, view)
+    equal(view.tab, 7)
+    middle = view.uiJob.page.params
+    assert(commit(app, "tab", app.tabs[7], true))
+    assert(not middle.nextButton.active())
+    middle.nextButton.press()
+    equal(view.tab, 7)
+    render(app, view)
+    equal(view.tab, 1)
+    equal(view.uiJob.page.params.subtitle, app.tabs[1].name .. " (1/2)")
+    assert(commit(app, "tab", app.tabs[9], true))
+    render(app, view)
+    assert(not view.uiJob.page.params.prevButton.active() and not view.uiJob.page.params.nextButton.active())
+end)
+
+test("Tab list action bars align at viewport edges with separators and scrollable status below", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local app = appInstance()
+    ready(app)
+    for _, screen in ipairs({{320, 240, 204, 26}, {480, 272, 227, 32},
+                            {800, 480, 412, 48}, {480, 800, 755, 32}}) do
+        LCD_W, LCD_H = screen[1], screen[2]
+        lvgl.PAGE_BODY_HEIGHT, lvgl.UI_ELEMENT_HEIGHT = screen[3], screen[4]
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, tab = 1, page = "tab"}
+        render(app, view)
+        local top, bottom = view.refs.tabActions.definition, view.refs.actions.definition
+        local content = view.refs.settings.definition
+        local topSeparator = view.refs.tabActionsSeparator.definition
+        local statusSeparator, status = view.refs.statusSeparator.definition, view.refs.status.definition
+        equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+        equal(view.uiJob.page.params.scrollBar, true)
+        equal(view.uiJob.page.params.flexFlow, nil)
+        equal(#top.children, 2)
+        equal(#bottom.children, 2)
+        equal(top.x, bottom.x)
+        equal(top.w, bottom.w)
+        equal(top.h, bottom.h)
+        equal(top.children[1].text, "Tab bearbeiten")
+        equal(top.children[2].text, "Element anlegen")
+        equal(bottom.children[1].text, "Bedienung")
+        equal(bottom.children[2].text, "Speichern")
+        for index = 1, 2 do
+            local upper, lower = top.children[index], bottom.children[index]
+            equal(upper.x, lower.x)
+            equal(upper.y, lower.y)
+            equal(upper.w, lower.w)
+            equal(upper.h, lower.h)
+            equal(upper.w, top.children[1].w)
+        end
+        equal(content.scrollDir, lvgl.SCROLL_VER)
+        assert(top.y + top.h <= topSeparator.y)
+        assert(content.h > 0 and topSeparator.y + topSeparator.h <= content.y)
+        equal(topSeparator.x, top.x)
+        equal(topSeparator.w, top.w)
+        assert(content.y + content.h < bottom.y)
+        equal(bottom.y + bottom.h, view.uiJob.height)
+        assert(statusSeparator.y >= view.uiJob.height)
+        assert(status.y >= statusSeparator.y + statusSeparator.h)
+        assert(status.h > 0 and status.y + status.h > view.uiJob.height)
+        equal(statusSeparator.x, bottom.x)
+        equal(statusSeparator.w, bottom.w)
+        equal(status.text, app.footerStatus)
+        assert(not find(function(item)
+            return item.text == "Tab bearbeiten" or item.text == "Element anlegen" or item.name == "status"
+        end, content.children))
+    end
+end)
+
+test("Tab and control editors keep bottom actions at the viewport edge with scrollable status", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local cases = {
+        {"tab", app.tabs[1], "Tab bearbeiten"},
+        {"tab", app.newTab(), "Tab-Einstellungen"},
+        {"control", app.controls[1], "Element-Einstellungen"},
+    }
+    for _, screen in ipairs({{320, 240, 204, 26}, {480, 272, 227, 32},
+                            {800, 480, 412, 48}, {480, 800, 755, 32}}) do
+        LCD_W, LCD_H = screen[1], screen[2]
+        lvgl.PAGE_BODY_HEIGHT, lvgl.UI_ELEMENT_HEIGHT = screen[3], screen[4]
+        for _, case in ipairs(cases) do
+            local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "editor",
+                          editKind = case[1], edit = app.config.copy(case[2]), editRevision = app.revision}
+            render(app, view)
+            equal(view.uiJob.page.params.title, case[3])
+            equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+            equal(view.uiJob.page.params.scrollBar, true)
+            equal(view.uiJob.page.params.prevButton, nil)
+            equal(view.uiJob.page.params.nextButton, nil)
+            local actions = view.refs.actions.definition
+            local content, status = view.refs.settings.definition, view.refs.status.definition
+            local separator = view.refs.statusSeparator.definition
+            equal(#actions.children, 3)
+            equal(actions.children[1].text, "Anwenden")
+            equal(actions.children[2].text, "Abbrechen")
+            equal(actions.children[3].text, "Speichern")
+            equal(actions.y + actions.h, screen[3])
+            assert(content.h > 0 and content.y + content.h < actions.y)
+            assert(separator.y >= screen[3] and status.y >= separator.y + separator.h)
+            equal(status.text, app.footerStatus)
+            if case[1] == "control" then
+                local y = actions.y
+                for _, section in ipairs({"Eingänge", "Aussehen", "Allgemein"}) do
+                    press(section)
+                    render(app, view)
+                    equal(view.refs.actions.definition.y, y)
+                    equal(view.refs.status.definition.y, status.y)
+                end
+            end
+        end
+    end
+end)
+
+test("Field explanations sit beside inputs and wrap within row bounds in both menu languages", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        for _, protocol in ipairs({0, 1, 2}) do
+            local data = config.defaults()
+            data.header.autoSave, data.header.protocol = 0, protocol
+            local path = "inline-" .. language .. protocol
+            finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+            local app = appInstance(path)
+            ready(app)
+            local cases
+            if protocol == 0 then
+                cases = {
+                    {"config", nil, {{"Button spacing:", "-1: default; 0..40 px"}, {"Interval:", "Unit: 10 ms"}}},
+                    {"tab", nil, {{"Default address:", "Changes all -1 controls"}, {"Height:", "0: auto; 30..240"}}},
+                    {"control", "Basic", {{"Address:", "-1: tab address"}}},
+                    {"control", "Inputs", {{"Mutex group:", "0: no group"}}},
+                }
+            elseif protocol == 1 then
+                cases = {{"config", nil, {{"App ID:", "High byte; default 81 (0x51)"}}}}
+            else
+                cases = {{"control", "Basic", {
+                    {"Output:", "ACW: address * 8 + output; 1..255"},
+                    {"On PWM:", "Off: 0; default: 255"},
+                }}}
+            end
+            for _, screen in ipairs({{320, 240, 204, 26}, {480, 272, 227, 32},
+                                    {800, 480, 412, 48}, {480, 800, 755, 32}}) do
+                LCD_W, LCD_H = screen[1], screen[2]
+                lvgl.PAGE_BODY_HEIGHT, lvgl.UI_ELEMENT_HEIGHT = screen[3], screen[4]
+                for _, case in ipairs(cases) do
+                    local record = case[1] == "config" and app.data.header
+                        or case[1] == "tab" and app.tabs[1] or app.controls[1]
+                    local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "editor",
+                                  editKind = case[1], edit = app.config.copy(record),
+                                  editRevision = app.revision, editSection = case[2]}
+                    render(app, view)
+                    for _, expected in ipairs(case[3]) do
+                        local row = assert(find(function(item)
+                            return item.type == "box" and item.children
+                                and item.children[1].text == app.t(expected[1])
+                        end))
+                        equal(#row.children, 3)
+                        local caption, input, explanation = row.children[1], row.children[2], row.children[3]
+                        equal(explanation.type, "label")
+                        equal(string.gsub(explanation.text, "\n", " "), app.t(expected[2]))
+                        assert(caption.x + caption.w <= input.x)
+                        assert(input.x + input.w < explanation.x)
+                        assert(explanation.x + explanation.w <= row.w)
+                        assert(input.w > 0 and explanation.w > 0)
+                        for _, item in ipairs(row.children) do
+                            equal(item.y, math.floor(item.y))
+                            assert(item.y >= 0 and item.y + item.h <= row.h)
+                        end
+                        for line in string.gmatch(explanation.text, "[^\n]+") do
+                            assert(lcd.sizeText(line, explanation.font) <= explanation.w,
+                                   "Inline explanation clips horizontally")
+                        end
+                        equal(row.scrollDir, lvgl.SCROLL_OFF)
+                    end
+                end
+            end
+        end
+    end
+end)
+
 test("Settings forms align fields and keep actions outside the scrolling area on different screens", function()
     local app = appInstance()
     ready(app)
@@ -1907,7 +2225,7 @@ test("Settings forms align fields and keep actions outside the scrolling area on
         local column, fields = nil, 0
         for _, item in ipairs(content.children) do
             if item.type == "box" and item.children and item.children[1].type == "label" then
-                equal(#item.children, 2)
+                assert(#item.children == 2 or #item.children == 3)
                 local caption, input = item.children[1], item.children[2]
                 if not column then column = input.x end
                 equal(input.x, column)
@@ -1918,7 +2236,7 @@ test("Settings forms align fields and keep actions outside the scrolling area on
                 fields = fields + 1
             end
         end
-        equal(fields, 6)
+        equal(fields, 7)
     end
 end)
 
@@ -2165,6 +2483,113 @@ test("New configurations automatically save defaults and subsequent applied chan
     equal(fresh.controls[1].name, "Automatically saved")
     equal(fresh.data.header.autoSave, 1)
     equal(fresh.tabs[1].height, 0)
+end)
+
+test("Legacy button spacing preserves the default layout and invalid spacing is rejected", function()
+    local data = config.defaults()
+    data.header.autoSave, data.header.buttonSpacing = 0, nil
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    equal(app.phase, "ready")
+    equal(app.data.header.buttonSpacing, -1)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    equal(view.uiJob.page.params.flexPad, 2)
+    equal(view.refs.c1.definition.w, 208)
+    equal(view.refs.c1.definition.h, 51)
+    for _, value in ipairs({-2, 41, 0.5, "4"}) do
+        local header = config.copy(app.data.header)
+        header.buttonSpacing = value
+        assert(not commit(app, "config", header))
+        contains(app.error, "Invalid config.buttonSpacing")
+        equal(app.data.header.buttonSpacing, -1)
+    end
+end)
+
+test("Global button spacing uses translated editing, applies only on confirmation and persists", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    local originalWidth = view.refs.c1.definition.w
+    press("Einstellungen")
+    render(app, view)
+    press("Global")
+    render(app, view)
+    equal(form("Button-Abstand:").get(), -1)
+    form("Button-Abstand:").set(40)
+    equal(app.data.header.buttonSpacing, -1)
+    press("Abbrechen")
+    render(app, view)
+    equal(view.refs.c1.definition.w, originalWidth)
+    equal(app.data.header.buttonSpacing, -1)
+    press("Global")
+    render(app, view)
+    form("Button-Abstand:").set(18)
+    equal(app.data.header.buttonSpacing, -1)
+    press("Anwenden")
+    render(app, view)
+    equal(app.data.header.buttonSpacing, 18)
+    equal(view.uiJob.page.params.flexPad, 18)
+    equal(view.refs.c1.definition.w, originalWidth - 8)
+    save(app)
+    equal(app.saveError, nil)
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.data.header.buttonSpacing, 18)
+end)
+
+test("Custom spacing fits row widths, supports zero and scrolling, and applies to all tabs", function()
+    for _, settings in ipairs({
+        {320, 240, 4, 40, 0}, {480, 272, 2, 0, 0}, {800, 480, 3, 18, 0},
+        {480, 272, 1, 40, 0}, {480, 272, 2, 18, 48},
+    }) do
+        LCD_W, LCD_H = settings[1], settings[2]
+        lvgl.PAD_OUTLINE = LCD_W == 800 and 3 or 2
+        local data = config.defaults()
+        data.header.autoSave, data.header.buttonSpacing = 0, settings[4]
+        data.tabs[1].columns, data.tabs[1].height = settings[3], settings[5]
+        data.tabs[2] = {kind = "tab", id = 2, name = "Second", address = 1, columns = 1, height = 48}
+        data.controls[9] = config.newControl(9, 2, 1)
+        finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+        local app = appInstance()
+        ready(app)
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, tab = 1, page = "control"}
+        render(app, view)
+        equal(view.uiJob.page.params.flexPad, settings[4])
+        local rows, totalHeight = 0, 2 * lvgl.PAD_OUTLINE
+        for _, item in ipairs(definitions) do
+            if item.type == "box" and item.children and item.children[1].name == "c" .. (rows * settings[3] + 1) then
+                equal(item.flexPad, settings[4])
+                equal(item.borderPad.top, 0)
+                equal(item.borderPad.bottom, 0)
+                local usedWidth = 2 * lvgl.PAD_OUTLINE + (#item.children - 1) * settings[4]
+                for _, child in ipairs(item.children) do
+                    usedWidth = usedWidth + child.w
+                    equal(child.h, item.h)
+                    assert(child.w > 0 and child.h >= 30)
+                    if settings[5] ~= 0 then equal(child.h, settings[5]) end
+                end
+                assert(usedWidth <= item.w, "Button spacing causes horizontal overflow")
+                totalHeight = totalHeight + item.h + (rows > 0 and settings[4] or 0)
+                rows = rows + 1
+            end
+        end
+        equal(rows, math.ceil(8 / settings[3]))
+        if settings[5] == 0 and totalHeight <= view.uiJob.height then
+            equal(totalHeight, view.uiJob.height)
+        end
+        if settings[3] == 1 then assert(totalHeight > view.uiJob.height) end
+        view.tab, view.renderRevision = 2, nil
+        render(app, view)
+        equal(view.uiJob.page.params.flexPad, settings[4])
+        equal(view.refs.c9.definition.h, 48)
+    end
 end)
 
 test("Existing manual height and disabled Auto-Save remain unchanged", function()
@@ -3576,7 +4001,7 @@ test("German editors keep section and type identifiers stable and serialize only
     render(app, view)
     press("Einstellungen")
     render(app, view)
-    press("Tabs")
+    press("Tab Einstellungen")
     render(app, view)
     equal(view.uiJob.page.params.title, "Tab-Einstellungen")
     press("Bearbeiten")
@@ -3696,7 +4121,7 @@ test("German catalog formatting preserves source placeholders and literal percen
         equal(i18n.t(source, table.unpack(arguments)), #arguments == 0 and translation
             or string.format(translation, table.unpack(arguments)), source)
     end
-    equal(i18n.p("button", "Tab settings"), "Tabs")
+    equal(i18n.p("button", "Tab settings"), "Tab Einstellungen")
     equal(i18n.t("Tab settings"), "Tab-Einstellungen")
     contains(i18n.t("Source: 0..1024 = 0..100%; negative values = 0%."), "100%")
 end)
