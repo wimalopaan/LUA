@@ -154,7 +154,7 @@ widget.hasVirtualInputs = (getVirtualSwitch ~= nil);
 
 local state = {};
 
-local version = 39;
+local version = 40;
 local settingsVersion = 30;
 local versionString = "[" .. version .. "." .. settingsVersion .. "]";
 
