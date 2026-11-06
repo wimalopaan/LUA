@@ -30,7 +30,8 @@ erscheinen Englisch. Eine fehlende oder fehlerhafte deutsche Katalogdatei
 wird dagegen ausdrücklich als Startfehler angezeigt. Frühe Startfehler vor
 der Sprachinitialisierung sowie native Lua-/Dateisystemmeldungen können
 Englisch bleiben. Das separate Speicherdiagnosewerkzeug bleibt Englisch.
-Die folgende Bedienungsbeschreibung verwendet die englischen Beschriftungen.
+Die folgende Bedienungsbeschreibung verwendet die englischen Beschriftungen;
+die Bildschirmfotos zeigen die deutsche Oberfläche.
 
 == Installation und Bedienung
 
@@ -49,9 +50,16 @@ und Name zu überlagern. In flachen Widget-Fenstern passt nur eine Statuszeile;
 in sehr flachen Fenstern haben Logo und Name Vorrang vor dem Status.
 Die frühe Ladeanzeige bleibt einzeilig.
 Die Bedienung, Konfiguration und vollständige Statusanzeige erfolgen im Vollbild.
+
+.Widget-Ansicht mit farbigem Logo, Widget-Name und Statusanzeige.
+image::.images/w1.png[Widget-Ansicht mit Logo und Statusanzeige]
+
 Die automatische Elementhöhe füllt beim Standardlayout mit zwei Spalten
 den sichtbaren Bedienbereich mit genau den acht Buttons. `Setup` und
 die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
+
+.Beispiel einer Bedienseite mit Schalter, Slider, 3-Pos-Tasten und Gruppenmarkierungen.
+image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgruppe G1]
 
 * Die Kopfzeile zeigt den aktiven Tab mit seiner Position, etwa `Licht (2/4)`.
   Die Vor-/Zurück-Buttons in der Kopfzeile wechseln zwischen Tabs; am Anfang
@@ -149,6 +157,12 @@ Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Apply`
 und `Cancel` sowie die zweizeilige Statusanzeige bleiben unten fest stehen.
 `Save` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 
+.Elementliste eines Tabs mit Adresse und Ausgang sowie direktem Zugang zum Elementeditor.
+image::.images/w3.png[Tab-Einstellungen mit Elementliste und Bearbeiten-Buttons]
+
+.Tab-Editor mit Name, Standardadresse und Layout-Einstellungen.
+image::.images/w4.png[Tab-Editor mit allgemeinen Einstellungen und Anordnung]
+
 Die globalen Einstellungen sind in `General` und einen protokollspezifischen
 Bereich (`CRSF`, `S.Port WM` oder `S.Port ACW`) gegliedert,
 die Tab-Einstellungen in `General`, `Layout` und `Management`.
@@ -167,10 +181,22 @@ Ein Wechsel der Protokollauswahl erhält den gesamten Entwurf und die
 Einstellungen des jeweils anderen Protokolls, aktiviert aber erst mit `Apply`
 den neuen Transport.
 
+.Globale Widget-Einstellungen mit Auto-Save und Protokollauswahl.
+image::.images/w8.png[Widget-Einstellungen mit Name, automatischem Speichern und CRSF-Auswahl]
+
 Nur passende Felder werden angezeigt: `Switch 2` bei `3Pos`, `Source`
 bei Slidern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
 bzw. Touch-Tastern. Ausgeblendete Eigenschaften bleiben im Entwurf erhalten;
 ein Unterseiten- oder Typwechsel speichert nichts automatisch.
+
+.Elementeditor: Allgemeine Einstellungen wie Name, Art und Adresse.
+image::.images/w5.png[Elementeditor auf der Unterseite Allgemein]
+
+.Elementeditor: Physische Eingänge, Aktivierung und Exklusivgruppe.
+image::.images/w6.png[Elementeditor auf der Unterseite Eingänge]
+
+.Elementeditor: Sichtbarkeit, Elementfarbe und Textfarbe.
+image::.images/w7.png[Elementeditor auf der Unterseite Aussehen]
 
 == Elemente und physische Bedienung
 
