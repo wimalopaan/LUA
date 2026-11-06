@@ -219,7 +219,7 @@ local function configure(sender, data, values)
 end
 
 local function offCount(sender)
-    return #sender.off[0] + #sender.off[1]
+    return #sender.off[0] + #sender.off[1] + #sender.off[2] + #sender.off[3]
 end
 
 local function save(app)
@@ -635,16 +635,18 @@ end)
 test("Disabling Auto-Save during a save is persisted once, then saving stops", function()
     local app = appInstance()
     ready(app)
+    settleAutosave(app)
     local header = config.copy(app.data.header)
-    header.autoSave = 1
+    header.autoSave, header.name = 1, "Before disable"
     assert(commit(app, "config", header))
     advance(app, 2)
     assert(app.saveJob)
+    local generation = app.saveGeneration
     header = config.copy(app.data.header)
     header.autoSave = 0
     assert(commit(app, "config", header))
     settleAutosave(app)
-    equal(app.generation, 2)
+    equal(app.generation, generation + 1)
     equal(app.dirty, false)
     local fresh = appInstance()
     ready(fresh)
@@ -1217,8 +1219,9 @@ test("Retired CRSF outputs survive full queues and subsequent preparation", func
     equal(encode(frames[#frames].payload), encode(pending.payload))
     blocked = false
     frames = {}
-    advance(app, 4)
+    advance(app, 3)
     equal(encode(frames[1].payload), encode(pending.payload))
+    equal(#frames, 2)
     for _, frame in ipairs(frames) do equal(frame.payload[1], 0) end
     equal(offCount(app.sender), 0)
     frames = {}
@@ -2169,6 +2172,8 @@ test("Protocol changes preserve old shutdown transport without starving new outp
     advance(app, 2)
     equal(offCount(app.sender), 0)
     equal(app.sender.offError, nil)
+    app.set(1, 1)
+    advance(app)
     local native = crossfireTelemetryPush
     crossfireTelemetryPush = nil
     header = config.copy(app.data.header)
@@ -2177,7 +2182,7 @@ test("Protocol changes preserve old shutdown transport without starving new outp
     sportFrames, frames = {}, {}
     advance(app, 2)
     contains(app.status(), "Retired output pending: CRSF API unavailable")
-    equal(encode(sportFrames[1].payload), "0,49,20736,0")
+    equal(encode(sportFrames[1].payload), "0,49,20736,1")
     equal(#frames, 0)
     crossfireTelemetryPush = native
     advance(app)
@@ -2240,6 +2245,8 @@ test("Retired simulator CRSF packets keep serial framing after selecting S.Port"
     crossfireTelemetryPush = function() error("Simulator shutdown must use serial CRSF") end
     local data, previous, sender = config.defaults(), crsf.new(), sport.new()
     configure(previous, data, {[1] = 1})
+    crsf.tick(previous, 0)
+    written = {}
     data.header.protocol = 1
     configure(sender, data, {[1] = 1})
     crsf.retireGroup(sender, previous, previous.groups[1])
@@ -2527,12 +2534,12 @@ test("ACW retirements preserve old parameters and formats across edits and proto
     sportFrames = {}
     advance(app, 4)
     equal(sportFrames[1].payload[3], 0xac00)
-    equal(sportFrames[2].payload[3], 0xac00)
+    equal(sportFrames[3].payload[3], 0xac00)
     equal(sportFrames[1].payload[4], 0x81050900)
-    equal(sportFrames[2].payload[4], 0x030a0200)
-    equal(sportFrames[3].payload[3], 0xfa07)
+    equal(sportFrames[3].payload[4], 0x030a0200)
+    equal(sportFrames[2].payload[3], 0xfa07)
     equal(sportFrames[4].payload[3], 0xfa07)
-    equal(sportFrames[3].payload[4], 0x81050964)
+    equal(sportFrames[2].payload[4], 0x81050964)
     equal(sportFrames[4].payload[4], 0x030a025a)
     header = config.copy(app.data.header)
     header.protocol = 1
@@ -2540,10 +2547,10 @@ test("ACW retirements preserve old parameters and formats across edits and proto
     sportFrames = {}
     advance(app, 4)
     equal(sportFrames[1].payload[3], 0xfa07)
-    equal(sportFrames[2].payload[3], 0xfa07)
+    equal(sportFrames[3].payload[3], 0xfa07)
     equal(sportFrames[1].payload[4] & 255, 0)
-    equal(sportFrames[2].payload[4] & 255, 0)
-    equal(encode(sportFrames[3].payload), "0,49,20737,1")
+    equal(sportFrames[3].payload[4] & 255, 0)
+    equal(encode(sportFrames[2].payload), "0,49,20737,1")
     equal(encode(sportFrames[4].payload), "0,49,20736,4")
     header = config.copy(app.data.header)
     header.protocol = 2
@@ -2551,8 +2558,8 @@ test("ACW retirements preserve old parameters and formats across edits and proto
     sportFrames = {}
     advance(app, 4)
     equal(encode(sportFrames[1].payload), "0,49,20737,0")
-    equal(encode(sportFrames[2].payload), "0,49,20736,0")
-    equal(sportFrames[3].payload[3], 0xac00)
+    equal(encode(sportFrames[3].payload), "0,49,20736,0")
+    equal(sportFrames[2].payload[3], 0xac00)
     equal(sportFrames[4].payload[3], 0xac00)
     header = config.copy(app.data.header)
     header.protocol = 0
@@ -2566,6 +2573,38 @@ test("ACW retirements preserve old parameters and formats across edits and proto
     equal(sportFrames[2].payload[4] & 255, 0)
     equal(encode(frames[1].payload), "0,234,161,9,2,1,0,1,0,0,4")
     equal(offCount(app.sender), 0)
+end)
+
+test("Blocked WM retirements do not starve ACW commands or ACW retirements", function()
+    local data, previous, sender = config.defaults(), sport.new(), sport.new()
+    data.header.protocol, data.controls = 1, {data.controls[1]}
+    configure(previous, data, {[1] = 1})
+    sport.tick(previous, 0)
+    sportFrames = {}
+    data.header.protocol = 2
+    configure(sender, data, {[1] = 1})
+    sport.retireGroup(sender, previous, previous.groups[1])
+    local native = sportTelemetryPush
+    sportTelemetryPush = function(physicalId, primId, dataId, value)
+        local queued = native(physicalId, primId, dataId, value)
+        if primId == 0x31 then return false end
+        return queued
+    end
+    sport.tick(sender, 1)
+    contains(sender.offError, "not accepted")
+    sport.tick(sender, 2)
+    equal(sportFrames[2].payload[4], 0x010001ff)
+    sport.tick(sender, 3)
+    sport.set(sender, 1, 0)
+    sport.tick(sender, 4)
+    equal(sportFrames[4].payload[4], 0x01000100)
+    sport.retireProp(sender, sender, {key = 8, prefix = 0x01000900})
+    sport.tick(sender, 5)
+    equal(sportFrames[5].payload[4], 0x01000900)
+    equal(#sender.off[2], 0)
+    equal(#sender.off[1], 1)
+    contains(sender.offError, "not accepted")
+    sportTelemetryPush = native
 end)
 
 test("ACW editors map Momentary correctly and retain driver settings across sections and saves", function()
@@ -2618,6 +2657,115 @@ test("ACW editors map Momentary correctly and retain driver settings across sect
     advance(fresh)
     equal(sportFrames[1].payload[3], 0xfa07)
     equal(sportFrames[1].payload[4], 0x0713017b)
+end)
+
+test("Simulator CRSF roundtrips through unused S.Port modes do not retain shutdown warnings", function()
+    getVersion = function() return "3.0.0", "tx16s-simu" end
+    serialWrite = function() end
+    sportBlocked = true
+    for variant = 1, 3 do
+        local data = config.defaults()
+        data.header.autoSave = 0
+        local path = "roundtrip" .. variant
+        finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+        local app = appInstance(path)
+        ready(app)
+        app.set(7, 1)
+        advance(app)
+        local header = config.copy(app.data.header)
+        header.protocol = variant
+        assert(commit(app, "config", header))
+        advance(app, 12)
+        header = config.copy(app.data.header)
+        header.name = "Unused S.Port"
+        assert(commit(app, "config", header))
+        header = config.copy(app.data.header)
+        header.protocol = 0
+        assert(commit(app, "config", header))
+        local attempts = #sportFrames
+        advance(app, 12)
+        equal(#sportFrames, attempts, "Unused S.Port shutdown reached the transmit API")
+        equal(app.sender.offError, nil)
+        equal(offCount(app.sender), 0)
+        equal(app.values[7], 1)
+        save(app)
+        contains(app.status(), "Configuration saved")
+    end
+end)
+
+test("Accepted activity survives preparation and failed zero transmissions in every protocol", function()
+    for variant = 0, 3 do
+        blocked, sportBlocked = false, false
+        local data = config.defaults()
+        data.header.protocol, data.header.autoSave = variant, 0
+        local path = "activity" .. variant
+        finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+        local app = appInstance(path)
+        ready(app)
+        app.set(1, 1)
+        advance(app, 8)
+        blocked, sportBlocked = true, true
+        app.set(1, 0)
+        advance(app, 2)
+        local header = config.copy(app.data.header)
+        header.name = "Preserve accepted activity"
+        assert(commit(app, "config", header))
+        header = config.copy(app.data.header)
+        header.protocol = variant == 0 and 1 or 0
+        assert(commit(app, "config", header))
+        advance(app, 3)
+        contains(app.sender.offError, "Retired output pending")
+        blocked, sportBlocked = false, false
+        advance(app, 25)
+        equal(app.sender.offError, nil)
+        equal(offCount(app.sender), 0)
+    end
+end)
+
+test("Already accepted ordinary zero commands satisfy retirement without another transmission", function()
+    for variant = 0, 3 do
+        blocked, sportBlocked = false, false
+        local data = config.defaults()
+        data.header.protocol, data.header.autoSave = variant, 0
+        local path = "zero" .. variant
+        finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+        local app = appInstance(path)
+        ready(app)
+        app.set(1, 1)
+        advance(app, 8)
+        app.set(1, 0)
+        advance(app, 8)
+        local header = config.copy(app.data.header)
+        header.protocol = variant == 0 and 1 or 0
+        assert(commit(app, "config", header))
+        if variant == 0 then blocked = true else sportBlocked = true end
+        local attempts = variant == 0 and #frames or #sportFrames
+        advance(app, 12)
+        equal(variant == 0 and #frames or #sportFrames, attempts)
+        equal(app.sender.offError, nil)
+        equal(offCount(app.sender), 0)
+    end
+end)
+
+test("Late accepted activity during preparation still requires a retirement command", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    blocked = true
+    app.set(1, 1)
+    local header = config.copy(app.data.header)
+    header.protocol = 1
+    local job = assert(app.commit("config", header))
+    while not job.done do
+        if job.phase == "retire-sliders" then blocked = false end
+        advance(app)
+    end
+    assert(job.success, job.error)
+    blocked = true
+    advance(app, 2)
+    contains(app.sender.offError, "Retired output pending: CRSF")
 end)
 
 local failures = 0

@@ -117,6 +117,7 @@ function M.step(job)
         local control = state.data.controls[job.index]
         if control then
             state.backend.addControl(state.sender, control, state.addresses[control.id], state.values[control.id])
+            if previous then app.outputs.inherit(state.sender, previous.sender, control.id) end
             job.index = job.index + 1
         else
             nextPhase(job, "pending-off")
@@ -131,8 +132,9 @@ function M.step(job)
                 queue[#queue + 1] = payload
             end
             job.index = job.index + 1
-        elseif job.offProtocol == 0 then
-            job.offProtocol, job.index = 1, previous and previous.sender.offIndex[1] or 1
+        elseif job.offProtocol < 3 then
+            job.offProtocol = job.offProtocol + 1
+            job.index = previous and previous.sender.offIndex[job.offProtocol] or 1
         else nextPhase(job, "retire-switches") end
     elseif job.phase == "retire-switches" then
         local group = previous and previous.sender.groups[job.index]

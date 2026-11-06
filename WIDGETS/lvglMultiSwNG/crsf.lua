@@ -50,7 +50,8 @@ end
 function M.retireGroup(sender, previous, group)
     if previous.protocol ~= sender.protocol or previous.destination ~= sender.destination
         or not sender.groupMap[group.key] then
-        outputs.retire(sender, previous, push, {previous.destination, 0xea, 0xa1, 0x07, group.key, 0, 0})
+        outputs.retire(sender, previous, push,
+                       {previous.destination, 0xea, 0xa1, 0x07, group.key, 0, 0}, group.delivery)
     end
 end
 
@@ -58,7 +59,7 @@ function M.retireProp(sender, previous, prop)
     if previous.protocol ~= sender.protocol or previous.destination ~= sender.destination
         or not sender.propMap[prop.key] then
         outputs.retire(sender, previous, push,
-                       {previous.destination, 0xea, 0xa1, 0x02, prop.address, prop.output, 0})
+                       {previous.destination, 0xea, 0xa1, 0x02, prop.address, prop.output, 0}, prop.delivery)
     end
 end
 
@@ -104,6 +105,7 @@ local function groupPacket(sender, now)
         for _, selection in ipairs(selected) do
             local group = selection.item
             group.last, group.dirty, group.epoch = now, false, sender.epoch
+            group.delivery.active = group.value ~= 0
             -- Each address has at most eight associated proportional outputs.
             for _, prop in ipairs(group.props) do prop.dirty = true end
         end
@@ -120,6 +122,7 @@ local function propPacket(sender, now)
         if due(sender, prop, now) then
             return {sender.destination, 0xea, 0xa1, 0x02, prop.address, prop.output, prop.value}, function()
                 prop.last, prop.dirty, prop.epoch = now, false, sender.epoch
+                prop.delivery.active = prop.value ~= 0
                 sender.propCursor = index % count + 1
             end
         end

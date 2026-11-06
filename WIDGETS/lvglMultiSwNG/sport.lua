@@ -27,6 +27,7 @@ function M.addControl(sender, control, address, value)
     local prop = {
         key = key, prefix = control.sportType * 0x1000000 + control.sportOptions * 0x10000 + (key + 1) * 256,
         pwm = control.sportPwmOn, value = 0, dirty = true, last = -100000, epoch = -1,
+        delivery = {active = false},
     }
     sender.props[#sender.props + 1], sender.propMap[key] = prop, prop
     sender.bindings[control.id] = {prop = prop, code = 0}
@@ -60,7 +61,8 @@ function M.retireGroup(sender, previous, group)
     if previous.protocol ~= sender.protocol or previous.variant ~= sender.variant
         or previous.physicalId ~= sender.physicalId
         or previous.appId ~= sender.appId or not sender.groupMap[group.key] then
-        outputs.retire(sender, previous, push, {previous.physicalId, 0x31, previous.appId * 256 + group.key, 0})
+        outputs.retire(sender, previous, push,
+                       {previous.physicalId, 0x31, previous.appId * 256 + group.key, 0}, group.delivery)
     end
 end
 
@@ -68,7 +70,7 @@ function M.retireProp(sender, previous, prop)
     local current = sender.propMap[prop.key]
     if previous.protocol ~= sender.protocol or previous.variant ~= sender.variant
         or not current or prop.prefix ~= current.prefix then
-        outputs.retire(sender, previous, push, {previous.physicalId, 0x10, previous.dataId, prop.prefix})
+        outputs.retire(sender, previous, push, {previous.physicalId, 0x10, previous.dataId, prop.prefix}, prop.delivery)
     end
 end
 
@@ -87,6 +89,7 @@ function M.tick(sender, now)
             else payload = {sender.physicalId, 0x31, sender.appId * 256 + group.key, group.value} end
             if push(sender, payload) then
                 group.last, group.dirty, group.epoch = now, false, sender.epoch
+                group.delivery.active = group.value ~= 0
                 sender.groupCursor = index % count + 1
             end
             return

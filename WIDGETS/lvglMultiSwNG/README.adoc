@@ -248,6 +248,14 @@ eine eigene serielle S.Port-Ausgabe ist nicht enthalten.
 
 Entfernte Adressen und Änderungen von Physical-ID oder App-ID erhalten
 Nulltelegramme an die alte Adresse beziehungsweise mit den alten IDs.
+Abschaltungen sind nur nötig, wenn zuvor ein Einschaltzustand vom Transport
+angenommen wurde und noch kein Nullzustand angenommen wurde. Nie erfolgreich
+angesprochene oder bereits ausgeschaltete Ausgänge erzeugen keine weiteren
+Abschaltversuche. Das verhindert dauerhafte Warnungen beim bloßen Testen
+der Protokollauswahl ohne passende HF-Modulauswahl.
+Diese Information bleibt bei unveränderter Zuordnung über
+Konfigurationsänderungen erhalten; erst beim Aktivieren der neuen Laufzeit
+wird entschieden, welche Abschaltungen noch nötig sind.
 Beim Protokollwechsel werden alte Ausgänge über ihren ursprünglichen
 Transport ausgeschaltet; ausstehende Telegramme bleiben auch über weitere
 Konfigurationsänderungen erhalten. Ist der alte Transport nicht mehr erreichbar,
@@ -302,6 +310,9 @@ S.Port-WM: höchstens acht Elementprüfungen und ein Telegramm pro Tick.
 Beim Löschen oder Umadressieren eines Elements, Ändern von Typ/Optionen
 oder Wechseln des Protokolls wird zunächst das alte ACW-Telegramm mit PWM 0
 eingereiht. Es behält seine ursprüngliche Data-ID, Schaltnummer, Typ und Optionen.
+Jede Protokollvariante besitzt eine eigene Abschaltwarteschlange.
+Blockierte alte WM- oder ACW-Telegramme halten weder die neue Variante
+noch deren eigene Abschaltungen auf.
 Auch Wechsel zwischen ACW 1.5, ACW 1.4 und WM bereiten Konfiguration und
 Abschaltungen schrittweise vor. Bereits angewendete Laufzeitwerte bleiben
 bei unveränderten Zuordnungen erhalten; PWM-Änderungen verwenden den neuen
