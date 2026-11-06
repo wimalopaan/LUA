@@ -1,0 +1,306 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Wilhelm Meier
+
+= MultiSwitch NG
+
+Neuimplementierung des LVGL-MultiSwitch-Widgets für EdgeTX 2.11.3 oder neuer
+mit LVGL-Unterstützung. Die vorhandene Implementierung in `../lvglMultiSw`
+wird nicht verändert. Ein Test auf dem Sender bzw. im EdgeTX-Simulator ist
+vor dem Einsatz am Modell erforderlich.
+
+== Installation und Bedienung
+
+Das Verzeichnis als `/WIDGETS/lvglMultiSwNG/` auf die SD-Karte kopieren.
+`tests/` wird auf dem Sender nicht benötigt. Das Widget heißt `MultiSw NG`.
+Es gibt keine funktionalen Widget-Options.
+
+Die erste Konfiguration enthält einen Tab mit acht rastenden Buttons,
+Standardadresse 0 und Ausgängen 1 bis 8. Im normalen Widget-Fenster erscheint
+eine Statusanzeige; die Bedienung und Konfiguration erfolgen im Vollbild.
+Die automatische Elementhöhe füllt beim Standardlayout mit zwei Spalten
+den sichtbaren Bedienbereich mit genau den acht Buttons. `Setup` und
+die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
+
+* Die Kopfzeile zeigt den aktiven Tab mit seiner Position, etwa `Licht (2/4)`.
+  Die Vor-/Zurück-Buttons in der Kopfzeile wechseln zwischen Tabs; am Anfang
+  bzw. Ende ist der jeweilige Button deaktiviert. Eine separate Reiterleiste
+  im Bedienbereich entfällt. Auf Editor- und Konfigurationsseiten werden
+  die Tab-Umschalter ausgeblendet.
+  Nur die Bedienelemente des aktiven Tabs werden aufgebaut.
+* Unter den Bedienelementen trennt eine Linie den Konfigurationsbereich ab.
+  Standardmäßig ist dort nur `Setup` sichtbar. Der Button blendet
+  `Tab settings`, `New tab`, `Global` und `Save` ein; `Hide setup` klappt sie
+  wieder ein. Nach Verlassen des Vollbilds ist der Bereich wieder geschlossen.
+  Die Statusanzeige bleibt sichtbar; auf den Konfigurationsseiten ist
+  `Save` weiterhin direkt erreichbar.
+* `New tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
+  Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
+* `Tab settings` zeigt eine kompakte Elementliste mit Name,
+  Adresse/Ausgang und `Edit`-Button nebeneinander in einer Zeile.
+  `Edit tab` öffnet die Tab-Einstellungen, `Add control` einen neuen Elemententwurf.
+  `Delete tab` befindet sich im Tab-Editor; `Delete control` im Elementeditor.
+  Der letzte Tab kann nicht gelöscht werden. Beim Löschen eines Tabs werden
+  auch seine Elemente entfernt.
+* Ein Element besitzt Name, Art, Adresse, Ausgang, Sichtbarkeit,
+  Exklusivgruppe, Farben, Schrift, optionales Button-Bild und
+  physische Schalter-/Quellenzuordnung. `Move` im Elementeditor öffnet
+  eine separate Verschiebeansicht mit Ziel-Tab, Adressvorschau und
+  Bestätigung bzw. Abbruch. Der Item-Editor enthält keine Tab-Auswahl.
+  Mit nur einem Tab ist `Move` deaktiviert; bei neuen, noch nicht angewendeten
+  Elementen sind Verschieben und Löschen nicht verfügbar.
+  Abbrechen der Verschiebeansicht kehrt zum unveränderten Entwurf zurück.
+  Bestätigen übernimmt den aktuellen Entwurf und die neue Tab-Zuordnung gemeinsam.
+* Adresse `-1` bedeutet: Standardadresse des Tabs erben. Eine Änderung der
+  Tab-Adresse wirkt auf alle erbenden Elemente. Eine explizite Adresse
+  bleibt unverändert. Beim Verschieben eines erbenden Elements wird die
+  Standardadresse des Ziel-Tabs wirksam.
+* Kombinationen aus Adresse und Ausgang müssen über alle Tabs eindeutig
+  sein, auch für unsichtbare Elemente. Konflikte werden beim Anwenden
+  angezeigt; die bisherige Konfiguration bleibt aktiv.
+* `Apply` prüft und bereitet einen Editorentwurf schrittweise vor.
+  Erst nach erfolgreichem Abschluss wird die neue Konfiguration aktiviert.
+  Währenddessen zeigt die Ansicht den Fortschritt und `Cancel update`;
+  ein Abbruch lässt die bisherige Konfiguration und den Entwurf unverändert.
+  `Cancel` verwirft den Entwurf. `Save` schreibt die angewendete Konfiguration.
+  Beim Verlassen des Vollbilds wird das Speichern angeboten. Die Speicherung
+  läuft auch nach Schließen des Vollbilds im Hintergrund weiter.
+* Unter `Global` aktiviert `Auto-Save` das automatische Speichern.
+  Die Vorgabe für neue Konfigurationen ist eingeschaltet. Bereits gespeicherte
+  Einstellungen werden nicht geändert. Nach `Apply`, Hinzufügen, Löschen oder
+  Verschieben werden Änderungen automatisch im Hintergrund gespeichert.
+  Unangewendete Editorentwürfe und Schaltzustände werden nicht gespeichert.
+  Weitere Änderungen während einer Speicherung werden anschließend
+  nachgespeichert. Auch das Ausschalten von Auto-Save wird noch gespeichert.
+  Bei aktivem Auto-Save entfällt die Speicherabfrage beim Schließen.
+  Nach einem Speicherfehler bleibt die Änderung ungespeichert und der Fehler
+  sichtbar; ein erneuter Versuch erfolgt über `Save` oder eine neue Änderung,
+  nicht in einer unbegrenzten Wiederholungsschleife.
+
+Tab-Spaltenzahl und Elementhöhe sind unabhängig einstellbar. Zusätzliche
+Elemente erhalten automatisch einen freien Ausgang, nötigenfalls mit
+expliziter anderer Adresse.
+Die Vorgabe für die Elementhöhe ist `0`: automatische Berechnung für
+acht Elemente anhand von Bildschirmgröße und Spaltenzahl, einschließlich
+Zeilenabständen und Innenrändern. Zusätzliche Elemente werden gescrollt.
+Manuelle Höhen von 30 bis 240 bleiben möglich und werden nicht automatisch
+angepasst. Für vorhandene Tabs lässt sich die Automatik im Tab-Editor durch
+Setzen von `Height` auf `0` aktivieren.
+
+== Einstellungsseiten
+
+Alle Formulare verwenden gleich hohe Zeilen mit einer festen
+Beschriftungsspalte links und dem Eingabefeld rechts. Überschriften gliedern
+die Einstellungen; ergänzende Hinweise werden kleiner dargestellt.
+Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Apply`
+und `Cancel` sowie eine separate Statuszeile bleiben unten fest stehen.
+`Save` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
+
+Die globalen Einstellungen sind in `General` und `CRSF` gegliedert,
+die Tab-Einstellungen in `General`, `Layout` und `Management`.
+Der Elementeditor hat drei Unterseiten: `Basic` für Name, Art, Adresse,
+Ausgang und Verwaltungsaktionen; `Inputs` für physische Zuordnungen,
+Aktivierung und Exklusivgruppe; `Appearance` für Sichtbarkeit, Farben,
+Schrift und Bilder. Wechsel zwischen Unterseiten erhalten den gesamten Entwurf.
+
+Nur passende Felder werden angezeigt: `Switch 2` bei `3Pos`, `Source`
+bei Slidern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
+bzw. Touch-Tastern. Ausgeblendete Eigenschaften bleiben im Entwurf erhalten;
+ein Unterseiten- oder Typwechsel speichert nichts automatisch.
+
+== Elemente und physische Bedienung
+
+`Button` rastet ein, `Toggle` ist ein Ein/Aus-Schalter, `3Pos` verwendet
+die Zustände Mitte = 0, rechts = 1, links = 2.
+`Momentary` ist nur während der Betätigung aktiv, `Slider` liefert 0 bis 100 %.
+Touch-Taster werden beim Seiten-/Tabwechsel, Neuaufbau und Verlassen des
+Vollbilds zurückgesetzt.
+
+Eine Schalterzuordnung deaktiviert die Touch-Bedienung des betreffenden
+Schaltelements. Bei `3Pos` hat der erste Schalter Vorrang; der zweite aktiviert
+Zustand 2. Negative Schalterkennungen werden unterstützt.
+Eine Slider-Quelle verwendet wie beim bisherigen Widget den positiven
+Quellenbereich: 0 bis 1024 entsprechen 0 bis 100 %; negative Werte ergeben 0 %.
+Quellenwerte werden begrenzt und auf ganze Prozent gerundet.
+Eine fehlende Quelle wird angezeigt und setzt den Slider auf 0 %.
+Bei zugeordneter Quelle ist die Touch-Bedienung des Sliders deaktiviert.
+
+Ein Aktivierungsschalter sperrt bei inaktivem Zustand die Bedienung und
+setzt den Ausgang zurück. Exklusivgruppen gelten tabübergreifend für
+Schaltelemente; 0 bedeutet keine Gruppe. Physische Gruppenanforderungen
+werden flankengesteuert verarbeitet: Bei gleichzeitig gehaltenen Schaltern
+bleibt die zuletzt eingelesene Einschaltflanke maßgebend, ohne Oszillation.
+Slider nehmen nicht an Exklusivgruppen teil.
+
+Auch in inaktiven Tabs werden physische Eingänge verarbeitet und
+Ausgangszustände übertragen. Pro Hintergrundschritt werden maximal acht
+physische Zuordnungen eingelesen. Schaltzustände werden nicht gespeichert;
+nach einem Neustart beginnen Touch-Elemente ausgeschaltet.
+
+Mehrere Widget-Instanzen eines Modells teilen Konfiguration, Zustände und
+Sender. Pro 10-ms-Zeitwert läuft die gemeinsame Verarbeitung nur einmal.
+Ändert eine andere Ansicht die Konfiguration, kann ein bereits geöffneter
+Editorentwurf nicht ungeprüft darübergeschrieben werden.
+
+== CRSF
+
+Referenz: https://github.com/wimalopaan/Electronics/blob/main/docs/protocols.adoc#crsf_sw
+
+Verwendet werden `crossfireTelemetryPush(0x32, payload)`, Quelladresse `0xea`
+und Realm `0xa1`. CRCs fügt EdgeTX hinzu.
+
+* `Set4` (`0x07`) für eine Schaltadresse.
+* `Set4M` (`0x09`) für mehrere Adressen, maximal 18 Adressen pro Paket.
+  Größere Konfigurationen werden über mehrere Pakete verteilt.
+* `Prop` (`0x02`) für Slider, Ausgangsnummer im Paket 0 bis 7.
+  Im Editor werden Ausgänge 1 bis 8 angezeigt.
+* Optional `SetRGB` (`0x0a`) mit RGB444-Farben aus den Elementfarben.
+  Aktivierung unter `Global`. Farben werden nach Konfigurationsänderungen
+  und bei Wiederkehr von `RQly` erneut übertragen.
+
+CRSF-Zieladresse und Wiederholintervall werden unter `Global` konfiguriert,
+nicht über Widget-Options. Das Intervall hat die Einheit 10 ms;
+Vorgabe 100 = 1 Sekunde. Änderungen werden unabhängig davon zeitnah gesendet.
+Je Hintergrundschritt wird höchstens ein Paket an EdgeTX übergeben.
+Schaltzustände, proportionale Werte und Farben werden fair abgearbeitet.
+Bei voller Sendewarteschlange bleiben Anforderungen erhalten; der Status
+meldet den Engpass. Bei sehr vielen Ausgängen bestimmt die verfügbare
+CRSF-Bandbreite die tatsächliche Wiederholrate.
+
+Auf dem Sender muss für die native CRSF-Schnittstelle ein internes oder
+externes HF-Modul auf CRSF/ELRS eingestellt sein. Ohne aktives CRSF-Protokoll
+liefert EdgeTX `nil`; das Widget meldet dann `CRSF inactive`, nicht einen
+vollen Sendepuffer. Ein Rückgabewert `false` bedeutet dagegen, dass EdgeTX
+das Paket nicht annehmen konnte.
+
+Der Simulator wird wie beim alten Widget anhand der Endung `-simu` der
+Radiokennung von `getVersion()` erkannt. Hier wird die native CRSF-Schnittstelle
+nicht verwendet: Vollständige CRSF-Command-Frames gehen über `serialWrite`
+an die serielle Simulatorausgabe. Die Frames beginnen mit `0xc8` und enthalten
+sowohl die Command-CRC (`0xba`) als auch die Frame-CRC (`0xd5`).
+Die native globale CRSF-Funktion wird dabei nicht überschrieben.
+Die serielle Ausgabe des Simulators muss für einen angeschlossenen Empfänger
+separat eingerichtet werden. Eine HF-Modulauswahl allein genügt dafür nicht.
+`serialWrite` liefert keine Zustellbestätigung; der Status zeigt daher
+`Simulator: serial CRSF (delivery unconfirmed)`.
+Fehlt die API, wird ein Fehler angezeigt und der Ausgangszustand bleibt
+zur Übertragung vorgemerkt. Ein serieller Telemetrieempfang ist nicht enthalten.
+
+Slider werden im Schaltzustandswort bei einem Wert größer 0 eingeschaltet.
+Nach Schaltzustandspaketen werden die PWM-Werte erneut übertragen.
+Entfernte oder umadressierte Ausgänge erhalten explizit einen Nullzustand;
+entfernte Slider zusätzlich `Prop` mit 0 %.
+
+S.Port, SHM, Telemetrieaktionen, Setzen virtueller Eingänge/Schalter
+und Migration alter Konfigurationsdateien sind
+in dieser ersten Version nicht enthalten.
+
+== Konfigurationsdateien
+
+Je Modell werden im Widget-Verzeichnis zwei wechselnde Dateien verwendet:
+`model_<Modellkennung als Hex>.a.lua` und `.b.lua`.
+Die Modellkennung ist `model.getInfo().filename`, falls vorhanden,
+sonst der Modellname. Bei Verwendung des Modellnamens führt Umbenennen
+zu einem anderen Dateipaar.
+Die bisherige MultiSwitch-Konfiguration wird weder geladen noch überschrieben.
+
+Jede Datei ist eine gültige Lua-Datei mit `return {`, einer Liste flacher
+Datensätze und abschließendem `}`. Die Datensätze haben `kind="config"`,
+`kind="tab"` oder `kind="control"`. Der Header steht zuerst, danach Tabs,
+danach Elemente. Alle Schemafelder müssen vorhanden sein, mit einer Ausnahme:
+Ältere Dateien ohne `autoSave` im Header werden als `autoSave=0` geladen.
+`version` beschreibt das Format, `generation` den Speicherstand.
+Die Dateien enthalten ausschließlich Konfiguration, keine Laufzeitzustände.
+
+Beim manuellen Bearbeiten:
+
+* Pro Datensatz genau eine Zeile mit abschließendem Komma verwenden.
+* Zeichenketten mit doppelten Anführungszeichen schreiben; nur skalare
+  Literale verwenden, keine Funktionen, Referenzen oder weiteren Tabellen.
+* Tab- und Element-IDs müssen jeweils eindeutig sein. Elemente verweisen
+  mit `tab` auf eine zuvor definierte Tab-ID.
+* Eine Datensatzzeile darf höchstens 2048 Bytes haben.
+* Der vollständige gültige Speicherstand mit der höchsten `generation`
+  wird geladen. Beim manuellen Ändern deshalb die Generation der bearbeiteten
+  Datei erhöhen oder beide Dateien konsistent bearbeiten.
+
+Module werden einzeln geladen. Die Konfigurationsdateien werden nicht als
+Ganzes mit `loadfile` ausgeführt: Der Loader liest maximal 512 Bytes oder
+verarbeitet einen Datensatz pro Hintergrundschritt. Nur der kleine,
+vorab auf Literale eingeschränkte Datensatz wird einzeln kompiliert und
+validiert. Damit sind sowohl Datei-I/O als auch das Verknüpfen der Elemente
+über mehrere Aufrufe verteilt.
+
+Anschließend bereitet eine Zustandsmaschine die Laufzeit vor:
+`header`, `tabs`, `controls`, `crsf`, `pending-off`, `retire-switches`,
+`retire-sliders`, `complete`. Jeder Hintergrundschritt verarbeitet höchstens
+einen Datensatz, eine CRSF-Zuordnung oder eine ausstehende Abschaltung.
+Dabei entstehen auch die Indizes für Tabs, Elemente, Adressen und
+Exklusivgruppen; spätere Zugriffe benötigen keine vollständigen Suchläufe.
+Erst am Ende werden die vorbereiteten Tabellen gemeinsam aktiviert.
+Während einer Konfigurationsänderung laufen die bisherigen physischen
+Eingänge und CRSF-Ausgänge weiter. Unveränderte Zuordnungen behalten ihre
+aktuellen Werte und Schaltflanken, auch wenn diese sich während der
+Vorbereitung ändern. Fehler und Abbruch lassen die bisherige Laufzeit aktiv.
+Weitere Konfigurationsänderungen sind während der Vorbereitung gesperrt;
+Auto-Save und angeforderte Speicherungen warten auf deren erfolgreichen Abschluss.
+
+Auch der UI-Aufbau besitzt eine eigene Zustandsmaschine und läuft nur in
+`refresh()`: höchstens vier einfache Objektdefinitionen pro Aufruf,
+einschließlich verschachtelter Labels und Slider. Reine Zustandswechsel
+laufen im gleichen Refresh weiter; spätestens nach 16 Zustandsmaschinenschritten
+wird unterbrochen. Seitenrahmen und Bilder werden jeweils allein in einem
+Refresh erzeugt, damit sie nicht mit weiteren Konstruktoraufrufen zusammenfallen.
+Beim Verschieben wird weiterhin höchstens ein Ziel-Tab pro Schritt vorbereitet.
+Laufzeitvorbereitung und Datei-I/O behalten ihre bisherigen Schrittgrenzen.
+Eine Fortschrittsanzeige
+bleibt bis zur fertigen Ansicht sichtbar; teilweise aufgebaute und veraltete
+Bedienelemente sind gesperrt. Seitenwechsel und Konfigurationsänderungen
+verwerfen einen veralteten Aufbau. Die Aktualisierung rastender Buttons
+prüft höchstens acht Elemente des aktiven Tabs pro Refresh.
+CRSF durchsucht pro Schritt nur begrenzte Ausschnitte seiner Warteschlangen;
+Neuübertragungen nach Wiederverbindung benötigen keine vollständigen Schleifen.
+
+Damit wachsen die Lua-Schleifen eines einzelnen Aufrufs nicht mit der
+gesamten Konfiguration. Eine absolute CPU-Limit-Garantie ergibt sich daraus
+jedoch nicht: Modulkompilierung, einzelne Dateioperationen sowie das native
+Erzeugen oder Löschen von LVGL-Objekten lassen sich innerhalb ihres Aufrufs
+nicht unterbrechen. Insbesondere Bilddateien und große vorhandene Ansichten
+müssen auf dem jeweiligen Sender geprüft werden.
+
+Beim Speichern wird ein unveränderlicher Konfigurationsstand datensatzweise
+in den jeweils anderen Slot geschrieben. Anschließend wird die Datei
+schrittweise zurückgelesen und inhaltlich mit diesem Stand verglichen.
+Erst danach meldet das Widget Erfolg. Weitere Änderungen während des
+Speicherns bleiben als ungespeichert markiert.
+Schreibfehler und unvollständige Dateien werden angezeigt. Der andere,
+zuletzt vollständig gespeicherte Slot bleibt erhalten.
+Ein vorhandener beschädigter Slot führt bei erfolgreicher Wiederherstellung
+zu einem Hinweis. Sind beide lesbaren Dateien ungültig, stoppt das Laden;
+`Retry loading` oder ein ausdrücklich bestätigter Neustart mit
+Standardkonfiguration sind möglich. Fehlende Slots werden anhand des
+Fehlercodes oder der EdgeTX-Funktion `fstat` erkannt und sind kein
+Wiederherstellungsfehler. Fehlen beide Dateien, startet die Standardkonfiguration.
+Können beide Dateien aus einem anderen Grund nicht geöffnet werden, stoppt
+das Laden mit den Dateifehlern. Vorhandene, nicht lesbare Konfigurationen
+werden nicht durch Auto-Save überschrieben; neue Standardwerte müssen
+ausdrücklich über `Create default configuration` bestätigt werden.
+Bei aktivem Auto-Save wird auch die neu erzeugte Startkonfiguration
+automatisch gespeichert und geprüft. Ohne Auto-Save bleibt sie bis `Save`
+oder zur Speicherbestätigung beim Verlassen des Vollbilds ungespeichert.
+
+== Entwicklung
+
+Die Module `config.lua`, `storage.lua`, `crsf.lua`, `runtime.lua`, `app.lua`
+und `ui.lua` trennen Datenmodell, inkrementelles I/O, Protokoll,
+schrittweise Laufzeitvorbereitung, gemeinsame Verarbeitung und
+ansichtsspezifische LVGL-Darstellung. Bei einem Update auch `runtime.lua`
+auf den Sender bzw. in das Simulatorverzeichnis kopieren.
+
+Die lokalen Tests benötigen Lua 5.3 oder neuer:
+
+----
+lua tests/run.lua
+----
+
+Die Tests bilden die EdgeTX-I/O-Aufrufe inklusive rückgabewertlosem
+`io.close` nach. Sie ersetzen keinen realen LVGL-/Sender-/Empfängertest.
