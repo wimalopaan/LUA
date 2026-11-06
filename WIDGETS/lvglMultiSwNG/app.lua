@@ -2,7 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
-app.modules = {"config", "storage", "crsf", "runtime", "ui"}
+app.modules = {"config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0
 app.values, app.inputIndex = {}, 1
 
@@ -13,10 +13,15 @@ function app.status()
     end
     if app.phase ~= "ready" then return "Loading: " .. app.phase end
     if app.saveJob then return "Saving configuration ..." end
+    if app.sender.offError then return app.sender.offError end
     if app.sender.error then return app.sender.error end
     local status = app.warning or (app.dirty and "Unsaved changes" or "Configuration saved")
     if app.sender.notice then return app.sender.notice .. "; " .. status end
     return status
+end
+
+function app.protocol(header)
+    return header.protocol > 0 and app.sport or app.crsf
 end
 
 local function beginPrepare(source, change, callback, dirty)
@@ -37,7 +42,7 @@ local function completePrepare(job)
         -- Only references are exchanged here; no configuration-sized loop runs.
         app.data, app.tabs, app.controls = state.data, state.tabs, state.controls
         app.values, app.physical, app.winners = state.values, state.physical, state.winners
-        app.addresses, app.sender = state.addresses, state.sender
+        app.addresses, app.sender, app.backend = state.addresses, state.sender, state.backend
         app.tabOrder, app.tabControls = state.tabOrder, state.tabControls
         app.visibleControls, app.masks = state.visibleControls, state.masks
         app.usedAddresses = state.usedAddresses
@@ -91,7 +96,7 @@ local function setState(state, id, value, changed)
         local other = state.winners[control.group]
         if other and other ~= id then
             state.values[other] = 0
-            app.crsf.set(state.sender, other, 0)
+            state.backend.set(state.sender, other, 0)
             if changed then changed(other, 0) end
         end
         state.winners[control.group] = id
@@ -99,7 +104,7 @@ local function setState(state, id, value, changed)
         state.winners[control.group] = nil
     end
     state.values[id] = value
-    app.crsf.set(state.sender, id, value)
+    state.backend.set(state.sender, id, value)
     if changed then changed(id, value) end
 end
 
@@ -115,21 +120,22 @@ function app.set(id, value)
 end
 
 function app.newTab()
-    local address = 0
-    while app.usedAddresses[address] and address < 256 do address = address + 1 end
-    if address == 256 then app.error = "No unused switch address"; return end
+    local address, count = 0, app.data.header.protocol >= 2 and 32 or 256
+    while app.usedAddresses[address] and address < count do address = address + 1 end
+    if address == count then app.error = "No unused switch address"; return end
     local id = app.maxTabId + 1
     return {kind = "tab", id = id, name = "Tab " .. id, address = address, columns = 2, height = 0}
 end
 
 function app.newControl(tab)
-    -- The protocol has exactly 256 addresses, with eight outputs each.
-    for offset = 0, 255 do
-        local address = (tab.address + offset) % 256
+    local acw = app.data.header.protocol >= 2
+    local count = acw and 32 or 256
+    for offset = 0, count - 1 do
+        local address = (tab.address + offset) % count
         local mask = app.masks[address] or 0
         if mask ~= 0xff then
             for output = 1, 8 do
-                if (mask & (1 << (output - 1))) == 0 then
+                if (mask & (1 << (output - 1))) == 0 and (not acw or address * 8 + output <= 255) then
                     local control = app.config.newControl(app.maxControlId + 1, tab.id, output)
                     if address ~= tab.address then control.address = address end
                     return control
@@ -237,7 +243,7 @@ function app.tick()
         app[name] = result
         app.moduleIndex = app.moduleIndex + 1
         if app.moduleIndex > #app.modules then
-            app.sender, app.physical = app.crsf.new(), {}
+            app.physical = {}
             app.phase = "files"
             app.loads = {a = app.storage.load(app.path .. ".a.lua"), b = app.storage.load(app.path .. ".b.lua")}
         end
@@ -248,15 +254,17 @@ function app.tick()
     elseif app.phase == "ready" or app.phase == "prepare" then
         if app.data then
             inputs()
-            local quality = getValue("RQly")
-            if type(quality) == "number" then
-                if quality > 0 and (app.quality or 0) == 0 then
-                    app.crsf.colors(app.sender)
-                    app.crsf.invalidate(app.sender)
+            if app.backend.colors then
+                local quality = getValue("RQly")
+                if type(quality) == "number" then
+                    if quality > 0 and (app.quality or 0) == 0 then
+                        app.backend.colors(app.sender)
+                        app.backend.invalidate(app.sender)
+                    end
+                    app.quality = quality
                 end
-                app.quality = quality
-            end
-            app.crsf.tick(app.sender, now)
+            else app.quality = nil end
+            app.backend.tick(app.sender, now)
         end
         if app.prepare then
             local job = app.prepare

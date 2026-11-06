@@ -3,6 +3,9 @@
 
 local M = {version = 1}
 M.types = {"Button", "Toggle", "3Pos", "Momentary", "Slider"}
+M.protocols = {"CRSF", "S.Port WM", "S.Port ACW 1.5", "S.Port ACW 1.4"}
+M.typeIds = {[0] = {1, 2, 3, 4, 5}, [1] = {1, 2, 3, 4}, [2] = {1, 2, 4}}
+M.typeIds[3] = M.typeIds[2]
 
 local function integer(v, low, high)
     return type(v) == "number" and v == math.floor(v) and v >= low and v <= high
@@ -12,6 +15,7 @@ local schemas = {
     config = {
         version = {1, 1}, generation = {0, 2147483647}, name = 32,
         destination = {0, 255}, interval = {5, 1000}, sendColors = {0, 1}, autoSave = {0, 1},
+        protocol = {0, 3}, sportPhysicalId = {0, 0x1b}, sportAppId = {0, 255},
     },
     tab = {
         id = {1, 2147483647}, name = 32, address = {0, 255},
@@ -24,6 +28,7 @@ local schemas = {
         visible = {0, 1}, switch = {-2147483648, 2147483647},
         switch2 = {-2147483648, 2147483647}, source = {-2147483648, 2147483647},
         activation = {-2147483648, 2147483647}, group = {0, 255}, image = 128,
+        sportType = {0, 255}, sportOptions = {0, 255}, sportPwmOn = {0, 255},
     },
 }
 
@@ -65,14 +70,15 @@ function M.newControl(id, tab, output)
         type = 1, address = -1, output = output,
         color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0,
         visible = 1, switch = 0, switch2 = 0, source = 0, activation = 0,
-        group = 0, image = "",
+        group = 0, image = "", sportType = 1, sportOptions = 0, sportPwmOn = 255,
     }
 end
 
 function M.defaults()
     local config = {
         header = {kind = "config", version = 1, generation = 0, name = "MultiSwitch NG",
-                  destination = 0, interval = 100, sendColors = 0, autoSave = 1},
+                  destination = 0, interval = 100, sendColors = 0, autoSave = 1,
+                  protocol = 0, sportPhysicalId = 0, sportAppId = 0x51},
         tabs = {{kind = "tab", id = 1, name = "Tab 1", address = 0, columns = 2, height = 0}},
         controls = {},
     }
@@ -90,9 +96,18 @@ function M.builder()
 end
 
 function M.append(builder, record)
-    if type(record) == "table" and record.kind == "config" and record.autoSave == nil then
+    if type(record) == "table" and record.kind == "config" then
         record = M.copy(record)
-        record.autoSave = 0
+        if record.autoSave == nil then record.autoSave = 0 end
+        if record.protocol == nil then record.protocol = 0 end
+        if record.sportPhysicalId == nil then record.sportPhysicalId = 0 end
+        if record.sportAppId == nil then record.sportAppId = 0x51 end
+    elseif type(record) == "table" and record.kind == "control"
+        and (record.sportType == nil or record.sportOptions == nil or record.sportPwmOn == nil) then
+        record = M.copy(record)
+        if record.sportType == nil then record.sportType = 1 end
+        if record.sportOptions == nil then record.sportOptions = 0 end
+        if record.sportPwmOn == nil then record.sportPwmOn = 255 end
     end
     local ok, err = M.validateRecord(record)
     if not ok then return nil, err end
@@ -107,10 +122,19 @@ function M.append(builder, record)
         builder.tabs[record.id] = record
         config.tabs[#config.tabs + 1] = record
     else
+        if config.header.protocol == 1 and record.type == 5 then
+            return nil, "Slider is not supported by S.Port WM: " .. record.name
+        end
+        if config.header.protocol >= 2 and (record.type == 3 or record.type == 5) then
+            return nil, M.types[record.type] .. " is not supported by S.Port ACW: " .. record.name
+        end
         local tab = builder.tabs[record.tab]
         if not tab then return nil, "Control refers to unknown tab" end
         if builder.ids[record.id] then return nil, "Duplicate control ID" end
         local endpoint = M.address(record, tab) * 8 + record.output
+        if config.header.protocol >= 2 and endpoint > 255 then
+            return nil, "ACW switch number must be 1..255: " .. record.name
+        end
         if builder.endpoints[endpoint] then
             return nil, "Address/output already assigned: " .. M.address(record, tab) .. "/" .. record.output
         end

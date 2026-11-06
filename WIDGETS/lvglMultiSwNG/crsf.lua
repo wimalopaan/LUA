@@ -1,7 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Wilhelm Meier
 
-local M = {}
+local app = ...
+local outputs = app.outputs
+local M = {addControl = outputs.addControl, set = outputs.set, invalidate = outputs.invalidate}
+local push
 
 function M.new()
     local simulator = false
@@ -9,13 +12,10 @@ function M.new()
         local _, radio = getVersion()
         simulator = type(radio) == "string" and string.sub(radio, -5) == "-simu"
     end
-    return {
-        groups = {}, props = {}, groupMap = {}, propMap = {}, bindings = {},
-        groupCursor = 1, propCursor = 1, colorCursor = 1, lane = 1,
-        off = {}, offIndex = 1, epoch = 0, colorEpoch = 0, pendingColors = 0,
-        simulator = simulator,
-        notice = simulator and "Simulator: serial CRSF (delivery unconfirmed)" or nil,
-    }
+    local sender = outputs.new()
+    sender.protocol, sender.simulator = 0, simulator
+    sender.notice = simulator and "Simulator: serial CRSF (delivery unconfirmed)" or nil
+    return sender
 end
 
 local function crc8(crc, byte, polynomial)
@@ -42,72 +42,29 @@ local function serialPush(payload)
     serialWrite(string.char(table.unpack(frame)))
 end
 
-local function indexed(list, lookup, key)
-    local item = lookup[key]
-    if item then return item end
-    item = {key = key, value = 0, dirty = true, last = -100000, colors = {}, props = {},
-            epoch = -1, colorEpoch = -1}
-    list[#list + 1], lookup[key] = item, item
-    return item
-end
-
 function M.header(sender, header)
     sender.destination, sender.interval = header.destination, header.interval
     sender.sendColors = header.sendColors == 1
 end
 
-function M.addControl(sender, control, address, value)
-    local group = indexed(sender.groups, sender.groupMap, address)
-    group.colors[#group.colors + 1] = control
-    group.colorDirty = true
-    local binding = {group = group, shift = 1 << (2 * (control.output - 1)), code = 0}
-    if control.type == 5 then
-        local prop = indexed(sender.props, sender.propMap, address * 8 + control.output - 1)
-        prop.address, prop.output = address, control.output - 1
-        binding.prop = prop
-        group.props[#group.props + 1] = prop
-    end
-    sender.bindings[control.id] = binding
-    M.set(sender, control.id, value)
-end
-
 function M.retireGroup(sender, previous, group)
-    if previous.destination ~= sender.destination or not sender.groupMap[group.key] then
-        sender.off[#sender.off + 1] = {previous.destination, 0xea, 0xa1, 0x07, group.key, 0, 0}
+    if previous.protocol ~= sender.protocol or previous.destination ~= sender.destination
+        or not sender.groupMap[group.key] then
+        outputs.retire(sender, previous, push, {previous.destination, 0xea, 0xa1, 0x07, group.key, 0, 0})
     end
 end
 
 function M.retireProp(sender, previous, prop)
-    if previous.destination ~= sender.destination or not sender.propMap[prop.key] then
-        sender.off[#sender.off + 1] = {previous.destination, 0xea, 0xa1, 0x02, prop.address, prop.output, 0}
-    end
-end
-
-function M.set(sender, id, value)
-    local binding = sender.bindings[id]
-    if not binding then return end
-    local code = value
-    if binding.prop then
-        code = value > 0 and 1 or 0
-        if binding.prop.value ~= value then
-            binding.prop.value, binding.prop.dirty = value, true
-        end
-    end
-    if code ~= binding.code then
-        local group = binding.group
-        group.value = group.value + (code - binding.code) * binding.shift
-        group.dirty = true
-        binding.code = code
+    if previous.protocol ~= sender.protocol or previous.destination ~= sender.destination
+        or not sender.propMap[prop.key] then
+        outputs.retire(sender, previous, push,
+                       {previous.destination, 0xea, 0xa1, 0x02, prop.address, prop.output, 0})
     end
 end
 
 function M.colors(sender, once)
     sender.colorEpoch = sender.colorEpoch + 1
     if once or sender.pendingColors > 0 then sender.pendingColors = #sender.groups end
-end
-
-function M.invalidate(sender)
-    sender.epoch = sender.epoch + 1
 end
 
 local function due(sender, item, now)
@@ -193,7 +150,16 @@ local function colorPacket(sender)
     end
 end
 
-local function push(sender, payload)
+local function available(sender)
+    if sender.simulator and type(serialWrite) ~= "function" then
+        sender.error = "Simulator serialWrite API unavailable"
+    elseif not sender.simulator and type(crossfireTelemetryPush) ~= "function" then
+        sender.error = "CRSF API unavailable"
+    else return true end
+end
+
+push = function(sender, payload)
+    if not available(sender) then return end
     local queued
     if sender.simulator then
         serialPush(payload)
@@ -208,21 +174,7 @@ local function push(sender, payload)
     return queued
 end
 function M.tick(sender, now)
-    if sender.simulator and type(serialWrite) ~= "function" then
-        sender.error = "Simulator serialWrite API unavailable"
-        return
-    elseif not sender.simulator and type(crossfireTelemetryPush) ~= "function" then
-        sender.error = "CRSF API unavailable"
-        return
-    end
-    local off = sender.off[sender.offIndex]
-    if off then
-        if push(sender, off) then
-            sender.offIndex = sender.offIndex + 1
-            if sender.offIndex > #sender.off then sender.off, sender.offIndex = {}, 1 end
-        end
-        return
-    end
+    if outputs.tickOff(sender) or not available(sender) then return end
     local lanes = {groupPacket, propPacket, colorPacket}
     for offset = 0, 2 do
         local lane = (sender.lane + offset - 1) % 3 + 1

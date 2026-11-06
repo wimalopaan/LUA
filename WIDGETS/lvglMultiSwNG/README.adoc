@@ -95,18 +95,23 @@ Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Apply`
 und `Cancel` sowie eine separate Statuszeile bleiben unten fest stehen.
 `Save` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 
-Die globalen Einstellungen sind in `General` und `CRSF` gegliedert,
+Die globalen Einstellungen sind in `General` und einen protokollspezifischen
+Bereich (`CRSF`, `S.Port WM` oder `S.Port ACW`) gegliedert,
 die Tab-Einstellungen in `General`, `Layout` und `Management`.
 Der Elementeditor hat drei Unterseiten: `Basic` für Name, Art, Adresse,
 Ausgang und Verwaltungsaktionen; `Inputs` für physische Zuordnungen,
 Aktivierung und Exklusivgruppe; `Appearance` für Sichtbarkeit, Farben,
 Schrift und Bilder. Wechsel zwischen Unterseiten erhalten den gesamten Entwurf.
 
-`Send colors now` wird im globalen Editor sofort durch die Einstellung
+Unter CRSF wird `Send colors now` im globalen Editor sofort durch die Einstellung
 `LED colors` aktiviert bzw. deaktiviert, ohne dass vorher `Apply` nötig ist.
 Der Button sendet die aktuell angewendeten Elementfarben einmalig.
 Die dauerhafte Einstellung und andere globale Editoränderungen bleiben
 bis `Apply` unverändert.
+Ist aktuell S.Port aktiv, muss zuerst CRSF angewendet werden.
+Ein Wechsel der Protokollauswahl erhält den gesamten Entwurf und die
+Einstellungen des jeweils anderen Protokolls, aktiviert aber erst mit `Apply`
+den neuen Transport.
 
 Nur passende Felder werden angezeigt: `Switch 2` bei `3Pos`, `Source`
 bei Slidern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
@@ -196,9 +201,114 @@ Nach Schaltzustandspaketen werden die PWM-Werte erneut übertragen.
 Entfernte oder umadressierte Ausgänge erhalten explizit einen Nullzustand;
 entfernte Slider zusätzlich `Prop` mit 0 %.
 
-S.Port, SHM, Telemetrieaktionen, Setzen virtueller Eingänge/Schalter
-und Migration alter Konfigurationsdateien sind
-in dieser ersten Version nicht enthalten.
+== S.Port WM
+
+Unter `Global` wählt `Protocol` zwischen `CRSF`, `S.Port WM`,
+`S.Port ACW 1.5` und `S.Port ACW 1.4`.
+Pro Modell ist genau ein Ausgabeprotokoll aktiv; alle Tabs verwenden es.
+CRSF bleibt die Vorgabe, auch für bestehende NG-Konfigurationsdateien.
+
+S.Port-WM übernimmt das Telegrammformat aus `../lvglMultiSw/sport.lua`:
+
+----
+sportTelemetryPush(physicalId, 0x31, appId * 256 + address, state)
+----
+
+`Physical ID` ist von 0 bis 27 einstellbar, Vorgabe 0.
+`App ID` bezeichnet das obere Byte der Data-ID, von 0 bis 255;
+Vorgabe 81 (`0x51`). Das untere Byte ist die effektive Element-/Tab-Adresse
+von 0 bis 255. Je Adresse enthält `state` acht Ausgänge mit jeweils zwei Bits:
+Ausgang 1 belegt Bits 0/1, Ausgang 8 Bits 14/15.
+Die Zustände 0, 1 und 2 werden unverändert übertragen.
+
+Unterstützt werden `Button`, `Toggle`, `3Pos` und `Momentary`, einschließlich
+physischer Schalter, Aktivierung und tabübergreifender Exklusivgruppen.
+Slider und LED-Farbübertragung sind im WM-Format nicht enthalten.
+Die Typauswahl enthält daher keine Slider; vorhandene Slider verhindern
+das Anwenden einer S.Port-Konfiguration mit einer Fehlermeldung.
+Die bisherige Konfiguration bleibt dabei aktiv.
+CRSF-Farbeinstellungen bleiben gespeichert, sind unter S.Port aber ohne Wirkung.
+Die Farben der Bedienoberfläche sind weiterhin frei einstellbar.
+
+Änderungen werden zeitnah übertragen; das gemeinsame `Interval` bestimmt
+die Wiederholung in Einheiten von 10 ms. Pro Hintergrundschritt werden
+höchstens acht Adressen geprüft und höchstens ein Telegramm gesendet.
+Ein rotierender Cursor sorgt für faire Verarbeitung aller Adressen.
+Nur der Rückgabewert `true` bestätigt die Annahme durch EdgeTX; fehlgeschlagene
+Versuche bleiben ausstehend und werden mit einem Statusfehler erneut versucht.
+Eine Empfangsbestätigung des Schaltmoduls ist damit nicht verbunden.
+
+Auf dem Sender ist ein zu S.Port kompatibles HF-Modul erforderlich.
+Das angesprochene Gerät darf nicht bereits als Telemetriesensor in EdgeTX
+registriert sein: Laut Vorlage kann EdgeTX andernfalls die Telegramme blockieren.
+Die Statusmeldung nennt deshalb HF-Konfiguration, Sendewarteschlange und
+Sensorkonflikte als mögliche Ursachen einer abgelehnten Übertragung.
+S.Port verwendet auch im Simulator die native `sportTelemetryPush`-API;
+eine eigene serielle S.Port-Ausgabe ist nicht enthalten.
+
+Entfernte Adressen und Änderungen von Physical-ID oder App-ID erhalten
+Nulltelegramme an die alte Adresse beziehungsweise mit den alten IDs.
+Beim Protokollwechsel werden alte Ausgänge über ihren ursprünglichen
+Transport ausgeschaltet; ausstehende Telegramme bleiben auch über weitere
+Konfigurationsänderungen erhalten. Ist der alte Transport nicht mehr erreichbar,
+zeigt der Status `Retired output pending`; das neue Protokoll wird trotzdem
+weiter bedient. Insgesamt bleibt es bei höchstens einem Telegramm pro Tick.
+Für eine sichere Abschaltung das HF-Modul erst nach erfolgreicher Übertragung
+der alten Nulltelegramme umstellen. Ein nicht mehr erreichbarer Empfänger
+kann durch das Widget nicht zuverlässig ausgeschaltet werden.
+
+== S.Port ACW 1.5 und 1.4
+
+Die ACW-Varianten übernehmen das Packing der Vorlage:
+
+----
+value = type * 0x1000000 + options * 0x10000 + number * 256 + pwm
+sportTelemetryPush(0x1b, 0x10, dataId, value)
+----
+
+Die Physical-ID ist fest `0x1b` (27), die Frame-ID `0x10`.
+Die Data-ID ist `0xac00` für ACW 1.5 und `0xfa07` für ACW 1.4.
+Die konfigurierbaren WM-IDs sind bei ACW ohne Wirkung und bleiben für einen
+späteren Wechsel zurück zu WM erhalten.
+
+Jedes Element besitzt unter `Basic` einen Bereich `ACW output`:
+
+* `ACW type` (`sportType`): Typbyte, Vorgabe 1.
+* `ACW options` (`sportOptions`): Optionsbyte, Vorgabe 0.
+* `On PWM` (`sportPwmOn`): Einschaltwert, Vorgabe 255.
+
+Alle drei Werte liegen zwischen 0 und 255 und werden unverändert übertragen.
+Typ und Optionen sind Rohwerte; ihre Bedeutung richtet sich nach dem
+angeschlossenen Decoder. PWM ist ein 8-Bit-Wert, kein Prozentwert.
+Ausgeschaltet wird PWM 0 gesendet, eingeschaltet der konfigurierte Einschaltwert.
+
+Die Schaltnummer ist die effektive Adresse mal 8 plus Ausgang (1 bis 8).
+Sie muss in ein Byte passen und liegt daher zwischen 1 und 255.
+Adresse 31/Ausgang 7 ist die letzte mögliche Kombination;
+Adresse 31/Ausgang 8 und höhere effektive Adressen werden beim Laden
+oder Anwenden ausdrücklich abgewiesen, nicht durch Maskieren verändert.
+Die automatische Ausgangsvergabe berücksichtigt diese Grenze.
+
+Unterstützt werden `Button`, `Toggle` und `Momentary`, einschließlich
+physischer Schalter, Aktivierung und Exklusivgruppen. Die Auswahl
+`Momentary` bleibt intern Elementart 4. `3Pos`, Slider und LED-Farbübertragung
+sind für ACW nicht umgesetzt; entsprechende Elementarten verhindern das
+Anwenden der Konfiguration. Zwei aktive 3Pos-Zustände werden nicht
+stillschweigend auf denselben Einschaltwert reduziert.
+
+Je Element wird ein eigenes Telegramm gesendet. Wiederholintervall,
+begrenzter Scheduler, Fehlerbehandlung und native Simulator-API entsprechen
+S.Port-WM: höchstens acht Elementprüfungen und ein Telegramm pro Tick.
+Beim Löschen oder Umadressieren eines Elements, Ändern von Typ/Optionen
+oder Wechseln des Protokolls wird zunächst das alte ACW-Telegramm mit PWM 0
+eingereiht. Es behält seine ursprüngliche Data-ID, Schaltnummer, Typ und Optionen.
+Auch Wechsel zwischen ACW 1.5, ACW 1.4 und WM bereiten Konfiguration und
+Abschaltungen schrittweise vor. Bereits angewendete Laufzeitwerte bleiben
+bei unveränderten Zuordnungen erhalten; PWM-Änderungen verwenden den neuen
+Einschaltwert.
+
+SHM, Telemetrieaktionen, Setzen virtueller Eingänge/Schalter
+und Migration der Konfiguration des alten Widgets sind noch nicht enthalten.
 
 == Konfigurationsdateien
 
@@ -212,8 +322,14 @@ Die bisherige MultiSwitch-Konfiguration wird weder geladen noch überschrieben.
 Jede Datei ist eine gültige Lua-Datei mit `return {`, einer Liste flacher
 Datensätze und abschließendem `}`. Die Datensätze haben `kind="config"`,
 `kind="tab"` oder `kind="control"`. Der Header steht zuerst, danach Tabs,
-danach Elemente. Alle Schemafelder müssen vorhanden sein, mit einer Ausnahme:
+danach Elemente. Alle Schemafelder müssen vorhanden sein, mit diesen Ausnahmen:
 Ältere Dateien ohne `autoSave` im Header werden als `autoSave=0` geladen.
+Fehlende Headerfelder `protocol`, `sportPhysicalId` und `sportAppId` werden
+mit 0 (CRSF), 0 und 81 ergänzt. `protocol=1` wählt S.Port-WM.
+`protocol=2` wählt ACW 1.5, `protocol=3` ACW 1.4.
+Fehlende Elementfelder `sportType`, `sportOptions` und `sportPwmOn` werden
+mit 1, 0 und 255 ergänzt. Die Felder bleiben auch bei CRSF und WM gespeichert,
+wirken aber nur bei ACW.
 `version` beschreibt das Format, `generation` den Speicherstand.
 Die Dateien enthalten ausschließlich Konfiguration, keine Laufzeitzustände.
 
@@ -237,14 +353,14 @@ validiert. Damit sind sowohl Datei-I/O als auch das Verknüpfen der Elemente
 über mehrere Aufrufe verteilt.
 
 Anschließend bereitet eine Zustandsmaschine die Laufzeit vor:
-`header`, `tabs`, `controls`, `crsf`, `pending-off`, `retire-switches`,
+`header`, `tabs`, `controls`, `sender`, `pending-off`, `retire-switches`,
 `retire-sliders`, `complete`. Jeder Hintergrundschritt verarbeitet höchstens
-einen Datensatz, eine CRSF-Zuordnung oder eine ausstehende Abschaltung.
+einen Datensatz, eine Sender-Zuordnung oder eine ausstehende Abschaltung.
 Dabei entstehen auch die Indizes für Tabs, Elemente, Adressen und
 Exklusivgruppen; spätere Zugriffe benötigen keine vollständigen Suchläufe.
 Erst am Ende werden die vorbereiteten Tabellen gemeinsam aktiviert.
 Während einer Konfigurationsänderung laufen die bisherigen physischen
-Eingänge und CRSF-Ausgänge weiter. Unveränderte Zuordnungen behalten ihre
+Eingänge und Ausgänge des bisherigen Protokolls weiter. Unveränderte Zuordnungen behalten ihre
 aktuellen Werte und Schaltflanken, auch wenn diese sich während der
 Vorbereitung ändern. Fehler und Abbruch lassen die bisherige Laufzeit aktiv.
 Weitere Konfigurationsänderungen sind während der Vorbereitung gesperrt;
@@ -296,11 +412,13 @@ oder zur Speicherbestätigung beim Verlassen des Vollbilds ungespeichert.
 
 == Entwicklung
 
-Die Module `config.lua`, `storage.lua`, `crsf.lua`, `runtime.lua`, `app.lua`
-und `ui.lua` trennen Datenmodell, inkrementelles I/O, Protokoll,
-schrittweise Laufzeitvorbereitung, gemeinsame Verarbeitung und
-ansichtsspezifische LVGL-Darstellung. Bei einem Update auch `runtime.lua`
-auf den Sender bzw. in das Simulatorverzeichnis kopieren.
+Die Module `config.lua`, `storage.lua`, `outputs.lua`, `crsf.lua`, `sport.lua`,
+`runtime.lua`, `app.lua` und `ui.lua` trennen Datenmodell, inkrementelles I/O,
+gemeinsame Ausgangszustände/Abschaltungen, Protokolle, schrittweise
+Laufzeitvorbereitung, gemeinsame Verarbeitung und ansichtsspezifische
+LVGL-Darstellung. Bei einem Update alle Lua-Module auf den Sender bzw.
+in das Simulatorverzeichnis kopieren, einschließlich der neuen
+`outputs.lua` und `sport.lua`.
 
 Die lokalen Tests benötigen Lua 5.3 oder neuer:
 

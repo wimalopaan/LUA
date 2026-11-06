@@ -6,6 +6,8 @@ local M = {}
 
 function M.begin(source, previous, change)
     local builder = app.config.builder()
+    local header = change and change.kind == "config" and change.record or source.header
+    local backend = app.protocol(header)
     return {
         source = source, previous = previous, change = change,
         phase = "header", index = 1, steps = 0, builder = builder, preserve = {},
@@ -13,7 +15,7 @@ function M.begin(source, previous, change)
             data = builder.config, tabs = {}, controls = {}, addresses = {},
             tabOrder = {}, tabControls = {}, visibleControls = {},
             values = {}, physical = {}, winners = {}, masks = {}, usedAddresses = {},
-            maxTabId = 0, maxControlId = 0, sender = app.crsf.new(),
+            maxTabId = 0, maxControlId = 0, backend = backend, sender = backend.new(),
         },
     }
 end
@@ -23,7 +25,7 @@ local function append(job, record)
     if not ok then job.done, job.error = true, err; return end
     local state = job.state
     if record.kind == "config" then
-        app.crsf.header(state.sender, state.data.header)
+        state.backend.header(state.sender, state.data.header)
     elseif record.kind == "tab" then
         state.tabs[record.id] = record
         state.tabOrder[record.id] = #state.data.tabs
@@ -108,34 +110,40 @@ function M.step(job)
                 end
                 local valid, err = app.config.finish(job.builder)
                 if not valid then job.done, job.error = true, err; return end
-                nextPhase(job, "crsf")
+                nextPhase(job, "sender")
             end
         end
-    elseif job.phase == "crsf" then
+    elseif job.phase == "sender" then
         local control = state.data.controls[job.index]
         if control then
-            app.crsf.addControl(state.sender, control, state.addresses[control.id], state.values[control.id])
+            state.backend.addControl(state.sender, control, state.addresses[control.id], state.values[control.id])
             job.index = job.index + 1
         else
             nextPhase(job, "pending-off")
-            job.index = previous and previous.sender.offIndex or 1
+            job.offProtocol = 0
+            job.index = previous and previous.sender.offIndex[0] or 1
         end
     elseif job.phase == "pending-off" then
-        local payload = previous and previous.sender.off[job.index]
+        local payload = previous and previous.sender.off[job.offProtocol][job.index]
         if payload then
-            state.sender.off[#state.sender.off + 1] = payload
+            if not payload.done then
+                local queue = state.sender.off[job.offProtocol]
+                queue[#queue + 1] = payload
+            end
             job.index = job.index + 1
+        elseif job.offProtocol == 0 then
+            job.offProtocol, job.index = 1, previous and previous.sender.offIndex[1] or 1
         else nextPhase(job, "retire-switches") end
     elseif job.phase == "retire-switches" then
         local group = previous and previous.sender.groups[job.index]
         if group then
-            app.crsf.retireGroup(state.sender, previous.sender, group)
+            previous.backend.retireGroup(state.sender, previous.sender, group)
             job.index = job.index + 1
         else nextPhase(job, "retire-sliders") end
     elseif job.phase == "retire-sliders" then
         local prop = previous and previous.sender.props[job.index]
         if prop then
-            app.crsf.retireProp(state.sender, previous.sender, prop)
+            previous.backend.retireProp(state.sender, previous.sender, prop)
             job.index = job.index + 1
         else
             job.phase, job.done = "complete", true

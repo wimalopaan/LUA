@@ -236,6 +236,20 @@ local function switchPicker(record, key)
             set = function(value) record[key] = value end}
 end
 
+local function typePicker(view, record)
+    local ids, names, positions = {}, {}, {}
+    for index, id in ipairs(app.config.typeIds[app.data.header.protocol]) do
+        ids[index], names[index], positions[id] = id, app.config.types[id], index
+    end
+    if not positions[record.type] then
+        ids[#ids + 1], names[#names + 1] = record.type, app.config.types[record.type]
+        positions[record.type] = #ids
+    end
+    return {type = "choice", values = names, w = scaled(180),
+        get = function() return positions[record.type] end,
+        set = function(value) record.type = ids[value]; view.renderRevision = nil end}
+end
+
 local function editorPage(view, width)
     local record, kind = view.edit, view.editKind
     local children = {}
@@ -245,15 +259,35 @@ local function editorPage(view, width)
         section("General")
         add("Name:", text(record, "name", 32))
         add("Auto-Save:", toggle(record, "autoSave"))
-        section("CRSF")
-        add("Destination:", number(record, "destination", 0, 255))
+        add("Protocol:", {type = "choice", values = app.config.protocols, w = scaled(180),
+            get = function() return record.protocol + 1 end,
+            set = function(value) record.protocol = value - 1; view.renderRevision = nil end})
+        section(app.config.protocols[record.protocol + 1])
         add("Interval:", number(record, "interval", 5, 1000))
         children[#children + 1] = hint("Interval unit: 10 ms.", width)
-        add("LED colors:", toggle(record, "sendColors"))
-        children[#children + 1] = actionRow({
-            button("Send colors now", function() app.crsf.colors(app.sender, true) end,
-                function() return record.sendColors == 1 end),
-        }, width)
+        if record.protocol == 1 then
+            add("Physical ID:", number(record, "sportPhysicalId", 0, 0x1b))
+            add("App ID:", number(record, "sportAppId", 0, 255))
+            children[#children + 1] = hint("App ID is the high byte; default: 81 (0x51).", width)
+            children[#children + 1] = hint("S.Port WM: no sliders or LED color transmission.", width)
+            children[#children + 1] = hint("Do not register the addressed device as a telemetry sensor.", width)
+        elseif record.protocol >= 2 then
+            children[#children + 1] = hint("Physical ID: 27 (0x1b), frame: 0x10.", width)
+            children[#children + 1] = hint(record.protocol == 2 and "Data ID: 0xac00." or "Data ID: 0xfa07.", width)
+            children[#children + 1] = hint("ACW: no 3Pos, sliders or LED color transmission.", width)
+            children[#children + 1] = hint("Type, options and on-PWM are set per control.", width)
+        else
+            add("Destination:", number(record, "destination", 0, 255))
+            add("LED colors:", toggle(record, "sendColors"))
+            children[#children + 1] = actionRow({
+                button("Send colors now", function() app.backend.colors(app.sender, true) end,
+                    function() return record.protocol == 0 and app.sender.protocol == 0
+                        and record.sendColors == 1 end),
+            }, width)
+            if app.sender.protocol ~= 0 then
+                children[#children + 1] = hint("Apply CRSF before sending colors.", width)
+            end
+        end
     elseif kind == "tab" then
         section("General")
         add("Name:", text(record, "name", 32))
@@ -316,12 +350,18 @@ local function editorPage(view, width)
     else
         section("Basic")
         add("Name:", text(record, "name", 32))
-        add("Type:", {type = "choice", values = app.config.types, w = scaled(180),
-            get = function() return record.type end,
-            set = function(value) record.type = value; view.renderRevision = nil end})
+        add("Type:", typePicker(view, record))
         add("Address:", number(record, "address", -1, 255))
         add("Output:", number(record, "output", 1, 8))
         children[#children + 1] = hint("Address -1: inherit the tab address.", width)
+        if app.data.header.protocol >= 2 then
+            children[#children + 1] = hint("ACW number = address * 8 + output; range: 1..255.", width)
+            section("ACW output")
+            add("ACW type:", number(record, "sportType", 0, 255))
+            add("ACW options:", number(record, "sportOptions", 0, 255))
+            add("On PWM:", number(record, "sportPwmOn", 0, 255))
+            children[#children + 1] = hint("Off PWM: 0; on-PWM default: 255.", width)
+        end
         if app.controls[record.id] then
             section("Management")
             local revision = view.editRevision

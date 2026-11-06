@@ -54,8 +54,11 @@ The initial layout has eight buttons sized automatically to fit the screen.
 Functional settings are stored in model-specific Lua configuration files shared by widget instances,
 not in widget options. Auto-Save is enabled by default for new configurations.
 Loading, saving and UI construction are processed incrementally.
-Currently only CRSF output is implemented, including serial output in the EdgeTX simulator;
-S.Port and other protocols are not yet supported.
+CRSF output (including serial output in the EdgeTX simulator), S.Port WM and S.Port ACW 1.5/1.4
+are supported, with one output protocol selected per model. S.Port WM supports switch controls,
+but not sliders or LED color transmission. ACW supports buttons, toggles and momentary controls
+with per-control type, options and on-PWM settings; it does not support 3-position switches,
+sliders or LED color transmission.
 
 See link:WIDGETS/lvglMultiSwNG/README.adoc[installation instructions and detailed documentation].
 

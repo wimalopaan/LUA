@@ -9,6 +9,7 @@ local stringMetatable = debug.getmetatable("")
 debug.setmetatable("", nil)
 local fs, now, frames, switches, sources, definitions, full, blocked, truncate, writeFailure
 local readCount, writeCount, loads, dialogs, quality, objectCount, createdTypes
+local sportFrames, sportBlocked
 COLOR_THEME_SECONDARY3, COLOR_THEME_PRIMARY3, COLOR_THEME_WARNING = 3, 4, 5
 LCD_W, LCD_H = 480, 272
 LEFT, VCENTER, SMLSIZE, BOLD = 0, 32, 1, 2
@@ -60,6 +61,7 @@ local function reset()
     definitions, full, blocked, truncate, writeFailure = {}, true, false, false, false
     readCount, writeCount, loads, dialogs, quality, objectCount = 0, 0, 0, {}, 0, 0
     createdTypes = {}
+    sportFrames, sportBlocked = {}, false
     io = {
         open = function(path, mode)
             if mode == "r" then
@@ -115,6 +117,14 @@ local function reset()
         frames[#frames + 1] = {payload = payload, blocked = blocked}
         return not blocked
     end
+    sportTelemetryPush = function(physicalId, primId, dataId, value)
+        assert(physicalId >= 0 and physicalId <= 0x1b and physicalId % 1 == 0)
+        assert(primId == 0x31 or primId == 0x10)
+        assert(dataId >= 0 and dataId <= 0xffff and dataId % 1 == 0)
+        assert(value >= 0 and value <= (primId == 0x31 and 0xffff or 0xffffffff) and value % 1 == 0)
+        sportFrames[#sportFrames + 1] = {payload = {physicalId, primId, dataId, value}, blocked = sportBlocked}
+        return not sportBlocked
+    end
     lvgl = {
         FLOW_ROW = 1, FLOW_COLUMN = 2,
         SCROLL_OFF = 0, SCROLL_VER = 2,
@@ -148,7 +158,9 @@ end
 
 local config = assert(loadfile(root .. "config.lua"))()
 local storage = assert(loadfile(root .. "storage.lua"))(config)
-local crsf = assert(loadfile(root .. "crsf.lua"))()
+local outputs = assert(loadfile(root .. "outputs.lua"))()
+local crsf = assert(loadfile(root .. "crsf.lua"))({outputs = outputs})
+local sport = assert(loadfile(root .. "sport.lua"))({outputs = outputs})
 
 local function finish(job, step)
     for _ = 1, 20000 do
@@ -197,12 +209,17 @@ local function render(app, view)
 end
 
 local function configure(sender, data, values)
-    crsf.header(sender, data.header)
+    local backend = sender.protocol == 1 and sport or crsf
+    backend.header(sender, data.header)
     local tabs = {}
     for _, tab in ipairs(data.tabs) do tabs[tab.id] = tab end
     for _, control in ipairs(data.controls) do
-        crsf.addControl(sender, control, config.address(control, tabs[control.tab]), values[control.id] or 0)
+        backend.addControl(sender, control, config.address(control, tabs[control.tab]), values[control.id] or 0)
     end
+end
+
+local function offCount(sender)
+    return #sender.off[0] + #sender.off[1]
 end
 
 local function save(app)
@@ -1079,17 +1096,17 @@ test("Large preparation is bounded and activates preserved live values atomicall
     end
     while not job.done do
         if job.phase == "controls" and job.index == 5 then app.set(2, 1) end
-        if job.phase == "crsf" and job.index == 2 then
+        if job.phase == "sender" and job.index == 2 then
             switches[1] = false
             app.set(3, 1)
         end
         local records = #job.state.data.tabs + #job.state.data.controls
-        local bindings, off, steps = added, #job.state.sender.off, job.steps
+        local bindings, off, steps = added, offCount(job.state.sender), job.steps
         advance(app)
         equal(job.steps - steps, 1)
         assert(#job.state.data.tabs + #job.state.data.controls - records <= 1)
         assert(added - bindings <= 1)
-        assert(#job.state.sender.off - off <= 1)
+        assert(offCount(job.state.sender) - off <= 1)
         if not job.done then
             equal(app.data, oldData)
             equal(app.sender, oldSender)
@@ -1187,23 +1204,23 @@ test("Retired CRSF outputs survive full queues and subsequent preparation", func
     blocked = true
     control.address = 9
     assert(commit(app, "control", control))
-    local pending = assert(app.sender.off[app.sender.offIndex])
-    equal(encode(pending), "0,234,161,2,0,0,0")
+    local pending = assert(app.sender.off[0][app.sender.offIndex[0]])
+    equal(encode(pending.payload), "0,234,161,2,0,0,0")
     app.set(1, 80)
     local header = config.copy(app.data.header)
     header.destination = 55
     assert(commit(app, "config", header))
-    equal(app.sender.off[1], pending)
-    equal(#app.sender.off, 4)
+    equal(app.sender.off[0][1], pending)
+    equal(offCount(app.sender), 4)
     advance(app)
-    equal(app.sender.offIndex, 1)
-    equal(encode(frames[#frames].payload), encode(pending))
+    equal(app.sender.offIndex[0], 1)
+    equal(encode(frames[#frames].payload), encode(pending.payload))
     blocked = false
     frames = {}
     advance(app, 4)
-    equal(encode(frames[1].payload), encode(pending))
+    equal(encode(frames[1].payload), encode(pending.payload))
     for _, frame in ipairs(frames) do equal(frame.payload[1], 0) end
-    equal(#app.sender.off, 0)
+    equal(offCount(app.sender), 0)
     frames = {}
     advance(app, 3)
     assert(find(function(frame)
@@ -1443,7 +1460,7 @@ test("Settings forms align fields and keep actions outside the scrolling area on
                 fields = fields + 1
             end
         end
-        equal(fields, 5)
+        equal(fields, 6)
     end
 end)
 
@@ -1921,6 +1938,686 @@ test("One-shot colors retry full queues and restart completely on a new color ep
     for time = 100, 110 do crsf.tick(sender, time) end
     assert(not find(function(frame) return frame.payload[4] == 0x0a end, frames))
     equal(sender.sendColors, false)
+end)
+
+test("Legacy configuration headers still load and transmit through CRSF", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.sportPhysicalId, data.header.sportAppId = nil, nil, nil
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 7), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    assert(not app.error, app.error)
+    equal(app.data.header.protocol, 0)
+    app.set(1, 1)
+    advance(app)
+    equal(encode(frames[#frames].payload), "0,234,161,7,0,0,1")
+    equal(#sportFrames, 0)
+    local header = config.copy(app.data.header)
+    header.protocol = 1
+    assert(commit(app, "config", header))
+    save(app)
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.data.header.protocol, 1)
+    equal(fresh.sender.physicalId, 0)
+    equal(fresh.sender.appId, 0x51)
+    equal(fresh.data.header.autoSave, 0)
+end)
+
+test("S.Port WM packs two-bit states, addresses and IDs and repeats without full invalidation", function()
+    local data, sender = config.defaults(), sport.new()
+    data.header.protocol, data.header.sportPhysicalId, data.header.sportAppId = 1, 0x1b, 0xff
+    data.header.interval, data.tabs[1].address = 10, 255
+    data.controls = {data.controls[1], data.controls[6], data.controls[8]}
+    data.controls[2].address, data.controls[2].type, data.controls[3].type = 254, 3, 3
+    configure(sender, data, {[1] = 1, [6] = 2, [8] = 2})
+    sport.tick(sender, 1)
+    sport.tick(sender, 2)
+    equal(encode(sportFrames[1].payload), "27,49,65535,32769")
+    equal(encode(sportFrames[2].payload), "27,49,65534,2048")
+    sport.tick(sender, 3)
+    equal(#sportFrames, 2)
+    sport.set(sender, 1, 0)
+    sport.tick(sender, 4)
+    equal(encode(sportFrames[3].payload), "27,49,65535,32768")
+    sport.tick(sender, 12)
+    equal(encode(sportFrames[4].payload), "27,49,65534,2048")
+    sport.invalidate(sender)
+    sport.tick(sender, 13)
+    sport.tick(sender, 14)
+    sport.tick(sender, 15)
+    equal(#sportFrames, 6)
+    equal(sportFrames[5].payload[3], 65535)
+    equal(sportFrames[6].payload[3], 65534)
+    sport.tick(sender, 0)
+    equal(#sportFrames, 7)
+    equal(#frames, 0)
+end)
+
+test("S.Port WM preserves failed requests and explicitly reports missing APIs", function()
+    local sender = sport.new()
+    configure(sender, config.defaults(), {[1] = 1})
+    sportBlocked = true
+    sport.tick(sender, 1)
+    contains(sender.error, "not accepted")
+    assert(sender.groups[1].dirty)
+    equal(sender.groups[1].last, -100000)
+    sportBlocked = false
+    sport.tick(sender, 2)
+    equal(encode(sportFrames[1].payload), encode(sportFrames[2].payload))
+    equal(sender.error, nil)
+    local native = sportTelemetryPush
+    sportTelemetryPush = function() return nil end
+    sport.set(sender, 1, 0)
+    sport.tick(sender, 3)
+    contains(sender.error, "not accepted")
+    assert(sender.groups[1].dirty)
+    equal(sender.groups[1].last, 2)
+    sportTelemetryPush = nil
+    sport.tick(sender, 4)
+    equal(sender.error, "S.Port API unavailable")
+    equal(#sportFrames, 2)
+    sportTelemetryPush = native
+    sport.tick(sender, 5)
+    equal(encode(sportFrames[3].payload), "0,49,20736,0")
+    equal(sender.error, nil)
+end)
+
+test("S.Port WM schedules all addresses fairly and limits idle scans", function()
+    local data, sender = config.defaults(), sport.new()
+    data.header.protocol, data.header.interval, data.controls = 1, 1000, {}
+    for address = 0, 255 do
+        local control = config.newControl(address + 1, 1, 1)
+        control.address = address
+        data.controls[#data.controls + 1] = control
+    end
+    configure(sender, data, {})
+    for time = 1, 256 do
+        sport.set(sender, 1, time % 2)
+        local before = #sportFrames
+        sport.tick(sender, time)
+        equal(#sportFrames - before, 1)
+        equal(sportFrames[#sportFrames].payload[3], 0x5100 + time - 1)
+    end
+    sport.tick(sender, 257)
+    local groups, reads = sender.groups, 0
+    sender.groups = setmetatable({}, {
+        __len = function() return #groups end,
+        __index = function(_, index) reads = reads + 1; return groups[index] end,
+    })
+    local before = #sportFrames
+    sport.tick(sender, 258)
+    assert(reads <= 8, "Unbounded S.Port address scan")
+    equal(#sportFrames, before)
+end)
+
+test("S.Port WM processes physical controls and mutex groups across tabs", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave = 1, 0
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 23
+    for index = 5, 8 do data.controls[index].tab = 2 end
+    data.controls[1].switch, data.controls[1].group = 19, 1
+    data.controls[2].type, data.controls[2].switch, data.controls[2].switch2 = 3, 10, -10
+    data.controls[6].switch, data.controls[6].group = 20, 1
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    switches[19], switches[-10], switches[20] = true, true, true
+    advance(app, 2)
+    equal(app.values[1], 0)
+    equal(app.values[2], 2)
+    equal(app.values[6], 1)
+    equal(encode(sportFrames[1].payload), "0,49,20736,8")
+    equal(encode(sportFrames[2].payload), "0,49,20759,1024")
+    app.set(8, 1)
+    advance(app)
+    equal(sportFrames[#sportFrames].payload[4], 17408)
+    local before = #sportFrames
+    app.tick()
+    equal(#sportFrames, before)
+    equal(#frames, 0)
+end)
+
+test("S.Port WM rejects sliders without activating or saving the invalid candidate", function()
+    local app = appInstance()
+    ready(app)
+    local control = config.copy(app.controls[1])
+    control.type = 5
+    assert(commit(app, "control", control))
+    settleAutosave(app)
+    app.set(1, 70)
+    local data, sender, revision, writes = app.data, app.sender, app.revision, writeCount
+    local header = config.copy(app.data.header)
+    header.protocol = 1
+    local job = assert(app.commit("config", header))
+    finish(job, function() advance(app) end)
+    assert(not job.success)
+    contains(job.error, "Slider is not supported")
+    equal(app.data, data)
+    equal(app.sender, sender)
+    equal(app.revision, revision)
+    equal(app.values[1], 70)
+    advance(app, 20)
+    equal(writeCount, writes)
+    equal(#sportFrames, 0)
+    local invalid = {header = header, tabs = data.tabs, controls = data.controls}
+    finish(storage.save("invalid.a.lua", invalid, 1), storage.stepSave)
+    contains(finish(storage.load("invalid.a.lua"), storage.stepLoad).error, "Slider is not supported")
+end)
+
+test("S.Port WM retains pending shutdowns with their original IDs across deletion and remapping", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave, data.tabs[1].address = 1, 0, 7
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 9
+    for index = 5, 8 do data.controls[index].tab = 2 end
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    app.set(1, 1)
+    app.set(5, 1)
+    advance(app, 2)
+    sportBlocked = true
+    assert(commit(app, "tab", config.copy(app.tabs[2]), true))
+    local pending = assert(app.sender.off[1][app.sender.offIndex[1]])
+    equal(encode(pending.payload), "0,49,20745,0")
+    local header = config.copy(app.data.header)
+    header.sportPhysicalId, header.sportAppId = 1, 0x52
+    assert(commit(app, "config", header))
+    equal(app.sender.off[1][1], pending)
+    equal(offCount(app.sender), 2)
+    advance(app)
+    contains(app.status(), "Retired output pending")
+    sportBlocked, sportFrames = false, {}
+    advance(app, 2)
+    equal(encode(sportFrames[1].payload), "0,49,20745,0")
+    equal(encode(sportFrames[2].payload), "0,49,20743,0")
+    equal(offCount(app.sender), 0)
+    advance(app)
+    equal(encode(sportFrames[3].payload), "1,49,20999,1")
+    equal(#frames, 0)
+end)
+
+test("Protocol changes preserve old shutdown transport without starving new outputs", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave = 1, 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    app.set(1, 1)
+    advance(app)
+    sportBlocked = true
+    local header = config.copy(app.data.header)
+    header.protocol = 0
+    assert(commit(app, "config", header))
+    sportFrames, frames = {}, {}
+    for _ = 1, 6 do
+        local before = #sportFrames + #frames
+        advance(app)
+        assert(#sportFrames + #frames - before <= 1, "Multiple transport packets in one tick")
+    end
+    equal(encode(frames[1].payload), "0,234,161,7,0,0,1")
+    equal(encode(sportFrames[1].payload), "0,49,20736,0")
+    equal(app.sender.offIndex[1], 1)
+    contains(app.status(), "Retired output pending: S.Port")
+    app.set(1, 0)
+    advance(app, 2)
+    equal(encode(frames[#frames].payload), "0,234,161,7,0,0,0")
+    sportBlocked = false
+    advance(app, 2)
+    equal(offCount(app.sender), 0)
+    equal(app.sender.offError, nil)
+    local native = crossfireTelemetryPush
+    crossfireTelemetryPush = nil
+    header = config.copy(app.data.header)
+    header.protocol = 1
+    assert(commit(app, "config", header))
+    sportFrames, frames = {}, {}
+    advance(app, 2)
+    contains(app.status(), "Retired output pending: CRSF API unavailable")
+    equal(encode(sportFrames[1].payload), "0,49,20736,0")
+    equal(#frames, 0)
+    crossfireTelemetryPush = native
+    advance(app)
+    equal(encode(frames[1].payload), "0,234,161,7,0,0,0")
+    equal(offCount(app.sender), 0)
+end)
+
+test("Unavailable CRSF shutdowns do not block later S.Port shutdowns", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 9
+    for index = 5, 8 do data.controls[index].tab = 2 end
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    app.set(1, 1)
+    app.set(5, 1)
+    advance(app)
+    crossfireTelemetryPush = nil
+    local header = config.copy(app.data.header)
+    header.protocol = 1
+    assert(commit(app, "config", header))
+    advance(app, 2)
+    contains(app.status(), "Retired output pending: CRSF")
+    assert(commit(app, "tab", config.copy(app.tabs[2]), true))
+    equal(#app.sender.off[0], 2)
+    equal(#app.sender.off[1], 1)
+    sportFrames = {}
+    advance(app)
+    equal(encode(sportFrames[1].payload), "0,49,20745,0")
+    equal(#app.sender.off[1], 0)
+    equal(#app.sender.off[0], 2)
+    advance(app, 2)
+    contains(app.status(), "Retired output pending: CRSF")
+    equal(encode(sportFrames[2].payload), "0,49,20736,1")
+end)
+
+test("Retirements already accepted during preparation are not transmitted again", function()
+    local data, previous, sender = config.defaults(), crsf.new(), sport.new()
+    configure(previous, data, {})
+    configure(sender, data, {})
+    crsf.retireGroup(previous, previous, {key = 9})
+    local pending = previous.off[0][1]
+    sender.off[0][1] = pending
+    crsf.tick(previous, 1)
+    assert(pending.done)
+    equal(#frames, 1)
+    sport.tick(sender, 2)
+    equal(#frames, 1)
+    equal(offCount(sender), 0)
+    sport.tick(sender, 3)
+    equal(encode(sportFrames[1].payload), "0,49,20736,0")
+end)
+
+test("Retired simulator CRSF packets keep serial framing after selecting S.Port", function()
+    getVersion = function() return "3.0.0", "tx16s-simu" end
+    local written = {}
+    serialWrite = function(data) written[#written + 1] = data end
+    crossfireTelemetryPush = function() error("Simulator shutdown must use serial CRSF") end
+    local data, previous, sender = config.defaults(), crsf.new(), sport.new()
+    configure(previous, data, {[1] = 1})
+    data.header.protocol = 1
+    configure(sender, data, {[1] = 1})
+    crsf.retireGroup(sender, previous, previous.groups[1])
+    sport.tick(sender, 1)
+    equal(#written, 1)
+    local bytes = {string.byte(written[1], 1, #written[1])}
+    equal(encode({table.unpack(bytes, 3, 10)}), "50,0,234,161,7,0,0,0")
+    equal(#sportFrames, 0)
+    sport.tick(sender, 2)
+    equal(encode(sportFrames[1].payload), "0,49,20736,1")
+    equal(offCount(sender), 0)
+end)
+
+test("Protocol editor preserves drafts and only shows supported settings and types", function()
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    press("Setup")
+    render(app, view)
+    press("Global")
+    render(app, view)
+    form("Name:").set("Protocol draft")
+    form("Destination:").set(42)
+    form("LED colors:").set(1)
+    form("Protocol:").set(2)
+    render(app, view)
+    equal(app.sender.protocol, 0)
+    assert(not find(function(item) return item.text == "LED colors:" or item.text == "Destination:" end))
+    form("Physical ID:").set(10)
+    form("App ID:").set(99)
+    form("Protocol:").set(1)
+    render(app, view)
+    equal(form("Name:").value, "Protocol draft")
+    equal(form("Destination:").get(), 42)
+    equal(form("LED colors:").get(), 1)
+    form("Protocol:").set(2)
+    render(app, view)
+    equal(form("Physical ID:").get(), 10)
+    equal(form("App ID:").get(), 99)
+    press("Apply")
+    render(app, view)
+    equal(app.sender.protocol, 1)
+    equal(app.sender.physicalId, 10)
+    equal(app.sender.appId, 99)
+    settleAutosave(app)
+    press("Tab settings")
+    render(app, view)
+    press("Edit")
+    render(app, view)
+    equal(#form("Type:").values, 4)
+    press("Cancel")
+    render(app, view)
+    view.page, view.renderRevision = "control", nil
+    render(app, view)
+    press("Global")
+    render(app, view)
+    form("Protocol:").set(1)
+    render(app, view)
+    local send = assert(find(function(item) return item.type == "button" and item.text == "Send colors now" end))
+    assert(not send.active(), "Unapplied CRSF draft must not send through S.Port")
+    local before = #sportFrames + #frames
+    send.press()
+    equal(#sportFrames + #frames, before)
+    equal(app.sender.protocol, 1)
+end)
+
+test("Legacy controls acquire ACW defaults without changing the original records", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave = 1, 0
+    for _, control in ipairs(data.controls) do
+        control.sportType, control.sportOptions, control.sportPwmOn = nil, nil, nil
+    end
+    finish(storage.save("model.a.lua", data, 6), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    assert(not app.error, app.error)
+    equal(data.controls[1].sportPwmOn, nil)
+    app.set(1, 1)
+    local header = config.copy(app.data.header)
+    header.protocol = 2
+    assert(commit(app, "config", header))
+    equal(app.values[1], 1)
+    save(app)
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.sender.variant, 2)
+    equal(fresh.controls[1].sportType, 1)
+    equal(fresh.controls[1].sportOptions, 0)
+    equal(fresh.controls[1].sportPwmOn, 255)
+    fresh.set(1, 1)
+    sportFrames = {}
+    advance(fresh)
+    equal(sportFrames[1].payload[4], 0x010001ff)
+end)
+
+test("ACW 1.5 and 1.4 encode all four bytes including unsigned high-bit values", function()
+    for variant = 2, 3 do
+        local data, sender = config.defaults(), sport.new()
+        data.header.protocol = variant
+        data.controls = {data.controls[1], data.controls[7]}
+        data.controls[1].sportType, data.controls[1].sportOptions, data.controls[1].sportPwmOn = 0x81, 0xaa, 99
+        data.controls[2].address = 31
+        data.controls[2].sportType, data.controls[2].sportOptions, data.controls[2].sportPwmOn = 255, 255, 255
+        assert(config.validate(data))
+        configure(sender, data, {[1] = 1, [7] = 1})
+        sportFrames = {}
+        sport.tick(sender, 1)
+        sport.tick(sender, 2)
+        local dataId = variant == 2 and 0xac00 or 0xfa07
+        equal(encode(sportFrames[1].payload), encode({27, 16, dataId, 0x81aa0163}))
+        equal(sportFrames[2].payload[4], 0xffffffff)
+        equal(sportFrames[2].payload[3], dataId)
+        sport.set(sender, 1, 0)
+        sport.tick(sender, 3)
+        equal(sportFrames[3].payload[4], 0x81aa0100)
+        sport.tick(sender, 4)
+        equal(#sportFrames, 3)
+        sport.tick(sender, 103)
+        sport.tick(sender, 104)
+        equal(#sportFrames, 5)
+        sport.invalidate(sender)
+        sport.tick(sender, 105)
+        sport.tick(sender, 106)
+        equal(#sportFrames, 7)
+        equal(#frames, 0)
+    end
+end)
+
+test("ACW retains busy and unavailable requests until their exact command is accepted", function()
+    for variant = 2, 3 do
+        local data, sender = config.defaults(), sport.new()
+        data.header.protocol, data.controls = variant, {data.controls[1]}
+        data.controls[1].sportPwmOn = 37
+        configure(sender, data, {[1] = 1})
+        sportFrames, sportBlocked = {}, true
+        sport.tick(sender, 1)
+        assert(sender.props[1].dirty)
+        equal(sender.props[1].last, -100000)
+        contains(sender.error, "not accepted")
+        sportBlocked = false
+        sport.tick(sender, 2)
+        equal(encode(sportFrames[1].payload), encode(sportFrames[2].payload))
+        equal(sender.error, nil)
+        local native = sportTelemetryPush
+        sportTelemetryPush = function() return nil end
+        sport.set(sender, 1, 0)
+        sport.tick(sender, 3)
+        contains(sender.error, "not accepted")
+        assert(sender.props[1].dirty)
+        equal(sender.props[1].last, 2)
+        sportTelemetryPush = native
+        sport.tick(sender, 4)
+        equal(sportFrames[3].payload[4], 0x01000100)
+        equal(sender.error, nil)
+    end
+end)
+
+test("ACW schedules 255 outputs fairly with bounded scans and one command per tick", function()
+    local data, sender = config.defaults(), sport.new()
+    data.header.protocol, data.header.interval, data.controls = 2, 1000, {}
+    for number = 1, 255 do
+        local control = config.newControl(number, 1, (number - 1) % 8 + 1)
+        control.address = (number - 1) // 8
+        data.controls[number] = control
+    end
+    assert(config.validate(data))
+    configure(sender, data, {})
+    for time = 1, 255 do
+        sport.set(sender, 1, time % 2)
+        local before = #sportFrames
+        sport.tick(sender, time)
+        equal(#sportFrames - before, 1)
+        equal((sportFrames[#sportFrames].payload[4] >> 8) & 255, time)
+        equal(sportFrames[#sportFrames].payload[2], 0x10)
+    end
+    sport.tick(sender, 256)
+    local props, reads = sender.props, 0
+    sender.props = setmetatable({}, {
+        __len = function() return #props end,
+        __index = function(_, index) reads = reads + 1; return props[index] end,
+    })
+    local before = #sportFrames
+    sport.tick(sender, 257)
+    assert(reads <= 8, "Unbounded ACW output scan")
+    equal(#sportFrames, before)
+end)
+
+test("ACW rejects unsupported types and number overflows instead of corrupting packed fields", function()
+    for variant = 2, 3 do
+        for _, kind in ipairs({3, 5}) do
+            local data = config.defaults()
+            data.header.protocol, data.controls[1].type = variant, kind
+            local valid, err = config.validate(data)
+            assert(not valid)
+            contains(err, "not supported by S.Port ACW")
+        end
+        local data = config.defaults()
+        data.header.protocol, data.controls[1].address, data.controls[1].output = variant, 31, 7
+        assert(config.validate(data))
+        data.controls[1].output = 8
+        local valid, err = config.validate(data)
+        assert(not valid)
+        contains(err, "ACW switch number must be 1..255")
+        data.tabs[1].address, data.controls[1].address = 32, -1
+        valid, err = config.validate(data)
+        assert(not valid)
+        contains(err, "ACW switch number must be 1..255")
+    end
+    local app = appInstance()
+    ready(app)
+    local control = config.copy(app.controls[1])
+    control.type = 3
+    assert(commit(app, "control", control))
+    settleAutosave(app)
+    app.set(1, 2)
+    local data, sender, revision, writes = app.data, app.sender, app.revision, writeCount
+    local header = config.copy(app.data.header)
+    header.protocol = 2
+    local ok, err = commit(app, "config", header)
+    assert(not ok)
+    contains(err, "3Pos is not supported")
+    equal(app.data, data)
+    equal(app.sender, sender)
+    equal(app.revision, revision)
+    equal(app.values[1], 2)
+    equal(writeCount, writes)
+end)
+
+test("ACW allocation stops at number 255 and never returns address 31 output 8", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave, data.tabs[1].address, data.controls = 2, 0, 31, {}
+    for number = 1, 254 do
+        local control = config.newControl(number, 1, (number - 1) % 8 + 1)
+        control.address = (number - 1) // 8
+        data.controls[number] = control
+    end
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local control = assert(app.newControl(app.tabs[1]))
+    equal(config.address(control, app.tabs[1]), 31)
+    equal(control.output, 7)
+    assert(commit(app, "control", control))
+    assert(not app.newControl(app.tabs[1]))
+    contains(app.error, "All switch outputs are assigned")
+    assert(not app.newTab())
+    contains(app.error, "No unused switch address")
+end)
+
+test("ACW retirements preserve old parameters and formats across edits and protocol changes", function()
+    local data = config.defaults()
+    data.header.protocol, data.header.autoSave, data.controls = 2, 0, {data.controls[1], data.controls[2]}
+    data.controls[1].sportType, data.controls[1].sportOptions, data.controls[1].sportPwmOn = 0x81, 5, 100
+    data.controls[2].sportType, data.controls[2].sportOptions, data.controls[2].sportPwmOn = 2, 9, 200
+    data.controls[2].type = 2
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    app.set(1, 1)
+    app.set(2, 1)
+    advance(app, 2)
+    sportBlocked = true
+    local control = config.copy(app.controls[1])
+    control.address = 1
+    assert(commit(app, "control", control))
+    app.set(1, 1)
+    control = config.copy(app.controls[2])
+    control.sportType, control.sportOptions, control.sportPwmOn = 3, 10, 90
+    assert(commit(app, "control", control))
+    equal(offCount(app.sender), 2)
+    advance(app)
+    contains(app.status(), "Retired output pending")
+    sportBlocked, sportFrames = false, {}
+    advance(app, 4)
+    equal(sportFrames[1].payload[4], 0x81050100)
+    equal(sportFrames[2].payload[4], 0x02090200)
+    equal(sportFrames[3].payload[4], 0x81050964)
+    equal(sportFrames[4].payload[4], 0x030a025a)
+    for _, frame in ipairs(sportFrames) do equal(frame.payload[3], 0xac00) end
+    local header = config.copy(app.data.header)
+    header.protocol = 3
+    assert(commit(app, "config", header))
+    sportFrames = {}
+    advance(app, 4)
+    equal(sportFrames[1].payload[3], 0xac00)
+    equal(sportFrames[2].payload[3], 0xac00)
+    equal(sportFrames[1].payload[4], 0x81050900)
+    equal(sportFrames[2].payload[4], 0x030a0200)
+    equal(sportFrames[3].payload[3], 0xfa07)
+    equal(sportFrames[4].payload[3], 0xfa07)
+    equal(sportFrames[3].payload[4], 0x81050964)
+    equal(sportFrames[4].payload[4], 0x030a025a)
+    header = config.copy(app.data.header)
+    header.protocol = 1
+    assert(commit(app, "config", header))
+    sportFrames = {}
+    advance(app, 4)
+    equal(sportFrames[1].payload[3], 0xfa07)
+    equal(sportFrames[2].payload[3], 0xfa07)
+    equal(sportFrames[1].payload[4] & 255, 0)
+    equal(sportFrames[2].payload[4] & 255, 0)
+    equal(encode(sportFrames[3].payload), "0,49,20737,1")
+    equal(encode(sportFrames[4].payload), "0,49,20736,4")
+    header = config.copy(app.data.header)
+    header.protocol = 2
+    assert(commit(app, "config", header))
+    sportFrames = {}
+    advance(app, 4)
+    equal(encode(sportFrames[1].payload), "0,49,20737,0")
+    equal(encode(sportFrames[2].payload), "0,49,20736,0")
+    equal(sportFrames[3].payload[3], 0xac00)
+    equal(sportFrames[4].payload[3], 0xac00)
+    header = config.copy(app.data.header)
+    header.protocol = 0
+    assert(commit(app, "config", header))
+    sportFrames, frames = {}, {}
+    advance(app, 4)
+    equal(#sportFrames, 2)
+    equal(sportFrames[1].payload[3], 0xac00)
+    equal(sportFrames[2].payload[3], 0xac00)
+    equal(sportFrames[1].payload[4] & 255, 0)
+    equal(sportFrames[2].payload[4] & 255, 0)
+    equal(encode(frames[1].payload), "0,234,161,9,2,1,0,1,0,0,4")
+    equal(offCount(app.sender), 0)
+end)
+
+test("ACW editors map Momentary correctly and retain driver settings across sections and saves", function()
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    press("Setup")
+    render(app, view)
+    press("Global")
+    render(app, view)
+    form("Protocol:").set(3)
+    render(app, view)
+    assert(not find(function(item) return item.text == "Physical ID:" or item.text == "LED colors:" end))
+    equal(app.data.header.protocol, 0)
+    form("Protocol:").set(4)
+    render(app, view)
+    assert(find(function(item) return item.text == "Data ID: 0xfa07." end))
+    press("Apply")
+    render(app, view)
+    equal(app.sender.variant, 3)
+    press("Tab settings")
+    render(app, view)
+    press("Edit")
+    render(app, view)
+    equal(#form("Type:").values, 3)
+    equal(form("Type:").values[3], "Momentary")
+    form("Type:").set(3)
+    render(app, view)
+    equal(view.edit.type, 4)
+    form("ACW type:").set(7)
+    form("ACW options:").set(19)
+    form("On PWM:").set(123)
+    press("Inputs")
+    render(app, view)
+    press("Basic")
+    render(app, view)
+    equal(form("ACW type:").get(), 7)
+    equal(form("ACW options:").get(), 19)
+    equal(form("On PWM:").get(), 123)
+    press("Apply")
+    render(app, view)
+    settleAutosave(app)
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.controls[1].type, 4)
+    fresh.set(1, 1)
+    sportFrames = {}
+    advance(fresh)
+    equal(sportFrames[1].payload[3], 0xfa07)
+    equal(sportFrames[1].payload[4], 0x0713017b)
 end)
 
 local failures = 0
