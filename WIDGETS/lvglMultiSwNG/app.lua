@@ -72,6 +72,7 @@ local function completePrepare(job)
         -- Only references are exchanged here; no configuration-sized loop runs.
         app.data, app.tabs, app.controls = state.data, state.tabs, state.controls
         app.values, app.physical, app.winners = state.values, state.physical, state.winners
+        app.groupCounts = state.groupCounts
         app.inputErrors, app.inputErrorCount = state.inputErrors, state.inputErrorCount
         app.inputErrorId = state.inputErrorId
         app.addresses, app.sender, app.backend = state.addresses, state.sender, state.backend
@@ -255,8 +256,8 @@ local function inputs()
                 app.set(control.id, 0)
                 failed = true
             end
-        elseif control.type ~= 5 and control.switch ~= 0 then
-            local value = getSwitchValue(control.switch) and 1 or 0
+        elseif control.type ~= 5 and (control.switch ~= 0 or control.type == 3 and control.switch2 ~= 0) then
+            local value = control.switch ~= 0 and getSwitchValue(control.switch) and 1 or 0
             if control.type == 3 and value == 0 and control.switch2 ~= 0 and getSwitchValue(control.switch2) then
                 value = 2
             end

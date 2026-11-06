@@ -136,11 +136,44 @@ local function selectTab(view, id)
     view.tab, view.renderRevision = id, nil
 end
 
-local function controlWidget(view, control, width, height)
+local function threePosition(control, width, height, active, set)
+    local pad, gap = scaled(2), scaled(2)
+    local buttonWidth = math.max(1, math.floor((width - 2 * pad - 2 * gap) / 3))
+    local buttonHeight = math.max(1, height - 2 * pad)
+    local labels = {control.leftText, t("Off"), control.rightText}
+    local font = control.font
+    for _, candidate in ipairs({control.font, SMLSIZE, TINSIZE}) do
+        font = candidate
+        local _, fontHeight = lcd.sizeText("M", font)
+        local fits = fontHeight + 2 * pad <= buttonHeight
+        for _, label in ipairs(labels) do
+            if lcd.sizeText(label, font) + 2 * scaled(4) > buttonWidth then fits = false; break end
+        end
+        if fits then break end
+    end
+    local buttons = {}
+    for index, position in ipairs({2, 0, 1}) do
+        buttons[index] = {
+            type = "button", name = "c" .. control.id .. "p" .. position, text = labels[index],
+            x = pad + (index - 1) * (buttonWidth + gap), y = pad, w = buttonWidth, h = buttonHeight,
+            font = font, color = control.color, textColor = control.textColor, active = active,
+            checked = app.values[control.id] == position,
+            press = function()
+                set(position)
+                return app.values[control.id] == position and 1 or 0
+            end,
+        }
+    end
+    return {type = "box", name = "c" .. control.id, w = width, h = height,
+            scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = buttons}
+end
+
+local function controlBody(view, control, width, height)
     local id = control.id
     local function active()
         return app.active(control) and (control.type == 5 and control.source == 0
-                                       or control.type ~= 5 and control.switch == 0)
+                                       or control.type ~= 5 and control.switch == 0
+                                           and (control.type ~= 3 or control.switch2 == 0))
     end
     local function set(value)
         if active() then app.set(id, value) end
@@ -161,18 +194,14 @@ local function controlWidget(view, control, width, height)
         common.cornerRadius = math.floor(math.min(width, height) / 2)
         common.press = function() release(view); view.held = id; set(1) end
         common.release = function() if view.held == id then release(view) end end
+    elseif control.type == 3 then
+        return threePosition(control, width, height, active, set)
     else
         local input = {type = control.type == 2 and "toggle" or "slider", w = width - 8,
                        h = math.max(20, height - 24), color = control.color, active = active}
-        if control.type == 3 then
-            input.min, input.max = -1, 1
-            input.get = function() return app.values[id] == 2 and -1 or app.values[id] end
-            input.set = function(value) set(value == -1 and 2 or value) end
-        else
-            if control.type == 5 then input.min, input.max = 0, 100 end
-            input.get = function() return app.values[id] end
-            input.set = set
-        end
+        if control.type == 5 then input.min, input.max = 0, 100 end
+        input.get = function() return app.values[id] end
+        input.set = set
         return {type = "box", w = width, h = height, flexFlow = lvgl.FLOW_COLUMN,
                 children = {{type = "label", text = control.name, font = control.font,
                              color = control.textColor, w = width - 8, align = CENTER}, input}}
@@ -182,6 +211,25 @@ local function controlWidget(view, control, width, height)
                             x = 0, y = 0, w = height - 8, h = height - 8}}
     end
     return common
+end
+
+local function controlWidget(view, control, width, height)
+    if control.type == 5 or (app.groupCounts[control.group] or 0) < 2 then
+        return controlBody(view, control, width, height)
+    end
+    local marker = "G" .. control.group
+    local markerWidth, markerHeight = lcd.sizeText(marker, TINSIZE)
+    markerWidth = markerWidth + 2 * scaled(2)
+    local contentWidth = math.max(1, width - markerWidth - scaled(2))
+    local content = controlBody(view, control, contentWidth, height)
+    content.x, content.y = 0, 0
+    return {type = "box", name = "group" .. control.id, w = width, h = height,
+            scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = {
+                content,
+                {type = "label", name = "g" .. control.id, text = marker, font = TINSIZE,
+                 x = width - markerWidth, y = math.floor((height - markerHeight) / 2),
+                 w = markerWidth, h = markerHeight, align = CENTER},
+            }}
 end
 
 local function controlFooter(view, width)
@@ -384,6 +432,10 @@ local function editorPage(view, width)
         section("Basic")
         add("Name:", text(record, "name", 32))
         add("Type:", typePicker(view, record))
+        if record.type == 3 then
+            add("Left text:", text(record, "leftText", 32))
+            add("Right text:", text(record, "rightText", 32))
+        end
         add("Address:", number(record, "address", -1, 255))
         add("Output:", number(record, "output", 1, 8))
         children[#children + 1] = hint("Address -1: inherit the tab address.", width)
@@ -776,9 +828,14 @@ function M.refresh(view)
         for _ = 1, math.min(8, #list) do
             if view.pollIndex > #list then view.pollIndex = 1 end
             local control = list[view.pollIndex]
-            local value, ref = app.values[control.id] ~= 0, view.refs["c" .. control.id]
-            if ref and control.type == 1 and view.checked[control.id] ~= value then
-                ref:set({checked = value})
+            local value, ref = app.values[control.id], view.refs["c" .. control.id]
+            if ref and control.type == 1 and view.checked[control.id] ~= (value ~= 0) then
+                ref:set({checked = value ~= 0})
+                view.checked[control.id] = value ~= 0
+            elseif ref and control.type == 3 and view.checked[control.id] ~= value then
+                for position = 0, 2 do
+                    view.refs["c" .. control.id .. "p" .. position]:set({checked = value == position})
+                end
                 view.checked[control.id] = value
             end
             view.pollIndex = view.pollIndex + 1

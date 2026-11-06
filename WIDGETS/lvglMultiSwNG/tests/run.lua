@@ -973,7 +973,7 @@ test("Changing an item to Schalter builds a native toggle without slider propert
     equal(app.error, nil)
 end)
 
-test("Toggle, three-position and slider captions stay centered above their inputs", function()
+test("Toggle and slider captions stay centered while three-position controls use only button labels", function()
     local data = config.defaults()
     data.header.autoSave = 0
     data.controls = {data.controls[1], data.controls[2], data.controls[3]}
@@ -984,15 +984,272 @@ test("Toggle, three-position and slider captions stay centered above their input
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
     render(app, view)
     for _, control in ipairs(app.data.controls) do
-        local box = assert(find(function(item)
-            return item.type == "box" and item.children and item.children[1].text == control.name
-        end))
-        local caption, input = box.children[1], box.children[2]
-        equal(box.flexFlow, lvgl.FLOW_COLUMN)
-        equal(caption.align, CENTER)
-        equal(caption.w, input.w)
-        equal(input.type, control.type == 2 and "toggle" or "slider")
+        if control.type == 3 then
+            local box = view.refs["c" .. control.id].definition
+            equal(#box.children, 3)
+            for _, item in ipairs(box.children) do equal(item.type, "button") end
+            assert(not find(function(item) return item.type == "label" and item.text == control.name end, box.children))
+        else
+            local box = assert(find(function(item)
+                return item.type == "box" and item.children and item.children[1].text == control.name
+            end))
+            local caption, input = box.children[1], box.children[2]
+            equal(box.flexFlow, lvgl.FLOW_COLUMN)
+            equal(caption.align, CENTER)
+            equal(caption.w, input.w)
+            equal(input.type, control.type == 2 and "toggle" or "slider")
+        end
     end
+end)
+
+test("Three-position groups select stable protocol states and fit wide and narrow screens", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls = {data.controls[1], data.controls[2]}
+    data.controls[1].type, data.controls[2].type = 3, 5
+    data.controls[1].leftText, data.controls[1].rightText = "Save", "Inputs"
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    for _, screen in ipairs({{320, 240, 204, 0}, {480, 272, 227, 0},
+                            {800, 480, 412, 0}, {480, 272, 227, 30}}) do
+        LCD_W, LCD_H, lvgl.PAGE_BODY_HEIGHT = screen[1], screen[2], screen[3]
+        lvgl.UI_ELEMENT_HEIGHT = LCD_W == 800 and 48 or nil
+        local tab = config.copy(app.tabs[1])
+        tab.height = screen[4]
+        assert(commit(app, "tab", tab))
+        app.set(1, 0)
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
+        render(app, view)
+        local group = view.refs.c1.definition
+        equal(#group.children, 3)
+        local expected = {"Save", "Aus", "Inputs"}
+        local right = 0
+        for index, position in ipairs({2, 0, 1}) do
+            local button = group.children[index]
+            equal(button, view.refs["c1p" .. position].definition)
+            equal(button.text, expected[index])
+            equal(button.checked, position == 0)
+            assert(button.x >= right and button.x + button.w <= group.w)
+            assert(button.y >= 0 and button.y + button.h <= group.h)
+            local _, fontHeight = lcd.sizeText("M", button.font)
+            assert(fontHeight <= button.h)
+            right = button.x + button.w
+        end
+        local objects = objectCount
+        for _, position in ipairs({2, 2, 1, 0}) do
+            equal(view.refs["c1p" .. position].definition.press(), 1)
+            equal(app.values[1], position)
+            app.ui.refresh(view)
+            for state = 0, 2 do equal(view.refs["c1p" .. state].definition.checked, state == position) end
+        end
+        equal(objectCount, objects)
+        local slider = assert(find(function(item) return item.type == "slider" end))
+        equal(slider.min, 0)
+        equal(slider.max, 100)
+        slider.set(73)
+        equal(app.values[2], 73)
+        equal(slider.get(), 73)
+    end
+end)
+
+test("Three-position user labels survive editing, type changes, saving and another menu language", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "editor",
+                  editKind = "control", edit = config.copy(app.controls[1]), editRevision = app.revision}
+    render(app, view)
+    assert(not find(function(item) return item.text == "Text links:" end))
+    form("Art:").set(3)
+    render(app, view)
+    form("Text links:").set('Tür "links"')
+    form("Text rechts:").set("Save")
+    form("Art:").set(2)
+    render(app, view)
+    assert(not find(function(item) return item.text == "Text rechts:" end))
+    form("Art:").set(3)
+    render(app, view)
+    equal(form("Text links:").value, 'Tür "links"')
+    equal(form("Text rechts:").value, "Save")
+    press("Anwenden")
+    render(app, view)
+    press("Bedienung")
+    render(app, view)
+    equal(view.refs.c1p2.definition.text, 'Tür "links"')
+    equal(view.refs.c1p0.definition.text, "Aus")
+    equal(view.refs.c1p1.definition.text, "Save")
+    save(app)
+    equal(app.saveError, nil)
+    getGeneralSettings = function() return {language = "EN", voice = "de"} end
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.controls[1].leftText, 'Tür "links"')
+    equal(fresh.controls[1].rightText, "Save")
+    local nextView = {zone = {w = 480, h = 272}, app = fresh, page = "control"}
+    render(fresh, nextView)
+    equal(nextView.refs.c1p2.definition.text, 'Tür "links"')
+    equal(nextView.refs.c1p0.definition.text, "Off")
+    equal(nextView.refs.c1p1.definition.text, "Save")
+end)
+
+test("Legacy controls receive missing label defaults but invalid explicit labels are rejected", function()
+    getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    for _, control in ipairs(data.controls) do control.leftText, control.rightText = nil, nil end
+    data.controls[1].type = 3
+    data.controls[2].leftText, data.controls[2].rightText = "", "Keep"
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    equal(app.phase, "ready")
+    equal(app.controls[1].leftText, "Links")
+    equal(app.controls[1].rightText, "Rechts")
+    equal(app.controls[2].leftText, "")
+    equal(app.controls[2].rightText, "Keep")
+    equal(app.data.header.version, 1)
+    data.controls[1].leftText = 17
+    finish(storage.save("invalid.a.lua", data, 1), storage.stepSave)
+    local writes = writeCount
+    local invalid = appInstance("invalid")
+    ready(invalid)
+    equal(invalid.phase, "error")
+    contains(invalid.error, "control.leftText")
+    equal(writeCount, writes)
+end)
+
+test("Physical three-position groups are read-only and keep their selection current beyond one poll batch", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    local control = config.newControl(9, 1, 1)
+    control.address, control.type, control.switch2 = 1, 3, 20
+    data.controls[9] = control
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    for position = 0, 2 do
+        local button = view.refs["c9p" .. position].definition
+        assert(not button.active())
+        equal(button.press(), 0)
+        equal(app.values[9], 0)
+    end
+    for _, on in ipairs({true, false, true}) do
+        switches[20] = on
+        advance(app, 8)
+        app.ui.refresh(view)
+        app.ui.refresh(view)
+        local selected = on and 2 or 0
+        equal(app.values[9], selected)
+        for position = 0, 2 do equal(view.refs["c9p" .. position].definition.checked, position == selected) end
+    end
+    control = config.copy(app.controls[9])
+    control.switch = 10
+    assert(commit(app, "control", control))
+    switches[10] = true
+    render(app, view)
+    app.ui.refresh(view)
+    equal(app.values[9], 1)
+    equal(view.refs.c9p1.definition.checked, true)
+    equal(view.refs.c9p2.definition.checked, false)
+    assert(not view.refs.c9p1.definition.active())
+end)
+
+test("Group markers identify shared groups across tabs and preserve control layouts and interaction", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 1
+    data.controls[1].group = 7
+    data.controls[2].tab, data.controls[2].type, data.controls[2].group = 2, 2, 7
+    data.controls[3].type, data.controls[3].group = 3, 8
+    data.controls[4].type, data.controls[4].group = 4, 8
+    data.controls[5].group = 9
+    data.controls[6].type, data.controls[6].group = 5, 9
+    data.controls[8].group, data.controls[8].visible = 10, 0
+    data.controls[9] = config.newControl(9, 1, 1)
+    data.controls[9].address, data.controls[9].group = 2, 10
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    for _, screen in ipairs({{320, 240, 204}, {480, 272, 227}, {800, 480, 412}}) do
+        LCD_W, LCD_H, lvgl.PAGE_BODY_HEIGHT = screen[1], screen[2], screen[3]
+        lvgl.UI_ELEMENT_HEIGHT = LCD_W == 800 and 48 or nil
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control", tab = 1}
+        render(app, view)
+        for id, group in pairs({[1] = 7, [3] = 8, [4] = 8, [9] = 10}) do
+            local wrapper = view.refs["group" .. id].definition
+            local content, marker = wrapper.children[1], view.refs["g" .. id].definition
+            equal(marker.text, "G" .. group)
+            assert(content.x + content.w <= marker.x)
+            assert(marker.x + marker.w <= wrapper.w)
+            assert(marker.y >= 0 and marker.y + marker.h <= wrapper.h)
+            equal(wrapper.scrollDir, lvgl.SCROLL_OFF)
+            equal(app.controls[id].name, data.controls[id].name)
+        end
+        for _, id in ipairs({2, 5, 6, 7, 8}) do equal(view.refs["g" .. id], nil) end
+        view.refs.c4.definition.press()
+        equal(app.values[4], 1)
+        view.refs.c3p2.definition.press()
+        equal(app.values[3], 2)
+        equal(app.values[4], 0)
+        view.refs.c4.definition.release()
+        view.refs.c1.definition.press()
+        equal(app.values[1], 1)
+        view.tab, view.renderRevision = 2, nil
+        render(app, view)
+        equal(view.refs.g2.definition.text, "G7")
+        local toggle = assert(find(function(item) return item.type == "toggle" end))
+        toggle.set(1)
+        equal(app.values[2], 1)
+        equal(app.values[1], 0)
+    end
+end)
+
+test("Group markers change only with applied membership, deletion and control type changes", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls[1].group, data.controls[2].group = 4, 4
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    equal(view.refs.g1.definition.text, "G4")
+    local counts = app.groupCounts
+    local control = config.copy(app.controls[2])
+    control.group = 0
+    local job = assert(app.commit("control", control))
+    advance(app, 5)
+    equal(app.groupCounts, counts)
+    equal(view.refs.g1.definition.text, "G4")
+    app.cancelUpdate(job)
+    equal(app.groupCounts, counts)
+    assert(commit(app, "control", control))
+    render(app, view)
+    equal(view.refs.g1, nil)
+    equal(view.refs.g2, nil)
+    control.group = 4
+    assert(commit(app, "control", control))
+    render(app, view)
+    equal(view.refs.g1.definition.text, "G4")
+    control.type = 5
+    assert(commit(app, "control", control))
+    render(app, view)
+    equal(view.refs.g1, nil)
+    equal(view.refs.g2, nil)
+    control.type = 1
+    assert(commit(app, "control", control))
+    assert(commit(app, "control", app.controls[2], true))
+    render(app, view)
+    equal(view.refs.g1, nil)
+    equal(view.refs.g2, nil)
 end)
 
 test("Move action previews inherited address, cancels, and preserves element identity", function()

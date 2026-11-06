@@ -24,7 +24,7 @@ local schemas = {
         columns = {1, 4}, height = {0, 240},
     },
     control = {
-        id = {1, 2147483647}, tab = {1, 2147483647}, name = 32,
+        id = {1, 2147483647}, tab = {1, 2147483647}, name = 32, leftText = 32, rightText = 32,
         type = {1, 5}, address = {-1, 255}, output = {1, 8},
         color = {-2147483648, 4294967295}, textColor = {-2147483648, 4294967295}, font = {0, 65535},
         visible = {0, 1}, switch = {-2147483648, 2147483647},
@@ -69,6 +69,7 @@ end
 function M.newControl(id, tab, output)
     return {
         kind = "control", id = id, tab = tab, name = t("Output %d", output),
+        leftText = t("Left"), rightText = t("Right"),
         type = 1, address = -1, output = output,
         color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0,
         visible = 1, switch = 0, switch2 = 0, source = 0, activation = 0,
@@ -105,11 +106,14 @@ function M.append(builder, record)
         if record.sportPhysicalId == nil then record.sportPhysicalId = 0 end
         if record.sportAppId == nil then record.sportAppId = 0x51 end
     elseif type(record) == "table" and record.kind == "control"
-        and (record.sportType == nil or record.sportOptions == nil or record.sportPwmOn == nil) then
+        and (record.sportType == nil or record.sportOptions == nil or record.sportPwmOn == nil
+            or record.leftText == nil or record.rightText == nil) then
         record = M.copy(record)
         if record.sportType == nil then record.sportType = 1 end
         if record.sportOptions == nil then record.sportOptions = 0 end
         if record.sportPwmOn == nil then record.sportPwmOn = 255 end
+        if record.leftText == nil then record.leftText = t("Left") end
+        if record.rightText == nil then record.rightText = t("Right") end
     end
     local ok, err = M.validateRecord(record)
     if not ok then return nil, err end

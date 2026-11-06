@@ -176,6 +176,17 @@ ein Unterseiten- oder Typwechsel speichert nichts automatisch.
 
 `Button` rastet ein, `Toggle` ist ein Ein/Aus-Schalter, `3Pos` verwendet
 die Zustände Mitte = 0, rechts = 1, links = 2.
+`3Pos` erscheint als Dreier-Tastengruppe mit hervorgehobener aktiver Position.
+Im Elementeditor unter `Basic` legen `Left text` und `Right text` die beiden
+äußeren Beschriftungen fest (je höchstens 32 Bytes). Diese Benutzertexte
+werden unverändert gespeichert und nicht übersetzt oder durch `L`/`R` ersetzt.
+Die mittlere Taste zeigt übersetzt `Off` bzw. `Aus`. Eine Überschrift über
+der Gruppe entfällt; der Elementname bleibt für die Verwaltung erhalten.
+Bei wenig Platz wird zunächst eine kleinere Schrift verwendet.
+Alte Konfigurationen ohne die neuen Felder erhalten beim Laden passende
+Standardtexte; nach dem Speichern bleiben auch diese sprachunabhängig erhalten.
+Die Position wird direkt angewählt; erneutes Antippen derselben Taste ändert sie nicht.
+Ist einer der beiden physischen Schalter zugeordnet, dient die Gruppe nur als Anzeige.
 `Momentary` ist nur während der Betätigung aktiv, `Slider` liefert 0 bis 100 %.
 Touch-Taster werden beim Seiten-/Tabwechsel, Neuaufbau und Verlassen des
 Vollbilds zurückgesetzt.
@@ -195,6 +206,11 @@ Schaltelemente; 0 bedeutet keine Gruppe. Physische Gruppenanforderungen
 werden flankengesteuert verarbeitet: Bei gleichzeitig gehaltenen Schaltern
 bleibt die zuletzt eingelesene Einschaltflanke maßgebend, ohne Oszillation.
 Slider nehmen nicht an Exklusivgruppen teil.
+Sobald eine Gruppe mindestens zwei Schaltelemente enthält, steht rechts
+an ihren sichtbaren Elementen eine kleine Markierung wie `G1`.
+Dabei zählen auch Mitglieder anderer Tabs und ausgeblendete Schaltelemente,
+nicht jedoch Slider. Die Markierungen folgen der angewendeten Konfiguration;
+Elementnamen und gespeicherte Beschriftungen bleiben unverändert.
 
 Auch in inaktiven Tabs werden physische Eingänge verarbeitet und
 Ausgangszustände übertragen. Pro Hintergrundschritt werden maximal acht
