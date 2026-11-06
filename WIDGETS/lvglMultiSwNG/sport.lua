@@ -4,10 +4,12 @@
 local app = ...
 local outputs = app.outputs
 local M = {invalidate = outputs.invalidate}
+local REQUEST_ERROR = "S.Port packet not accepted: check RF module, queue and sensor conflict"
 
 function M.new()
     local sender = outputs.new()
     sender.protocol, sender.variant = 1, 1
+    sender.failedCount = 0
     return sender
 end
 
@@ -45,15 +47,15 @@ function M.set(sender, id, value)
 end
 
 local function available(sender)
-    if type(sportTelemetryPush) == "function" then return true end
-    sender.error = "S.Port API unavailable"
+    sender.apiError = type(sportTelemetryPush) ~= "function" and "S.Port API unavailable" or nil
+    return sender.apiError == nil
 end
 
 local function push(sender, payload)
-    if not available(sender) then return end
+    if not available(sender) then sender.error = sender.apiError; return end
     local queued = sportTelemetryPush(payload[1], payload[2], payload[3], payload[4])
     if queued == true then sender.error = nil
-    else sender.error = "S.Port packet not accepted: check RF module, queue and sensor conflict" end
+    else sender.error = REQUEST_ERROR end
     return queued == true
 end
 
@@ -75,7 +77,9 @@ function M.retireProp(sender, previous, prop)
 end
 
 function M.tick(sender, now)
-    if outputs.tickOff(sender) or not available(sender) then return end
+    local ready = available(sender)
+    sender.error = sender.apiError or (sender.failedCount > 0 and REQUEST_ERROR or nil)
+    if outputs.tickOff(sender) or not ready then return end
     local acw = sender.variant >= 2
     local list = acw and sender.props or sender.groups
     local count = #list
@@ -87,11 +91,20 @@ function M.tick(sender, now)
             local payload
             if acw then payload = {sender.physicalId, 0x10, sender.dataId, group.prefix + group.value}
             else payload = {sender.physicalId, 0x31, sender.appId * 256 + group.key, group.value} end
-            if push(sender, payload) then
+            local queued = push(sender, payload)
+            sender.groupCursor = index % count + 1
+            if queued then
                 group.last, group.dirty, group.epoch = now, false, sender.epoch
                 group.delivery.active = group.value ~= 0
-                sender.groupCursor = index % count + 1
+                if group.failed then
+                    group.failed = nil
+                    sender.failedCount = sender.failedCount - 1
+                end
+            elseif not group.failed then
+                group.failed = true
+                sender.failedCount = sender.failedCount + 1
             end
+            sender.error = sender.apiError or (sender.failedCount > 0 and REQUEST_ERROR or nil)
             return
         end
     end

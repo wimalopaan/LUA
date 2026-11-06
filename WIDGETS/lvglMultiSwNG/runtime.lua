@@ -15,6 +15,7 @@ function M.begin(source, previous, change)
             data = builder.config, tabs = {}, controls = {}, addresses = {},
             tabOrder = {}, tabControls = {}, visibleControls = {},
             values = {}, physical = {}, winners = {}, masks = {}, usedAddresses = {},
+            inputErrors = {}, inputErrorCount = 0,
             maxTabId = 0, maxControlId = 0, backend = backend, sender = backend.new(),
         },
     }
@@ -55,6 +56,11 @@ local function append(job, record)
             job.preserve[id] = true
             state.values[id] = previous.values[id] or 0
             state.physical[id] = previous.physical[id]
+            if previous.inputErrors[id] then
+                state.inputErrors[id] = true
+                state.inputErrorCount = state.inputErrorCount + 1
+                state.inputErrorId = id
+            end
         else state.values[id] = 0 end
         if record.type ~= 5 and record.group > 0 and state.values[id] > 0 then
             state.winners[record.group] = id

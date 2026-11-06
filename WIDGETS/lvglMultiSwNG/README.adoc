@@ -76,6 +76,15 @@ die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
   sichtbar; ein erneuter Versuch erfolgt über `Save` oder eine neue Änderung,
   nicht in einer unbegrenzten Wiederholungsschleife.
 
+Die Fußzeile zeigt Konfigurations-/Speicherstatus und Betriebsstatus auf
+zwei getrennten Zeilen. Eine laufende Speicherung verdeckt daher keine
+ausstehende Abschaltung. Speicherfehler, Quellenfehler und Übertragungsfehler
+werden unabhängig verwaltet: Ein erfolgreicher Vorgang löscht nur den
+zugehörigen Fehler. Nicht verfügbare Slider-Quellen setzen den Ausgang auf 0;
+ihre Fehlermeldung verschwindet beim begrenzten Eingabepolling, sobald die
+Quelle wieder gültige Werte liefert oder ihre Zuordnung deaktiviert wird.
+Bei mehreren betroffenen Elementen nennt der Status zusätzlich deren Anzahl.
+
 Tab-Spaltenzahl und Elementhöhe sind unabhängig einstellbar. Zusätzliche
 Elemente erhalten automatisch einen freien Ausgang, nötigenfalls mit
 expliziter anderer Adresse.
@@ -88,11 +97,17 @@ Setzen von `Height` auf `0` aktivieren.
 
 == Einstellungsseiten
 
+Die Kopfzeile nennt die jeweilige Einstellungsseite: `Global widget settings`,
+`Tab settings`, `Control settings` oder `Move control to another tab`.
+Darunter steht der Name des Widgets, Tabs beziehungsweise Elements.
+Die kurzen Beschriftungen der Navigationsbuttons bleiben unverändert.
+Auf der Bedienseite werden weiterhin Widget-Name und aktiver Tab angezeigt.
+
 Alle Formulare verwenden gleich hohe Zeilen mit einer festen
 Beschriftungsspalte links und dem Eingabefeld rechts. Überschriften gliedern
 die Einstellungen; ergänzende Hinweise werden kleiner dargestellt.
 Nur der Formularbereich scrollt vertikal. Die Aktionsleiste mit `Apply`
-und `Cancel` sowie eine separate Statuszeile bleiben unten fest stehen.
+und `Cancel` sowie die zweizeilige Statusanzeige bleiben unten fest stehen.
 `Save` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 
 Die globalen Einstellungen sind in `General` und einen protokollspezifischen
@@ -234,6 +249,13 @@ Die Farben der Bedienoberfläche sind weiterhin frei einstellbar.
 die Wiederholung in Einheiten von 10 ms. Pro Hintergrundschritt werden
 höchstens acht Adressen geprüft und höchstens ein Telegramm gesendet.
 Ein rotierender Cursor sorgt für faire Verarbeitung aller Adressen.
+Er wird auch nach einem abgelehnten normalen Sendeversuch weitergestellt;
+eine dauerhaft blockierte Adresse hält dadurch andere normale Ausgänge
+nicht auf. Der abgelehnte Eintrag bleibt ausstehend und wird beim nächsten
+Umlauf mit seinem aktuellen Wert erneut versucht. Sein Fehler bleibt
+sichtbar, auch wenn Telegramme anderer Adressen angenommen werden.
+Notwendige Abschaltungen der aktuellen Protokollvariante behalten dagegen
+Vorrang und dürfen nicht von neuen Einschaltbefehlen überholt werden.
 Nur der Rückgabewert `true` bestätigt die Annahme durch EdgeTX; fehlgeschlagene
 Versuche bleiben ausstehend und werden mit einem Statusfehler erneut versucht.
 Eine Empfangsbestätigung des Schaltmoduls ist damit nicht verbunden.
@@ -320,6 +342,55 @@ Einschaltwert.
 
 SHM, Telemetrieaktionen, Setzen virtueller Eingänge/Schalter
 und Migration der Konfiguration des alten Widgets sind noch nicht enthalten.
+
+== Speicherdiagnose auf dem Sender
+
+`tools/swngmem.lua` ist ein separates Diagnose-Tool, insbesondere für
+Messungen auf dem TX16S MK3. Die Datei nach `/SCRIPTS/TOOLS/swngmem.lua`
+kopieren und im Tools-Menü des Senders starten. Die Widget-Module müssen
+unter `/WIDGETS/lvglMultiSwNG/` installiert sein.
+Nur am Boden und mit ausgeschalteten HF-Modulen messen.
+
+Mit dem Drehgeber wird das Profil gewählt, mit `ENTER` ein einzelner
+Messlauf gestartet. `EXIT` bricht einen laufenden Versuch ab; erneut
+`EXIT` schließt das Tool. Zunächst die Profile mit 8 Elementen verwenden,
+danach schrittweise 32, 64 und 128 testen. 256 ist ein weiteres, manuell
+auszuwählendes Profil; ACW verwendet wegen seines Nummernbereichs 255.
+Es gibt Profile für CRSF-Buttons, CRSF-Slider, WM und beide ACW-Varianten.
+Je acht Elemente wird ein Tab erzeugt. Das zusätzliche Profil `Empty tabs`
+misst 8 bis 256 leere Tabs unabhängig von der Elementanzahl.
+
+Das Tool verwendet ausschließlich synthetische Daten im RAM. Es verändert
+keine Modellkonfiguration, sendet keine CRSF-/S.Port-Telegramme und ruft
+keine serielle Ausgabe auf. Die tatsächlichen Widget-Module werden geladen,
+je Durchlauf höchstens ein Modul oder ein Konfigurationsdatensatz verarbeitet.
+Gemessen werden zwei unabhängig aufgebaute, dekodierte Konfigurationen,
+eine aktive Laufzeit und die gleichzeitig vorbereitete Folgelaufzeit.
+Die Garbage Collection wird an den Messpunkten gezielt ausgeführt.
+
+Ergebnisse werden an `/LOGS/swngmem.csv` angehängt. Vorhandene Ergebnisse
+bleiben erhalten. Die CSV enthält Sender/Firmware, Profilgröße, Lua-Belegung
+vor dem Laden der Module, Modul-Baseline, Belegung mit zwei Konfigurationen,
+aktive Laufzeit, parallele Vorbereitung, beobachtete Spitze und kleinsten
+verfügbaren Heap. Alle Speicherwerte sind in KiB angegeben.
+Die Differenzen zur jeweiligen Baseline zeigen den zusätzlichen Datenbedarf.
+Abbrüche und Fehler werden ausdrücklich markiert; nicht erreichte Messpunkte
+bleiben leer. Schreib-/Schließfehler der CSV werden auf dem Bildschirm angezeigt.
+
+Die Heap-Reserve beträgt 25 Prozent des zu Laufbeginn verfügbaren Heaps,
+mindestens 128 KiB. Wird diese Reserve erreicht, wird der Versuch abgebrochen
+und seine Testkonfiguration freigegeben. Das ist eine Sicherheitsmarge für
+die Diagnose, keine neue Konfigurationsgrenze. Eine einzelne große Allokation
+kann zwischen zwei Messungen dennoch scheitern.
+
+Die Werte beschreiben den Lua-Heap samt Diagnose-/Modul-Overhead und den
+zusätzlichen Datenstrukturen. Andere Lua-Skripte können die Baseline beeinflussen.
+Native LVGL-Objekte werden nicht erzeugt; Dateipuffer, Parser-Temporärdaten,
+Grafiken und weitere Firmware-Allokationen sind nicht vollständig abgebildet.
+Die beobachtete Spitze wird zwischen Verarbeitungsschritten gemessen,
+nicht innerhalb jeder Allokation. Die Messungen sind daher die Grundlage
+für weitere Tests auf dem Sender, nicht allein der Nachweis einer sicheren
+maximalen Widget-Größe. Simulatorwerte ersetzen diese Hardwaremessung nicht.
 
 == Konfigurationsdateien
 

@@ -5,19 +5,43 @@ local app = ...
 app.modules = {"config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0
 app.values, app.inputIndex = {}, 1
+app.inputErrors, app.inputErrorCount = {}, 0
+
+function app.storageStatus()
+    local status = app.saveError or (app.saveJob and "Saving configuration ...")
+        or (not app.data and "Configuration not loaded")
+        or app.warning or (app.dirty and "Unsaved changes" or "Configuration saved")
+    if app.error then return app.error .. "; " .. status end
+    return status
+end
+
+function app.operationStatus()
+    local progress = app.prepare and ("Preparing " .. app.prepare.phase .. ": " .. app.prepare.index)
+    if not app.sender then return progress or ("Loading: " .. app.phase) end
+    local status = app.sender.offError
+    if app.sender.error then
+        status = status and (status .. "; " .. app.sender.error) or app.sender.error
+    end
+    if app.inputErrorCount > 0 then
+        local control = app.inputErrorId and app.controls[app.inputErrorId]
+        local detail = control and control.name or (app.inputErrorCount .. " control(s)")
+        if control and app.inputErrorCount > 1 then detail = detail .. " (" .. app.inputErrorCount .. " controls)" end
+        local error = "Source unavailable: " .. detail
+        status = status and (status .. "; " .. error) or error
+    end
+    status = status or "Outputs ready"
+    if progress then status = progress .. "; " .. status end
+    if app.sender.notice then return status .. "; " .. app.sender.notice end
+    return status
+end
 
 function app.status()
-    if app.error then return app.error end
-    if app.prepare then
-        return "Preparing " .. app.prepare.phase .. ": " .. app.prepare.index
-    end
-    if app.phase ~= "ready" then return "Loading: " .. app.phase end
-    if app.saveJob then return "Saving configuration ..." end
-    if app.sender.offError then return app.sender.offError end
-    if app.sender.error then return app.sender.error end
-    local status = app.warning or (app.dirty and "Unsaved changes" or "Configuration saved")
-    if app.sender.notice then return app.sender.notice .. "; " .. status end
-    return status
+    if not app.data then return app.error or app.operationStatus() end
+    return app.storageStatus() .. "; " .. app.operationStatus()
+end
+
+function app.footerStatus()
+    return app.storageStatus() .. "\n" .. app.operationStatus()
 end
 
 function app.protocol(header)
@@ -42,6 +66,8 @@ local function completePrepare(job)
         -- Only references are exchanged here; no configuration-sized loop runs.
         app.data, app.tabs, app.controls = state.data, state.tabs, state.controls
         app.values, app.physical, app.winners = state.values, state.physical, state.winners
+        app.inputErrors, app.inputErrorCount = state.inputErrors, state.inputErrorCount
+        app.inputErrorId = state.inputErrorId
         app.addresses, app.sender, app.backend = state.addresses, state.sender, state.backend
         app.tabOrder, app.tabControls = state.tabOrder, state.tabControls
         app.visibleControls, app.masks = state.visibleControls, state.masks
@@ -152,12 +178,12 @@ function app.save()
     if app.saveJob then app.saveAgain = true; return end
     app.autoSaveRevision, app.autoSavePending = app.revision, nil
     local generation = app.generation + 1
-    if generation > 2147483647 then app.error = "Configuration generation overflow"; return end
+    if generation > 2147483647 then app.saveError = "Configuration generation overflow"; return end
     local slot = app.slot == "a" and "b" or "a"
     app.saveRevision, app.saveSlot, app.saveGeneration = app.revision, slot, generation
     app.saveSnapshot = app.data
     app.saveJob = app.storage.save(app.path .. "." .. slot .. ".lua", app.data, generation)
-    app.error = nil
+    app.saveError = nil
 end
 
 function app.reset()
@@ -192,11 +218,26 @@ local function loadComplete()
     app.loads = nil
 end
 
+local function updateInputError(state, id, failed)
+    if failed then
+        state.inputErrorId = id
+        if not state.inputErrors[id] then
+            state.inputErrors[id] = true
+            state.inputErrorCount = state.inputErrorCount + 1
+        end
+    elseif state.inputErrors[id] then
+        state.inputErrors[id] = nil
+        state.inputErrorCount = state.inputErrorCount - 1
+        if state.inputErrorId == id then state.inputErrorId = nil end
+    end
+end
+
 local function inputs()
     local count = #app.data.controls
     for _ = 1, math.min(8, count) do
         if app.inputIndex > count then app.inputIndex = 1 end
         local control = app.data.controls[app.inputIndex]
+        local failed = false
         if not app.active(control) then
             app.set(control.id, 0)
             app.physical[control.id] = nil
@@ -206,7 +247,7 @@ local function inputs()
                 app.set(control.id, value / 10.24)
             else
                 app.set(control.id, 0)
-                app.error = "Source unavailable: " .. control.name
+                failed = true
             end
         elseif control.type ~= 5 and control.switch ~= 0 then
             local value = getSwitchValue(control.switch) and 1 or 0
@@ -220,8 +261,10 @@ local function inputs()
             end
         end
         local job = app.prepare
+        updateInputError(app, control.id, failed)
         if job and job.preserve[control.id] then
             job.state.physical[control.id] = app.physical[control.id]
+            updateInputError(job.state, control.id, failed)
         end
         app.inputIndex = app.inputIndex + 1
     end
@@ -280,7 +323,7 @@ function app.tick()
             else app.storage.stepSave(app.saveJob) end
             if app.saveJob.done then
                 local saved = false
-                if app.saveJob.error then app.error = "Save failed: " .. app.saveJob.error
+                if app.saveJob.error then app.saveError = "Save failed: " .. app.saveJob.error
                 elseif not app.saveVerify then
                     app.saveJob = app.storage.load(app.path .. "." .. app.saveSlot .. ".lua",
                                                   app.saveSnapshot, app.saveGeneration)
@@ -292,7 +335,7 @@ function app.tick()
                     app.warning = nil
                     saved = true
                 else
-                    app.error = "Save verification failed"
+                    app.saveError = "Save verification failed"
                 end
                 app.saveJob, app.saveVerify = nil, nil
                 app.saveSnapshot = nil

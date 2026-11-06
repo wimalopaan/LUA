@@ -59,20 +59,29 @@ function M.invalidate(sender)
     sender.epoch = sender.epoch + 1
 end
 
+local function inheritItem(sender, item, old, error)
+    -- Missing history from an older runtime is treated as potentially active.
+    item.delivery = old.delivery or {active = true}
+    if sender.failedCount and old.failed and not item.failed then
+        item.failed = true
+        sender.failedCount = sender.failedCount + 1
+        sender.error = sender.error or error
+    end
+end
+
 function M.inherit(sender, previous, id)
     if sender.protocol ~= previous.protocol or sender.variant ~= previous.variant
         or sender.destination ~= previous.destination or sender.physicalId ~= previous.physicalId
         or sender.appId ~= previous.appId then return end
     local binding = sender.bindings[id]
-    -- Missing history from an older runtime is treated as potentially active.
     if binding.group then
         local old = previous.groupMap[binding.group.key]
-        if old then binding.group.delivery = old.delivery or {active = true} end
+        if old then inheritItem(sender, binding.group, old, previous.error) end
     end
     if binding.prop then
         local old = previous.propMap[binding.prop.key]
         if old and old.prefix == binding.prop.prefix then
-            binding.prop.delivery = old.delivery or {active = true}
+            inheritItem(sender, binding.prop, old, previous.error)
         end
     end
 end

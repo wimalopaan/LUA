@@ -154,11 +154,17 @@ local function colorPacket(sender)
 end
 
 local function available(sender)
+    local error
     if sender.simulator and type(serialWrite) ~= "function" then
-        sender.error = "Simulator serialWrite API unavailable"
+        error = "Simulator serialWrite API unavailable"
     elseif not sender.simulator and type(crossfireTelemetryPush) ~= "function" then
-        sender.error = "CRSF API unavailable"
-    else return true end
+        error = "CRSF API unavailable"
+    end
+    if error then sender.error = error; return end
+    if sender.error == "Simulator serialWrite API unavailable" or sender.error == "CRSF API unavailable" then
+        sender.error = nil
+    end
+    return true
 end
 
 push = function(sender, payload)
@@ -177,7 +183,8 @@ push = function(sender, payload)
     return queued
 end
 function M.tick(sender, now)
-    if outputs.tickOff(sender) or not available(sender) then return end
+    local ready = available(sender)
+    if outputs.tickOff(sender) or not ready then return end
     local lanes = {groupPacket, propPacket, colorPacket}
     for offset = 0, 2 do
         local lane = (sender.lane + offset - 1) % 3 + 1

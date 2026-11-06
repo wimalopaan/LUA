@@ -3,6 +3,7 @@
 
 local app = ...
 local M = {}
+local editorTitles = {config = "Global widget settings", tab = "Tab settings", control = "Control settings"}
 
 local function release(view)
     if view.held then app.set(view.held, 0); view.held = nil end
@@ -451,7 +452,7 @@ local function beginBuild(view, full)
     job.pad = lvgl.PAD_OUTLINE or scaled(2)
     job.fixed = app.phase == "ready" and view.page ~= "control" and not view.pending
     if job.fixed then
-        job.footerHeight = (lvgl.UI_ELEMENT_HEIGHT or scaled(32)) + scaled(44)
+        job.footerHeight = (lvgl.UI_ELEMENT_HEIGHT or scaled(32)) + scaled(66)
         job.toolbarHeight = view.page == "editor" and view.editKind == "control"
             and (lvgl.UI_ELEMENT_HEIGHT or scaled(32)) + scaled(8) or 0
     end
@@ -461,11 +462,18 @@ end
 local function pageHeader(view, job)
     local params = {
         title = app.data and app.data.header.name or "MultiSwitch NG",
-        subtitle = view.page, back = function() exit(view) end,
+        subtitle = "Controls", back = function() exit(view) end,
         flexFlow = lvgl.FLOW_COLUMN, flexPad = job.pad,
     }
     if job.fixed then
         params.flexFlow, params.scrollBar, params.scrollDir = nil, false, lvgl.SCROLL_OFF
+    end
+    if view.page == "editor" and view.edit then
+        params.title, params.subtitle = editorTitles[view.editKind], view.edit.name
+    elseif view.page == "tab" and app.tabs and app.tabs[view.tab] then
+        params.title, params.subtitle = "Tab settings", app.tabs[view.tab].name
+    elseif view.page == "move" and view.moveControl then
+        params.title, params.subtitle = "Move control to another tab", view.moveControl.name
     end
     if app.phase == "ready" and view.page == "control" and not view.pending then
         local tabs, selected = app.data.tabs, app.tabOrder[view.tab]
@@ -697,15 +705,16 @@ local function stepBuild(view)
             nodes(job, {
                 {type = "hline", x = 12, y = job.height - job.footerHeight, w = job.width, h = 1},
                 bar,
-                {type = "label", name = "status", x = 12, y = job.height - scaled(26),
-                 w = job.width, h = scaled(22), font = SMLSIZE, text = app.status},
+                {type = "label", name = "status", x = 12, y = job.height - scaled(48),
+                 w = job.width, h = scaled(44), font = SMLSIZE, text = app.footerStatus},
             }, job.page, "finish")
         elseif view.setupOpen then
             nodes(job, {row({
                 button("Save", app.save, function() return app.dirty and not app.saveJob end),
-                {type = "label", w = width - 90, text = app.status},
+                {type = "label", w = width - 90, h = scaled(44), font = SMLSIZE, text = app.footerStatus},
             }, width)}, job.content, "finish")
-        else nodes(job, {{type = "label", w = width, text = app.status}}, job.content, "finish") end
+        else nodes(job, {{type = "label", w = width, h = scaled(44), font = SMLSIZE,
+                          text = app.footerStatus}}, job.content, "finish") end
     elseif job.phase == "nodes" then stepNodes(view, job)
     elseif job.phase == "finish" then
         view.uiReady, view.buildJob = true, nil

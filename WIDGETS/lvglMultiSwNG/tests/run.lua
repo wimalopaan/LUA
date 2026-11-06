@@ -66,6 +66,7 @@ local function reset()
         open = function(path, mode)
             if mode == "r" then
                 if fs[path] == nil then return nil, "not found: " .. path, 2 end
+            elseif mode == "a" then fs[path] = fs[path] or ""
             else fs[path] = "" end
             return {path = path, position = 1, mode = mode}
         end,
@@ -234,7 +235,7 @@ end
 local function settleAutosave(app)
     for _ = 1, 2000 do
         advance(app)
-        if not app.prepare and not app.saveJob and (not app.dirty or app.error) then return end
+        if not app.prepare and not app.saveJob and (not app.dirty or app.error or app.saveError) then return end
     end
     error("Automatic save did not finish")
 end
@@ -519,7 +520,8 @@ test("Physical controls, negative switches, source and activation work across ta
     sources[9] = nil
     advance(app, 3)
     equal(app.values[control.id], 0)
-    contains(app.error, "Source unavailable")
+    contains(app.operationStatus(), "Source unavailable")
+    equal(app.inputErrorCount, 1)
 end)
 
 test("Mutex groups do not oscillate while physical switches stay on", function()
@@ -669,12 +671,12 @@ test("Auto-Save failures stay visible without retrying every background tick", f
     assert(commit(app, "config", header))
     writeFailure = true
     settleAutosave(app)
-    contains(app.error, "Save failed")
+    contains(app.saveError, "Save failed")
     assert(app.dirty)
     local writes = writeCount
     advance(app, 100)
     equal(writeCount, writes)
-    contains(app.error, "Save failed")
+    contains(app.saveError, "Save failed")
     writeFailure = false
     save(app)
     assert(not app.error, app.error)
@@ -753,11 +755,11 @@ test("Write and close-time truncation fail; edits during saving remain dirty", f
     ready(app)
     writeFailure = true
     save(app)
-    contains(app.error, "SD full")
+    contains(app.saveError, "SD full")
     assert(app.dirty)
     writeFailure, truncate = false, true
     save(app)
-    contains(app.error, "Save failed")
+    contains(app.saveError, "Save failed")
     equal(app.generation, 0)
     truncate = false
     app.save()
@@ -1358,10 +1360,60 @@ test("Header tab navigation respects bounds and stays out of editor pages", func
     press("Global")
     render(app, view)
     header = view.uiJob.page.params
-    equal(header.subtitle, "editor")
+    equal(header.title, "Global widget settings")
+    equal(header.subtitle, app.data.header.name)
     equal(header.prevButton, nil)
     equal(header.nextButton, nil)
     equal(type(header.back), "function")
+end)
+
+test("Settings page headers describe the page and identify its widget, tab or control", function()
+    local data = config.defaults()
+    data.header.name, data.header.autoSave = "Model switches", 0
+    data.tabs[1].name, data.controls[1].name = "Exterior lights", "Landing light"
+    data.tabs[2] = {kind = "tab", id = 2, name = "Auxiliary", address = 1, columns = 2, height = 0}
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    local function header(title, subtitle)
+        local params = view.uiJob.page.params
+        equal(params.title, title)
+        equal(params.subtitle, subtitle)
+    end
+    render(app, view)
+    header("Model switches", "Exterior lights (1/2)")
+    press("Setup")
+    render(app, view)
+    press("Tab settings")
+    render(app, view)
+    header("Tab settings", "Exterior lights")
+    press("Edit tab")
+    render(app, view)
+    header("Tab settings", "Exterior lights")
+    press("Cancel")
+    render(app, view)
+    press("Edit")
+    render(app, view)
+    header("Control settings", "Landing light")
+    press("Move")
+    render(app, view)
+    header("Move control to another tab", "Landing light")
+    press("Cancel")
+    render(app, view)
+    header("Control settings", "Landing light")
+    press("Cancel")
+    render(app, view)
+    press("Control")
+    render(app, view)
+    press("Global")
+    render(app, view)
+    header("Global widget settings", "Model switches")
+    press("Cancel")
+    render(app, view)
+    press("New tab")
+    render(app, view)
+    header("Tab settings", view.edit.name)
 end)
 
 test("Header navigation changes tabs safely and updates their names and positions", function()
@@ -2766,6 +2818,367 @@ test("Late accepted activity during preparation still requires a retirement comm
     blocked = true
     advance(app, 2)
     contains(app.sender.offError, "Retired output pending: CRSF")
+end)
+
+test("Input, storage and transport failures recover independently without clearing configuration errors", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    for id = 1, 2 do
+        data.controls[id].type, data.controls[id].source = 5, id + 8
+    end
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    advance(app, 8)
+    equal(app.inputErrorCount, 2)
+    assert(app.inputErrors[1] and app.inputErrors[2])
+    contains(app.operationStatus(), "Source unavailable")
+    equal(app.error, nil)
+    blocked, writeFailure = true, true
+    app.set(3, 1)
+    save(app)
+    contains(app.saveError, "Save failed")
+    contains(app.sender.error, "busy")
+    sources[9] = 512
+    advance(app, 8)
+    equal(app.inputErrorCount, 1)
+    equal(app.inputErrors[1], nil)
+    contains(app.operationStatus(), "Output 2")
+    contains(app.storageStatus(), "Save failed")
+    blocked = false
+    advance(app, 8)
+    equal(app.sender.error, nil)
+    contains(app.storageStatus(), "Save failed")
+    blocked = true
+    app.set(3, 0)
+    local header = config.copy(app.data.header)
+    header.autoSave = 2
+    assert(not app.commit("config", header))
+    local configurationError = app.error
+    writeFailure = false
+    save(app)
+    equal(app.saveError, nil)
+    equal(app.error, configurationError)
+    contains(app.operationStatus(), "busy")
+    equal(app.inputErrorCount, 1)
+    blocked = false
+    advance(app, 8)
+    equal(app.sender.error, nil)
+    equal(app.error, configurationError)
+    equal(app.inputErrorCount, 1)
+    sources[10] = 256
+    advance(app, 8)
+    equal(app.inputErrorCount, 0)
+    equal(app.inputErrors[2], nil)
+    equal(app.error, configurationError)
+    equal(app.operationStatus(), "Outputs ready")
+end)
+
+test("Source errors follow preserved inputs and late recovery during preparation", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.controls[1].type, data.controls[1].source = 5, 9
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    advance(app, 8)
+    equal(app.inputErrorCount, 1)
+    local header = config.copy(app.data.header)
+    header.name = "Preserved error"
+    assert(commit(app, "config", header))
+    equal(app.inputErrorCount, 1)
+    contains(app.operationStatus(), "Source unavailable")
+    header = config.copy(app.data.header)
+    header.name = "Late recovery"
+    local job = assert(app.commit("config", header))
+    while job.phase ~= "retire-sliders" do advance(app) end
+    sources[9] = 512
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    equal(app.inputErrorCount, 0)
+    equal(app.inputErrors[1], nil)
+    equal(app.values[1], 50)
+    data = config.copy(app.controls[1])
+    sources[9], data.source = nil, 0
+    advance(app, 8)
+    equal(app.inputErrorCount, 1)
+    assert(commit(app, "control", data))
+    equal(app.inputErrorCount, 0)
+end)
+
+test("Footer shows saving and real pending shutdowns on separate lines", function()
+    local data = config.defaults()
+    data.header.autoSave, data.header.protocol = 0, 1
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    app.set(1, 1)
+    advance(app)
+    sportBlocked = true
+    local header = config.copy(app.data.header)
+    header.protocol = 0
+    assert(commit(app, "config", header))
+    advance(app, 2)
+    contains(app.operationStatus(), "Retired output pending")
+    app.save()
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    assert(app.saveJob)
+    local label = assert(find(function(item) return item.text == app.footerStatus end))
+    local text = label.text()
+    contains(text, "Saving configuration")
+    contains(text, "\n")
+    contains(text, "Retired output pending")
+    equal(label.h, 44)
+    contains(app.status(), "Saving configuration")
+    contains(app.status(), "Retired output pending")
+end)
+
+test("S.Port rejected entries stay pending without starving other entries or hiding their errors", function()
+    local native = sportTelemetryPush
+    for variant = 1, 3 do
+        local data, sender = config.defaults(), sport.new()
+        data.header.protocol, data.header.interval = variant, 1000
+        local extra = data.controls[4]
+        data.controls = {data.controls[1], data.controls[2], data.controls[3]}
+        for index, control in ipairs(data.controls) do control.address = index - 1 end
+        if variant == 1 then
+            extra.address = 0
+            data.controls[4] = extra
+        end
+        configure(sender, data, {[1] = 1, [2] = 1, [3] = 1})
+        local rejecting = true
+        sportTelemetryPush = function(physicalId, primId, dataId, value)
+            sportBlocked = rejecting and (variant == 1 and dataId == 0x5100
+                or variant >= 2 and ((value >> 8) & 255) == 1)
+            local result = native(physicalId, primId, dataId, value)
+            sportBlocked = false
+            return result
+        end
+        sportFrames = {}
+        for time = 1, 3 do
+            local before = #sportFrames
+            sport.tick(sender, time)
+            equal(#sportFrames - before, 1)
+        end
+        assert(sportFrames[1].blocked)
+        assert(not sportFrames[2].blocked and not sportFrames[3].blocked)
+        local list = variant == 1 and sender.groups or sender.props
+        assert(list[1].dirty)
+        equal(list[1].last, -100000)
+        equal(sender.failedCount, 1)
+        contains(sender.error, "not accepted")
+        sport.set(sender, 1, 0)
+        sport.tick(sender, 4)
+        assert(sportFrames[4].blocked)
+        equal(sender.failedCount, 1)
+        local replacement = sport.new()
+        configure(replacement, data, {})
+        for _, control in ipairs(data.controls) do outputs.inherit(replacement, sender, control.id) end
+        equal(replacement.failedCount, 1)
+        contains(replacement.error, "not accepted")
+        rejecting = false
+        sport.tick(sender, 5)
+        equal(#sportFrames, 5)
+        equal(sportFrames[5].payload[4], variant == 1 and 0 or list[1].prefix)
+        equal(sender.failedCount, 0)
+        equal(sender.error, nil)
+        equal(list[1].dirty, false)
+        equal(list[1].last, 5)
+    end
+    sportTelemetryPush = native
+end)
+
+test("S.Port normal retry fairness never bypasses blocked same-mode shutdowns", function()
+    local native = sportTelemetryPush
+    for variant = 1, 3 do
+        local data, previous = config.defaults(), sport.new()
+        data.header.protocol, data.controls = variant, {data.controls[1]}
+        configure(previous, data, {[1] = 1})
+        sport.tick(previous, 0)
+        data.controls[1].address = 1
+        local sender = sport.new()
+        configure(sender, data, {[1] = 1})
+        if variant == 1 then sport.retireGroup(sender, previous, previous.groups[1])
+        else sport.retireProp(sender, previous, previous.props[1]) end
+        local rejecting = true
+        sportTelemetryPush = function(physicalId, primId, dataId, value)
+            sportBlocked = rejecting and (variant == 1 and dataId == 0x5100
+                or variant >= 2 and ((value >> 8) & 255) == 1)
+            local result = native(physicalId, primId, dataId, value)
+            sportBlocked = false
+            return result
+        end
+        sportFrames = {}
+        for time = 1, 3 do
+            sport.tick(sender, time)
+            equal(#sportFrames, time)
+            assert(sportFrames[time].blocked)
+        end
+        contains(sender.offError, "Retired output pending")
+        equal(sender.groupCursor, 1)
+        rejecting = false
+        sport.tick(sender, 4)
+        equal(#sportFrames, 4)
+        equal(offCount(sender), 0)
+        sport.tick(sender, 5)
+        equal(#sportFrames, 5)
+        equal(sportFrames[5].payload[4], variant == 1 and 1 or sender.props[1].prefix + 255)
+    end
+    sportTelemetryPush = native
+end)
+
+test("Restored transport APIs clear availability errors without requiring another packet", function()
+    local data = config.defaults()
+    data.header.interval, data.controls = 1000, {data.controls[1]}
+    local sender = crsf.new()
+    configure(sender, data, {})
+    crsf.tick(sender, 1)
+    local native = crossfireTelemetryPush
+    crossfireTelemetryPush = nil
+    crsf.tick(sender, 2)
+    contains(sender.error, "API unavailable")
+    crossfireTelemetryPush = native
+    crsf.tick(sender, 3)
+    equal(sender.error, nil)
+    equal(#frames, 1)
+    sender = sport.new()
+    configure(sender, data, {})
+    sport.tick(sender, 1)
+    native = sportTelemetryPush
+    sportTelemetryPush = nil
+    sport.tick(sender, 2)
+    contains(sender.error, "API unavailable")
+    sportTelemetryPush = native
+    sport.tick(sender, 3)
+    equal(sender.error, nil)
+    equal(#sportFrames, 1)
+    getVersion = function() return "3.0.0", "tx16s-simu" end
+    local writes = 0
+    serialWrite = function() writes = writes + 1 end
+    sender = crsf.new()
+    configure(sender, data, {})
+    crsf.tick(sender, 1)
+    native = serialWrite
+    serialWrite = nil
+    crsf.tick(sender, 2)
+    contains(sender.error, "API unavailable")
+    serialWrite = native
+    crsf.tick(sender, 3)
+    equal(sender.error, nil)
+    equal(writes, 1)
+end)
+
+local function memoryTool()
+    EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT, EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV = 1001, 1002, 1003, 1004
+    getAvailableMemory = function() return 8 * 1024 * 1024 - collectgarbage("count") * 1024 end
+    lcd.clear = function() end
+    local counters = {records = 0, modules = 0, opens = 0}
+    local open = io.open
+    io.open = function(path, mode)
+        equal(path, "/LOGS/swngmem.csv", "Diagnostic touched a configuration file")
+        equal(mode, "a")
+        counters.opens = counters.opens + 1
+        return open(path, mode)
+    end
+    loadScript = function(path, mode)
+        counters.modules = counters.modules + 1
+        equal(mode, "tx", "Diagnostic must not generate binary cache files")
+        local name = assert(string.match(path, "^/WIDGETS/lvglMultiSwNG/([%a]+)%.lua$"))
+        local chunk = assert(loadfile(root .. name .. ".lua"))
+        return function(argument)
+            local result = chunk(argument)
+            if name == "config" then
+                local append = result.append
+                result.append = function(...)
+                    counters.records = counters.records + 1
+                    return append(...)
+                end
+            end
+            return result
+        end
+    end
+    crossfireTelemetryPush = function() error("Diagnostic transmitted CRSF") end
+    sportTelemetryPush = function() error("Diagnostic transmitted S.Port") end
+    serialWrite = function() error("Diagnostic wrote to the serial port") end
+    local tool = assert(loadfile(root .. "tools/swngmem.lua"))()
+    tool.init()
+    local function run(event)
+        counters.records, counters.modules = 0, 0
+        local result = tool.run(event)
+        assert(counters.records <= 1, "Diagnostic processed multiple configuration records")
+        assert(counters.modules <= 1, "Diagnostic loaded multiple modules")
+        return result
+    end
+    return tool, run, counters
+end
+
+test("On-radio memory diagnostic profiles all protocols and sizes without outputs or configuration writes", function()
+    local _, run, counters = memoryTool()
+    for profile = 1, 30 do
+        local opens = counters.opens
+        run(EVT_VIRTUAL_ENTER)
+        for _ = 1, 2100 do
+            if counters.opens > opens then break end
+            run(0)
+        end
+        equal(counters.opens, opens + 1, "Diagnostic did not finish the selected profile")
+        local log = fs["/LOGS/swngmem.csv"]
+        contains(log, '"complete"')
+        assert(not string.find(log, '"error"', 1, true), log)
+        assert(not string.find(log, '"stopped"', 1, true), log)
+        local _, lines = string.gsub(log, "\n", "")
+        equal(lines, profile + 1, "Diagnostic overwrote previous results")
+        if profile < 30 then run(EVT_VIRTUAL_NEXT) end
+    end
+    contains(fs["/LOGS/swngmem.csv"], '"ACW 1.4",255,32,')
+    contains(fs["/LOGS/swngmem.csv"], '"CRSF sliders",256,32,')
+    contains(fs["/LOGS/swngmem.csv"], '"Empty tabs",0,256,')
+    equal(#frames, 0)
+    equal(#sportFrames, 0)
+    equal(run(EVT_VIRTUAL_EXIT), 2)
+end)
+
+test("Memory diagnostic stops at its heap reserve and records incomplete measurements explicitly", function()
+    local _, run, counters = memoryTool()
+    run(EVT_VIRTUAL_ENTER)
+    for _ = 1, 20 do
+        run(0)
+        if counters.records > 0 then break end
+    end
+    equal(counters.records, 1)
+    getAvailableMemory = function() return 1024 end
+    run(0)
+    equal(counters.records, 0)
+    equal(counters.opens, 1)
+    contains(fs["/LOGS/swngmem.csv"], '"stopped","Heap reserve reached"')
+    assert(not string.find(fs["/LOGS/swngmem.csv"], '"complete"', 1, true))
+    run(0)
+    equal(counters.opens, 1)
+    equal(run(EVT_VIRTUAL_EXIT), 2)
+end)
+
+test("Memory diagnostic surfaces module and CSV failures and supports cancellation", function()
+    local _, run = memoryTool()
+    loadScript = function() return nil, "missing diagnostic module" end
+    run(EVT_VIRTUAL_ENTER)
+    contains(fs["/LOGS/swngmem.csv"], '"error"')
+    contains(fs["/LOGS/swngmem.csv"], "missing diagnostic module")
+    equal(run(EVT_VIRTUAL_EXIT), 2)
+    local _, nextRun, counters = memoryTool()
+    local displayed = {}
+    lcd.drawText = function(_, _, text) displayed[#displayed + 1] = text end
+    nextRun(EVT_VIRTUAL_ENTER)
+    writeFailure = true
+    nextRun(EVT_VIRTUAL_EXIT)
+    equal(counters.opens, 1)
+    contains(table.concat(displayed, "\n"), "Cancelled by user; SD full")
+    writeFailure = false
+    nextRun(EVT_VIRTUAL_ENTER)
+    nextRun(0)
+    nextRun(EVT_VIRTUAL_EXIT)
+    contains(fs["/LOGS/swngmem.csv"], '"cancelled","Cancelled by user"')
+    equal(nextRun(EVT_VIRTUAL_EXIT), 2)
 end)
 
 local failures = 0
