@@ -102,6 +102,12 @@ Ausgang und Verwaltungsaktionen; `Inputs` für physische Zuordnungen,
 Aktivierung und Exklusivgruppe; `Appearance` für Sichtbarkeit, Farben,
 Schrift und Bilder. Wechsel zwischen Unterseiten erhalten den gesamten Entwurf.
 
+`Send colors now` wird im globalen Editor sofort durch die Einstellung
+`LED colors` aktiviert bzw. deaktiviert, ohne dass vorher `Apply` nötig ist.
+Der Button sendet die aktuell angewendeten Elementfarben einmalig.
+Die dauerhafte Einstellung und andere globale Editoränderungen bleiben
+bis `Apply` unverändert.
+
 Nur passende Felder werden angezeigt: `Switch 2` bei `3Pos`, `Source`
 bei Slidern, Exklusivgruppen bei Schaltelementen und Bilder bei Buttons
 bzw. Touch-Tastern. Ausgeblendete Eigenschaften bleiben im Entwurf erhalten;

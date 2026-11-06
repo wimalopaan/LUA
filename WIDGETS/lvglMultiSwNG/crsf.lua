@@ -12,7 +12,7 @@ function M.new()
     return {
         groups = {}, props = {}, groupMap = {}, propMap = {}, bindings = {},
         groupCursor = 1, propCursor = 1, colorCursor = 1, lane = 1,
-        off = {}, offIndex = 1, epoch = 0, colorEpoch = 0,
+        off = {}, offIndex = 1, epoch = 0, colorEpoch = 0, pendingColors = 0,
         simulator = simulator,
         notice = simulator and "Simulator: serial CRSF (delivery unconfirmed)" or nil,
     }
@@ -101,8 +101,9 @@ function M.set(sender, id, value)
     end
 end
 
-function M.colors(sender)
+function M.colors(sender, once)
     sender.colorEpoch = sender.colorEpoch + 1
+    if once or sender.pendingColors > 0 then sender.pendingColors = #sender.groups end
 end
 
 function M.invalidate(sender)
@@ -170,7 +171,7 @@ local function propPacket(sender, now)
 end
 
 local function colorPacket(sender)
-    if not sender.sendColors then return end
+    if not sender.sendColors and sender.pendingColors == 0 then return end
     local count = #sender.groups
     if count > 0 then
         local index = (sender.colorCursor - 1) % count + 1
@@ -185,6 +186,7 @@ local function colorPacket(sender)
             return payload, function()
                 group.colorDirty, group.colorEpoch = false, sender.colorEpoch
                 sender.colorCursor = nextCursor
+                if sender.pendingColors > 0 then sender.pendingColors = sender.pendingColors - 1 end
             end
         end
         sender.colorCursor = nextCursor

@@ -251,8 +251,8 @@ local function editorPage(view, width)
         children[#children + 1] = hint("Interval unit: 10 ms.", width)
         add("LED colors:", toggle(record, "sendColors"))
         children[#children + 1] = actionRow({
-            button("Send colors now", function() app.crsf.colors(app.sender) end,
-                function() return app.sender.sendColors end),
+            button("Send colors now", function() app.crsf.colors(app.sender, true) end,
+                function() return record.sendColors == 1 end),
         }, width)
     elseif kind == "tab" then
         section("General")

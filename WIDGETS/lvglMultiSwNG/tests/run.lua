@@ -1833,6 +1833,96 @@ test("Move targets batch empty transitions while respecting the sixteen-step bud
     equal(view.moveTarget, 2)
 end)
 
+test("Send colors now follows the LED draft immediately without applying or saving it", function()
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+    render(app, view)
+    press("Setup")
+    render(app, view)
+    press("Global")
+    render(app, view)
+    local send = assert(find(function(item) return item.type == "button" and item.text == "Send colors now" end))
+    assert(not send.active())
+    local revision, writes = app.revision, writeCount
+    form("LED colors:").set(1)
+    assert(send.active(), "Send colors now did not react to the draft")
+    equal(app.data.header.sendColors, 0)
+    equal(app.sender.sendColors, false)
+    frames = {}
+    press("Send colors now")
+    advance(app, 10)
+    local colors = 0
+    for _, frame in ipairs(frames) do
+        if frame.payload[4] == 0x0a then colors = colors + 1 end
+    end
+    equal(colors, 1)
+    equal(app.sender.pendingColors, 0)
+    equal(app.sender.sendColors, false)
+    equal(app.data.header.sendColors, 0)
+    equal(app.revision, revision)
+    equal(writeCount, writes)
+    form("LED colors:").set(0)
+    assert(not send.active())
+    frames = {}
+    app.crsf.colors(app.sender)
+    advance(app, 100)
+    assert(not find(function(frame) return frame.payload[4] == 0x0a end, frames))
+    press("Cancel")
+    render(app, view)
+    local header = config.copy(app.data.header)
+    header.sendColors = 1
+    assert(commit(app, "config", header))
+    render(app, view)
+    press("Global")
+    render(app, view)
+    send = assert(find(function(item) return item.type == "button" and item.text == "Send colors now" end))
+    assert(send.active())
+    form("LED colors:").set(0)
+    assert(not send.active(), "Button still follows the applied setting")
+    equal(app.sender.sendColors, true)
+    equal(app.data.header.sendColors, 1)
+end)
+
+test("One-shot colors retry full queues and restart completely on a new color epoch", function()
+    local data, sender = config.defaults(), crsf.new()
+    data.controls = {data.controls[1], data.controls[2], data.controls[3]}
+    for index, control in ipairs(data.controls) do control.address = index - 1 end
+    configure(sender, data, {})
+    crsf.colors(sender, true)
+    sender.lane, blocked = 3, true
+    crsf.tick(sender, 1)
+    equal(sender.pendingColors, 3)
+    contains(sender.error, "busy")
+    blocked = false
+    crsf.tick(sender, 2)
+    equal(sender.pendingColors, 2)
+    equal(encode(frames[1].payload), encode(frames[2].payload))
+    crsf.colors(sender)
+    equal(sender.pendingColors, 3)
+    for time = 3, 40 do
+        crsf.tick(sender, time)
+        if sender.pendingColors == 0 then break end
+    end
+    equal(sender.pendingColors, 0)
+    local accepted = {}
+    for _, frame in ipairs(frames) do
+        if frame.payload[4] == 0x0a and not frame.blocked then
+            local address = frame.payload[5]
+            accepted[address] = (accepted[address] or 0) + 1
+        end
+    end
+    equal(accepted[0], 2)
+    equal(accepted[1], 1)
+    equal(accepted[2], 1)
+    frames = {}
+    crsf.colors(sender)
+    for time = 100, 110 do crsf.tick(sender, time) end
+    assert(not find(function(frame) return frame.payload[4] == 0x0a end, frames))
+    equal(sender.sendColors, false)
+end)
+
 local failures = 0
 for _, item in ipairs(tests) do
     reset()
