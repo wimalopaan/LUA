@@ -3,6 +3,8 @@
 
 = MultiSwitch NG
 
+*Deutsch* | link:README.en.adoc[English]
+
 Neuimplementierung des LVGL-MultiSwitch-Widgets für EdgeTX 2.11.3 oder neuer
 mit LVGL-Unterstützung. Die vorhandene Implementierung in `../lvglMultiSw`
 wird nicht verändert. Ein Test auf dem Sender bzw. im EdgeTX-Simulator ist
@@ -175,10 +177,11 @@ zur Intervalleinheit, zur Höhe oder zur Exklusivgruppe, stehen kleiner
 rechts neben dem Eingabefeld. Bei Bedarf werden sie umgebrochen und die
 Zeilenhöhe angepasst. Allgemeine Protokollhinweise bleiben separate Absätze.
 Überschriften gliedern die Einstellungen.
-Im Tab- und Elementeditor stehen `Anwenden`, `Abbrechen` und `Speichern`
+In den globalen Widget-Einstellungen sowie im Tab- und Elementeditor
+stehen `Anwenden`, `Abbrechen` und `Speichern`
 am sichtbaren unteren Rand. Der Statustext folgt darunter hinter einer
 Trennlinie und ist durch Scrollen der gesamten Seite erreichbar.
-In den globalen Widget-Einstellungen und in der Verschiebeansicht scrollt
+In der Verschiebeansicht scrollt
 nur der Formularbereich; Aktionen und zweizeilige Statusanzeige bleiben sichtbar.
 `Speichern` schreibt weiterhin ausschließlich bereits angewendete Einstellungen.
 

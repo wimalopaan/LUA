@@ -574,8 +574,7 @@ local function beginBuild(view, full)
         job.rowPad = 0
     end
     job.fixed = app.phase == "ready" and view.page ~= "control" and not view.pending
-    job.scrollStatus = job.fixed and (view.page == "tab"
-        or view.page == "editor" and (view.editKind == "tab" or view.editKind == "control"))
+    job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor")
     if job.fixed then
         local elementHeight = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
         job.footerHeight = elementHeight + scaled(66)

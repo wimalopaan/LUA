@@ -2083,12 +2083,13 @@ test("Tab list action bars align at viewport edges with separators and scrollabl
     end
 end)
 
-test("Tab and control editors keep bottom actions at the viewport edge with scrollable status", function()
+test("Editors keep bottom actions at the viewport edge with scrollable status", function()
     getGeneralSettings = function() return {language = "DE"} end
     local app = appInstance()
     ready(app)
     settleAutosave(app)
     local cases = {
+        {"config", app.data.header, "Widget-Einstellungen"},
         {"tab", app.tabs[1], "Tab bearbeiten"},
         {"tab", app.newTab(), "Tab-Einstellungen"},
         {"control", app.controls[1], "Element-Einstellungen"},
@@ -2215,12 +2216,14 @@ test("Settings forms align fields and keep actions outside the scrolling area on
         equal(iconWidth, iconHeight)
         assert(iconHeight <= LCD_H - view.uiJob.height)
         if LCD_W >= 480 then assert(iconWidth > 30, "Header logo still uses the small variant") end
-        equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_OFF)
+        equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+        equal(view.uiJob.page.params.scrollBar, true)
         equal(view.uiJob.page.params.flexFlow, nil)
         equal(content.scrollDir, lvgl.SCROLL_VER)
         assert(content.h > 0 and content.y + content.h < actions.y)
-        assert(actions.y + actions.h <= status.y)
-        assert(status.y + status.h <= screen[3])
+        equal(actions.y + actions.h, screen[3])
+        assert(view.refs.statusSeparator.definition.y >= screen[3])
+        assert(status.y >= view.refs.statusSeparator.definition.y + 1)
         assert(not find(function(item) return item.text == "Apply" or item.text == "Cancel" end, content.children))
         local column, fields = nil, 0
         for _, item in ipairs(content.children) do
@@ -4083,7 +4086,7 @@ test("German runtime, storage and validation errors retain independent recovery"
     contains(parser.error, "Unvollständige Konfigurationsdatei")
 end)
 
-test("German forms and fixed two-line footers retain layout bounds on supported screen sizes", function()
+test("German global forms anchor actions at the bottom with scrollable two-line status", function()
     getGeneralSettings = function() return {language = "DE"} end
     local app = appInstance()
     ready(app)
@@ -4099,8 +4102,10 @@ test("German forms and fixed two-line footers retain layout bounds on supported 
         assert(form("Auto-Speichern:") and form("Protokoll:"))
         local content, actions, status = view.refs.settings.definition, view.refs.actions.definition, view.refs.status.definition
         assert(content.h > 0 and content.y + content.h < actions.y)
-        assert(actions.y + actions.h <= status.y)
-        assert(status.y + status.h <= screen[3])
+        equal(actions.y + actions.h, screen[3])
+        equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+        assert(view.refs.statusSeparator.definition.y >= screen[3])
+        assert(status.y >= view.refs.statusSeparator.definition.y + 1)
         contains(status.text(), "Konfiguration gespeichert")
     end
 end)
