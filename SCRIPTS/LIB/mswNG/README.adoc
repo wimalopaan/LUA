@@ -4,7 +4,7 @@
 
 Den gemeinsamen Unterordner `SCRIPTS/LIB/mswNG` auf die SD-Karte kopieren.
 Er benoetigt `app.lua`, `core.lua`, `ui.lua`, `editor.lua` und `storage.lua`;
-`tests` wird auf dem Sender nicht benoetigt.
+`tests` und `images` werden auf dem Sender nicht benoetigt.
 
 Fuer den normalen Modellbetrieb `SCRIPTS/TELEMETRY/mswNG.lua` kopieren
 und im Modell als Telemetrie-Skript auswaehlen.
@@ -14,6 +14,9 @@ Im Modell muss ein CRSF-/ExpressLRS-Sendemodul aktiviert sein.
 Das bisherige Telemetrie-Skript und die Widgets bleiben unveraendert.
 
 == Bedienung
+
+.Funktionsseite mit acht Schaltern und Seitenanzeige
+image::images/mswng01.png[Funktionsseite mit ein- und ausgeschalteten Ausgaengen]
 
 * Drehgeber bzw. Navigationstasten: Schalter oder Menueeintrag auswaehlen.
 * ENTER: ausgewaehlten Schalter zwischen Aus und Ein umschalten.
@@ -39,12 +42,19 @@ Es gibt eine bis vier Seiten mit anfangs jeweils acht Schaltern.
 Jede Seite kann null bis zwoelf Schalter enthalten (maximal 48 insgesamt).
 Neue Seiten erhalten die erste vollstaendig freie Adresse und die Ausgaenge 1 bis 8.
 
+.Allgemeine Einstellungen
+image::images/mswng02.png[Einstellungen fuer Seitenzahl und Wiederholintervall]
+
 Unter `Seite bearbeiten` lassen sich die Seite und ihre Standardadresse auswaehlen,
 ein eigener `Titel` mit bis zu 20 ASCII-Zeichen einstellen,
 Schalter bearbeiten und Schalter hinzufuegen.
 Der Titel steht in der Kopfzeile. Seitennummer und Aenderungsmarkierung
 bleiben sichtbar; bei Platzmangel wird nur der angezeigte Titel gekuerzt.
 Neue Seiten und bestehende Konfigurationen ohne Titel verwenden zunaechst `Funktionen`.
+
+.Seiteneinstellungen mit Titel und Standardadresse
+image::images/mswng03.png[Seite bearbeiten mit Titel, Standardadresse und Schalterliste]
+
 Neue Schalter verwenden zuerst einen freien Ausgang an der Standardadresse,
 danach an der naechsten freien Adresse (nach 255 folgt 0).
 Geloeschte Ausgaenge werden dabei wiederverwendet.
@@ -56,6 +66,9 @@ Die Adresse `-1`, angezeigt als `Seite:...`, uebernimmt die Standardadresse der 
 Individuelle Adressen bleiben von Aenderungen der Standardadresse unberuehrt.
 Eine Kombination aus Adresse und Ausgang kann nur einmal vergeben werden,
 auch seitenuebergreifend.
+
+.Einstellungen eines einzelnen Schalters
+image::images/mswng04.png[Schalter bearbeiten mit Name, geerbter Seitenadresse, Ausgang und manueller Steuerung]
 
 `Steuerung` waehlt zwischen `Manuell` und einer nativen EdgeTX-Schalterkennung.
 Die Auswahl verwendet die verfuegbaren EdgeTX-Schalterpositionen, einschliesslich
