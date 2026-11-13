@@ -23,6 +23,17 @@ EdgeTx LUA Widget for ELRS MultiSwitch
 
 Telemetry script `mulsw2.lua` (and folder `MULSW2`) for B&W radios (like <<lvglmsw>>)
 
+== MultiSwitchNG (mswNG) for b&w radios
+
+Telemetry script `SCRIPTS/TELEMETRY/mswNG.lua` and alternative standalone tool
+`SCRIPTS/TOOLS/mswNG.lua`, sharing modules in `SCRIPTS/LIB/mswNG`.
+Up to four pages and twelve switches per page, with configurable names, addresses,
+outputs and physical/logical EdgeTX switch assignments.
+The telemetry variant continues evaluating switches and sending CRSF SET4/SET4M in the background;
+the tool sends only while open. Configuration is model-specific, with lazily loaded LCD/editor modules.
+
+See link:SCRIPTS/LIB/mswNG/README.adoc[installation and operation].
+
 == Hardware-Extension-Widget `lvglHwExt`
 
 EdgeTx LUA Widget for the `hardware-extension`-protocol.
