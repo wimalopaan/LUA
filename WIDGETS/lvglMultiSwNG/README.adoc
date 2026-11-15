@@ -40,7 +40,7 @@ aus `lang/de.lua`, passend zu den Bildschirmfotos.
 Das Verzeichnis als `/WIDGETS/lvglMultiSwNG/` auf die SD-Karte kopieren.
 Bei einem Update auch `i18n.lua`, das gesamte Verzeichnis `lang/` und alle
 geänderten Widget-Module sowie `Logo_small_64_t.png`, `Logo_30_inv.png`,
-`Logo_40_inv.png` und `Logo_56_inv.png` übertragen.
+`Logo_40_inv.png`, `Logo_56_inv.png` und `website-qr.png` übertragen.
 `tests/` wird auf dem Sender nicht benötigt. Das Widget heißt `MultiSw NG`.
 Es gibt keine funktionalen Widget-Options.
 
@@ -71,7 +71,7 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   Nur die Bedienelemente des aktiven Tabs werden aufgebaut.
 * Unter den Bedienelementen trennt eine Linie den Konfigurationsbereich ab.
   Standardmäßig ist dort nur `Einstellungen` sichtbar. Der Button blendet
-  `Tab Einstellungen`, `Neuer Tab`, `Global` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
+  `Tab Einstellungen`, `Neuer Tab`, `Global`, `Info` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
   wieder ein. Nach Verlassen des Vollbilds ist der Bereich wieder geschlossen.
   Auf den Konfigurationsseiten ist
   `Speichern` weiterhin direkt erreichbar.
@@ -229,6 +229,18 @@ image::.images/w6.png[Elementeditor auf der Unterseite Eingänge]
 
 .Elementeditor: Sichtbarkeit, Elementfarbe und Textfarbe.
 image::.images/w7.png[Elementeditor auf der Unterseite Aussehen]
+
+== Infoseite und Softwareversion
+
+`Einstellungen` → `Info` öffnet eine eigene, scrollbar dargestellte Infoseite.
+Sie zeigt die Softwareversion (aktuell `3`) und einen QR-Code zur Webseite
+https://github.com/wimalopaan/LUA. Die URL steht auch als Text darunter.
+`Bedienung` führt zur Bedienseite zurück.
+Die Softwareversion ist eine einfache Zahl in `app.lua` (`app.softwareVersion`)
+und unabhängig von der Konfigurationsformatversion.
+Der QR-Code liegt als fertiges Bild in `website-qr.png`; er wird nicht auf dem
+Sender berechnet. Bei einer Änderung von `app.website` muss das Bild passend
+neu erzeugt werden.
 
 == Elemente und physische Bedienung
 

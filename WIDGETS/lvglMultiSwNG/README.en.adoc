@@ -39,7 +39,7 @@ This documentation uses the English UI labels; the screenshots show the German U
 Copy the directory to `/WIDGETS/lvglMultiSwNG/` on the SD card.
 When updating, also copy `i18n.lua`, the entire `lang/` directory,
 all modified widget modules, and `Logo_small_64_t.png`, `Logo_30_inv.png`,
-`Logo_40_inv.png` and `Logo_56_inv.png`.
+`Logo_40_inv.png`, `Logo_56_inv.png` and `website-qr.png`.
 The `tests/` directory is not required on the radio. The widget is named `MultiSw NG`.
 There are no functional widget options.
 
@@ -71,7 +71,7 @@ image::.images/w2.png[Operating page with different control types and exclusive 
   Only the controls of the active tab are constructed.
 * A separator below the controls marks the configuration area.
   Initially, only `Setup` is visible. It reveals `Tab settings`, `New tab`,
-  `Global` and `Save`; `Hide setup` collapses the area again.
+  `Global`, `Info` and `Save`; `Hide setup` collapses the area again.
   The area is collapsed again after leaving fullscreen.
   `Save` remains directly accessible on configuration pages.
 * `New tab` opens an editor for a new, initially empty tab.
@@ -228,6 +228,17 @@ image::.images/w6.png[Control editor on the Inputs subpage]
 
 .Control editor: Visibility, control color and text color.
 image::.images/w7.png[Control editor on the Appearance subpage]
+
+== Information page and software version
+
+`Setup` → `Info` opens a separate, scrollable information page.
+It shows the software version (currently `3`) and a QR code linking to
+https://github.com/wimalopaan/LUA. The URL is also displayed below the image.
+`Control` returns to the operating page.
+The software version is a simple number in `app.lua` (`app.softwareVersion`)
+and is independent of the configuration format version.
+The QR code is a static image in `website-qr.png`, not calculated on the radio.
+If `app.website` changes, regenerate the image accordingly.
 
 == Controls and physical operation
 

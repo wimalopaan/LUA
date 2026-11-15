@@ -858,18 +858,18 @@ test("Control setup actions collapse without changing switches and reset on full
     assert(setupIndex, "Setup must be attached directly to the page, not an extra scrolling box")
     equal(definitions[setupIndex - 1].type, "hline")
     equal(definitions[setupIndex - 1].h, 1)
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save"}) do assert(not visible(text)) end
+    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(not visible(text)) end
     equal(press("Output 1"), 1)
     local revision = app.revision
     press("Setup")
     render(app, view)
     assert(visible("Hide setup"))
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save"}) do assert(visible(text)) end
+    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(visible(text)) end
     equal(app.values[1], 1)
     equal(app.revision, revision)
     press("Hide setup")
     render(app, view)
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save"}) do assert(not visible(text)) end
+    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(not visible(text)) end
     equal(app.values[1], 1)
     press("Setup")
     render(app, view)
@@ -880,6 +880,53 @@ test("Control setup actions collapse without changing switches and reset on full
     assert(visible("Setup"))
     assert(not visible("Hide setup"))
     assert(not visible("Tab settings"))
+end)
+
+test("Info page shows localized software version and QR link without changing configuration or outputs", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("info-" .. language)
+        ready(app)
+        settleAutosave(app)
+        app.set(1, 1)
+        local revision, generation = app.revision, app.generation
+        for _, screen in ipairs({{320, 240}, {480, 272}, {800, 480}, {480, 800}}) do
+            LCD_W, LCD_H = screen[1], screen[2]
+            local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
+            render(app, view)
+            press(app.t("Setup"))
+            render(app, view)
+            press("Info")
+            render(app, view)
+            equal(view.page, "info")
+            equal(view.uiJob.page.params.title, "Info")
+            equal(view.uiJob.page.params.subtitle, "MultiSwitch NG")
+            equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+            equal(view.uiJob.page.params.prevButton, nil)
+            equal(view.uiJob.page.params.nextButton, nil)
+            equal(view.refs.softwareVersion.definition.text,
+                  language == "DE" and "Softwareversion: 3" or "Software version: 3")
+            equal(view.refs.website.definition.text, "https://github.com/wimalopaan/LUA")
+            local qr = view.refs.websiteQR.definition
+            local file = assert(hostIO.open(qr.file, "rb"))
+            local header = file:read(24)
+            file:close()
+            local width, height = string.unpack(">I4I4", header, 17)
+            equal(qr.w, width)
+            equal(qr.h, height)
+            equal(qr.w, qr.h)
+            equal(qr.x, math.floor((view.uiJob.width - qr.w) / 2))
+            assert(qr.x >= 0 and qr.x + qr.w <= view.uiJob.width)
+            assert(not find(function(item) return item.text == app.t("Save") end))
+            equal(app.values[1], 1)
+            equal(app.revision, revision)
+            equal(app.generation, generation)
+            press(app.t("Control"))
+            render(app, view)
+            equal(view.page, "control")
+            equal(app.values[1], 1)
+        end
+    end
 end)
 
 test("Expanded setup footer never scrolls horizontally in either language or screen size", function()
@@ -899,6 +946,14 @@ test("Expanded setup footer never scrolls horizontally in either language or scr
             equal(footer.scrollBar, false)
             equal(footer.scrollDir, lvgl.SCROLL_OFF)
             equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
+            local setup = assert(find(function(item)
+                return item.type == "box" and item.children
+                    and item.children[1].text == app.i18n.p("button", "Tab settings")
+            end))
+            equal(#setup.children, 4)
+            equal(setup.children[3].text, "Global")
+            equal(setup.children[4].text, "Info")
+            equal(setup.flexFlow, lvgl.FLOW_ROW)
         end
     end
 end)

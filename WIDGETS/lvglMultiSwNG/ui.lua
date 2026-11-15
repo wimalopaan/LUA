@@ -285,9 +285,25 @@ local function controlFooter(view, width)
                 if new then edit(view, "tab", new) end
             end),
             button("Global", function() edit(view, "config", app.data.header) end),
+            button("Info", function() navigate(view, "info") end),
         }, width)
     end
     return children
+end
+
+local function infoPage(view, width)
+    local qrSize = 148
+    return {
+        {type = "label", name = "softwareVersion", text = t("Software version: %d", app.softwareVersion),
+         w = width, h = scaled(32), align = CENTER},
+        {type = "label", text = t("Website"), w = width, h = scaled(26), align = CENTER},
+        {type = "box", w = width, h = qrSize, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
+         children = {{type = "image", name = "websiteQR", file = app.dir .. "website-qr.png",
+                      x = math.floor((width - qrSize) / 2), y = 0, w = qrSize, h = qrSize}}},
+        {type = "label", name = "website", text = app.website, w = width,
+         h = scaled(40), font = SMLSIZE, align = CENTER},
+        button("Control", function() navigate(view, "control") end),
+    }
 end
 
 local function tabActions(view, width)
@@ -575,7 +591,7 @@ local function beginBuild(view, full)
         job.gap = app.data.header.buttonSpacing
         job.rowPad = 0
     end
-    job.fixed = app.phase == "ready" and view.page ~= "control" and not view.pending
+    job.fixed = app.phase == "ready" and view.page ~= "control" and view.page ~= "info" and not view.pending
     job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor")
     if job.fixed then
         local elementHeight = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
@@ -615,6 +631,8 @@ local function pageHeader(view, job)
         params.title, params.subtitle = t("Tab settings"), app.tabs[view.tab].name
     elseif view.page == "move" and view.moveControl then
         params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
+    elseif view.page == "info" then
+        params.title, params.subtitle = t("Info"), "MultiSwitch NG"
     end
     if app.phase == "ready" and (view.page == "control" or view.page == "tab") and not view.pending then
         local page = view.page
@@ -787,7 +805,8 @@ local function stepBuild(view)
             nodes(job, items, job.content, "finish")
         else
             if not app.tabs[view.tab] then view.tab = app.data.tabs[1].id end
-            if view.page == "editor" then nodes(job, editorPage(view, width), job.content, "footer")
+            if view.page == "info" then nodes(job, infoPage(view, width), job.content, "finish")
+            elseif view.page == "editor" then nodes(job, editorPage(view, width), job.content, "footer")
             elseif view.page == "move" then
                 job.targets = {names = {}, ids = {}, positions = {}}
                 job.phase = "targets"
