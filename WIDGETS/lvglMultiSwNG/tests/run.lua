@@ -11,6 +11,7 @@ local fs, now, frames, switches, sources, definitions, full, blocked, truncate, 
 local readCount, writeCount, loads, dialogs, quality, objectCount, createdTypes
 local sportFrames, sportBlocked
 COLOR_THEME_SECONDARY3, COLOR_THEME_PRIMARY3, COLOR_THEME_WARNING = 3, 4, 5
+RED = 6
 LCD_W, LCD_H = 480, 272
 LEFT, VCENTER, SMLSIZE, BOLD, TINSIZE = 0, 32, 1, 2, 3
 CENTER = 16
@@ -2394,9 +2395,12 @@ test("Tab item rows place name, effective address and edit action beside each ot
     local control = config.copy(app.controls[2])
     control.name, control.address = "A long item name for the list", 255
     assert(commit(app, "control", control))
+    local sameAddress = config.copy(app.controls[3])
+    sameAddress.address = app.tabs[1].address
+    assert(commit(app, "control", sameAddress))
     local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "tab"}
     render(app, view)
-    for _, id in ipairs({1, 2}) do
+    for _, id in ipairs({1, 2, 3}) do
         local control = app.controls[id]
         local row = assert(find(function(item)
             return item.type == "box" and item.children and item.children[1].text == control.name
@@ -2404,6 +2408,7 @@ test("Tab item rows place name, effective address and edit action beside each ot
         equal(#row.children, 3)
         local name, address, edit = row.children[1], row.children[2], row.children[3]
         equal(address.text, app.addresses[id] .. " / " .. control.output)
+        equal(address.color, id == 2 and RED or nil)
         equal(name.y, address.y)
         equal(address.y, edit.y)
         equal(name.h, edit.h)
@@ -2412,6 +2417,16 @@ test("Tab item rows place name, effective address and edit action beside each ot
         assert(edit.x + edit.w <= row.w)
         equal(row.h, 40)
         equal(edit.text, "Edit")
+    end
+    local tab = config.copy(app.tabs[1])
+    tab.address = 255
+    assert(commit(app, "tab", tab))
+    render(app, view)
+    for _, id in ipairs({1, 2, 3}) do
+        local row = assert(find(function(item)
+            return item.type == "box" and item.children and item.children[1].text == app.controls[id].name
+        end))
+        equal(row.children[2].color, id == 3 and RED or nil)
     end
 end)
 

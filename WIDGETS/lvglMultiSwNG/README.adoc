@@ -79,6 +79,8 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
 * `Tab Einstellungen` zeigt eine kompakte Elementliste mit Name,
   Adresse/Ausgang und `Bearbeiten`-Button nebeneinander in einer Zeile.
+  Weicht die effektive Elementadresse von der Standardadresse des Tabs ab,
+  wird die Anzeige von Adresse/Ausgang rot hervorgehoben.
   `Tab bearbeiten` öffnet die Tab-Einstellungen, `Element anlegen` einen neuen Elemententwurf.
   In der Kopfzeile lässt sich wie auf der Bedienseite durch die Tabs blättern.
   Die beiden oberen Aktionen bleiben außerhalb der scrollenden Elementliste

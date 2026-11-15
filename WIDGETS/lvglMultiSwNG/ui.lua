@@ -303,6 +303,7 @@ end
 
 local function tabControlRow(view, width, control)
     local tab = app.tabs[view.tab]
+    local address = app.config.address(control, tab)
     local height, gap = lvgl.UI_ELEMENT_HEIGHT or scaled(32), scaled(8)
     local editWidth, addressWidth = scaled(88), scaled(84)
     local addressX = width - editWidth - gap - addressWidth
@@ -313,7 +314,8 @@ local function tabControlRow(view, width, control)
                 {type = "label", x = 0, y = gap / 2, w = addressX - gap, h = height,
                  text = control.name, align = LEFT | VCENTER},
                 {type = "label", x = addressX, y = gap / 2, w = addressWidth, h = height,
-                 text = app.config.address(control, tab) .. " / " .. control.output, align = LEFT | VCENTER},
+                 text = address .. " / " .. control.output, align = LEFT | VCENTER,
+                 color = address ~= tab.address and RED or nil},
                 editButton,
             }}
 end

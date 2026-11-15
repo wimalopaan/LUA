@@ -78,6 +78,8 @@ image::.images/w2.png[Operating page with different control types and exclusive 
   An unused address is suggested as its default address.
 * `Tab settings` shows a compact control list with the name,
   address/output and an `Edit` button side by side in each row.
+  If a control's effective address differs from the tab's default address,
+  its address/output text is highlighted in red.
   `Edit tab` opens the tab editor; `Add control` opens a new control draft.
   The header lets you browse tabs just as on the operating page.
   The two upper actions are outside the scrolling control list.
