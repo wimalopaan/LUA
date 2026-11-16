@@ -271,28 +271,45 @@ local function controlWidget(view, control, width, height)
 end
 
 local function controlFooter(view, width)
-    local children = {}
-    children[#children + 1] = {type = "hline", w = width, h = 1}
-    children[#children + 1] = button(view.setupOpen and "Hide setup" or "Setup", function()
-        view.setupOpen = not view.setupOpen
-        view.renderRevision = nil
-    end)
-    if view.setupOpen then
-        children[#children + 1] = row({
-            button("Tab settings", function() navigate(view, "tab") end),
-            button("New tab", function()
-                local new = app.newTab()
-                if new then edit(view, "tab", new) end
-            end),
-            button("Global", function() edit(view, "config", app.data.header) end),
-            button("Info", function() navigate(view, "info") end),
-        }, width)
+    local items = {
+        button("Tab settings", function() navigate(view, "tab") end),
+        button("Global", function() edit(view, "config", app.data.header) end),
+        button("Info", function() navigate(view, "info") end),
+        button("New tab", function()
+            local new = app.newTab()
+            if new then edit(view, "tab", new) end
+        end),
+    }
+    local gap, padding = scaled(4), 2 * scaled(4)
+    local used, height = 3 * gap, lvgl.UI_ELEMENT_HEIGHT or scaled(32)
+    for _, item in ipairs(items) do
+        item.w = lcd.sizeText(item.text, SMLSIZE) + padding
+        used = used + item.w
     end
-    return children
+    items[1].w = items[1].w - math.max(0, used - width)
+    local x = 0
+    for index, item in ipairs(items) do
+        local text, lines = wrapHint(item.text, item.w - padding)
+        local _, lineHeight = lcd.sizeText("M", SMLSIZE)
+        item.text, item.font = text, SMLSIZE
+        item.x, item.y = index == #items and width - item.w or x, 0
+        height = math.max(height, lines * lineHeight + padding)
+        x = x + item.w + gap
+    end
+    for _, item in ipairs(items) do item.h = height end
+    return {
+        {type = "hline", w = width, h = 1},
+        {type = "box", name = "controlActions", w = width, h = height,
+         scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = items},
+    }
 end
 
 local function infoPage(view, width)
     local qrSize = 148
+    local back = button("Control", function() navigate(view, "control") end)
+    back.name, back.w, back.h = "infoBack", math.min(width, scaled(140)),
+        lvgl.UI_ELEMENT_HEIGHT or scaled(32)
+    back.x, back.y = math.floor((width - back.w) / 2), 0
     return {
         {type = "label", name = "softwareVersion", text = t("Software version: %d", app.softwareVersion),
          w = width, h = scaled(32), align = CENTER},
@@ -302,7 +319,8 @@ local function infoPage(view, width)
                       x = math.floor((width - qrSize) / 2), y = 0, w = qrSize, h = qrSize}}},
         {type = "label", name = "website", text = app.website, w = width,
          h = scaled(40), font = SMLSIZE, align = CENTER},
-        button("Control", function() navigate(view, "control") end),
+        {type = "box", w = width, h = back.h, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
+         children = {back}},
     }
 end
 
@@ -875,7 +893,9 @@ local function stepBuild(view)
             if view.page == "editor" then actions = editorActions(view)
             elseif view.page == "move" then actions = moveActions(view)
             else actions = {button("Control", function() navigate(view, "control") end)} end
-            actions[#actions + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
+            if app.data.header.autoSave == 0 then
+                actions[#actions + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
+            end
             local bar = actionRow(actions, job.width)
             bar.name, bar.x, bar.y = "actions", 12, job.height - job.footerHeight + scaled(4)
             local statusY = job.height - scaled(48)
@@ -897,13 +917,17 @@ local function stepBuild(view)
                 w = job.width, h = scaled(44), font = SMLSIZE, text = app.footerStatus,
             }
             nodes(job, items, job.page, "finish")
-        elseif view.setupOpen then
-            nodes(job, {row({
-                button("Save", app.save, function() return app.dirty and not app.saveJob end),
-                {type = "label", w = width - 90, h = scaled(44), font = SMLSIZE, text = app.footerStatus},
-            }, width)}, job.content, "finish")
-        else nodes(job, {{type = "label", w = width, h = scaled(44), font = SMLSIZE,
-                          text = app.footerStatus}}, job.content, "finish") end
+        else
+            local items = {}
+            if app.data.header.autoSave == 0 then
+                items[#items + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
+            end
+            items[#items + 1] = {
+                type = "label", w = app.data.header.autoSave == 0 and width - 90 or width,
+                h = scaled(44), font = SMLSIZE, text = app.footerStatus,
+            }
+            nodes(job, {row(items, width)}, job.content, "finish")
+        end
     elseif job.phase == "nodes" then stepNodes(view, job)
     elseif job.phase == "finish" then
         view.uiReady, view.buildJob = true, nil
@@ -915,7 +939,7 @@ function M.refresh(view)
     local full = lvgl.isFullScreen() or lvgl.isAppMode()
     if view.full and not full then
         release(view)
-        view.page, view.setupOpen = "control", false
+        view.page = "control"
     end
     if view.full ~= full or view.renderRevision ~= app.revision or view.renderPhase ~= app.phase then
         beginBuild(view, full)

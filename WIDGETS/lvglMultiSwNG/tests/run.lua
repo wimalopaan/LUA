@@ -264,7 +264,9 @@ local function find(predicate, items)
 end
 
 local function press(text)
-    local item = assert(find(function(item) return item.type == "button" and item.text == text end),
+    local item = assert(find(function(item)
+        return item.type == "button" and string.gsub(item.text, "\n", " ") == text
+    end),
                         "Button not found: " .. text)
     assert(not item.active or item.active(), "Button inactive: " .. text)
     return item.press()
@@ -581,8 +583,6 @@ test("Global Auto-Save persists applied changes, not drafts or runtime switches"
     local initialWrites = writeCount
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
     render(app, view)
-    press("Setup")
-    render(app, view)
     press("Global")
     render(app, view)
     local setting = assert(find(function(item)
@@ -841,7 +841,7 @@ test("Periodic refresh, reconnect colors and unavailable CRSF stay explicit", fu
     contains(app.status(), "CRSF API unavailable")
 end)
 
-test("Control setup actions collapse without changing switches and reset on fullscreen exit", function()
+test("Control footer actions remain available after fullscreen exit without changing switches", function()
     local app = appInstance()
     ready(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
@@ -849,37 +849,50 @@ test("Control setup actions collapse without changing switches and reset on full
     local function visible(text)
         return find(function(item) return item.type == "button" and item.text == text end) ~= nil
     end
-    assert(visible("Setup"))
+    assert(not visible("Setup") and not visible("Hide setup"))
     assert(find(function(item) return item.type == "hline" end))
-    local setupIndex
-    for index, item in ipairs(definitions) do
-        if item.type == "button" and item.text == "Setup" then setupIndex = index end
-    end
-    assert(setupIndex, "Setup must be attached directly to the page, not an extra scrolling box")
-    equal(definitions[setupIndex - 1].type, "hline")
-    equal(definitions[setupIndex - 1].h, 1)
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(not visible(text)) end
+    for _, text in ipairs({"Tab settings", "New tab", "Global", "Info"}) do assert(visible(text)) end
+    assert(not visible("Save"))
     equal(press("Output 1"), 1)
     local revision = app.revision
-    press("Setup")
-    render(app, view)
-    assert(visible("Hide setup"))
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(visible(text)) end
-    equal(app.values[1], 1)
-    equal(app.revision, revision)
-    press("Hide setup")
-    render(app, view)
-    for _, text in ipairs({"Tab settings", "New tab", "Global", "Save", "Info"}) do assert(not visible(text)) end
-    equal(app.values[1], 1)
-    press("Setup")
-    render(app, view)
     full = false
     render(app, view)
     full = true
     render(app, view)
-    assert(visible("Setup"))
-    assert(not visible("Hide setup"))
-    assert(not visible("Tab settings"))
+    assert(not visible("Setup") and not visible("Hide setup"))
+    for _, text in ipairs({"Tab settings", "New tab", "Global", "Info"}) do assert(visible(text)) end
+    assert(not visible("Save"))
+    equal(app.values[1], 1)
+    equal(app.revision, revision)
+end)
+
+test("Save is visible only with applied Auto-Save disabled across operating and settings pages", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("save-visibility-" .. language)
+        ready(app)
+        settleAutosave(app)
+        for _, autoSave in ipairs({1, 0, 1}) do
+            if app.data.header.autoSave ~= autoSave then
+                local header = config.copy(app.data.header)
+                header.autoSave = autoSave
+                assert(commit(app, "config", header))
+            end
+            for _, page in ipairs({"control", "tab", "editor", "move", "info"}) do
+                local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = page,
+                              editKind = "config", edit = config.copy(app.data.header),
+                              editRevision = app.revision,
+                              moveControl = config.copy(app.controls[1]), moveRevision = app.revision}
+                view.edit.autoSave = 1 - autoSave
+                render(app, view)
+                local saveButton = find(function(item)
+                    return item.type == "button" and item.text == app.t("Save")
+                end)
+                equal(saveButton ~= nil, autoSave == 0 and page ~= "info",
+                      "Save visibility must follow applied Auto-Save, not the editor draft")
+            end
+        end
+    end
 end)
 
 test("Info page shows localized software version and QR link without changing configuration or outputs", function()
@@ -894,8 +907,6 @@ test("Info page shows localized software version and QR link without changing co
             LCD_W, LCD_H = screen[1], screen[2]
             local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
             render(app, view)
-            press(app.t("Setup"))
-            render(app, view)
             press("Info")
             render(app, view)
             equal(view.page, "info")
@@ -905,7 +916,7 @@ test("Info page shows localized software version and QR link without changing co
             equal(view.uiJob.page.params.prevButton, nil)
             equal(view.uiJob.page.params.nextButton, nil)
             equal(view.refs.softwareVersion.definition.text,
-                  language == "DE" and "Softwareversion: 3" or "Software version: 3")
+                  language == "DE" and "Softwareversion: 4" or "Software version: 4")
             equal(view.refs.website.definition.text, "https://github.com/wimalopaan/LUA")
             local qr = view.refs.websiteQR.definition
             local file = assert(hostIO.open(qr.file, "rb"))
@@ -917,6 +928,9 @@ test("Info page shows localized software version and QR link without changing co
             equal(qr.w, qr.h)
             equal(qr.x, math.floor((view.uiJob.width - qr.w) / 2))
             assert(qr.x >= 0 and qr.x + qr.w <= view.uiJob.width)
+            local back = view.refs.infoBack.definition
+            equal(back.x, math.floor((view.uiJob.width - back.w) / 2))
+            assert(back.w > 0 and back.x >= 0 and back.x + back.w <= view.uiJob.width)
             assert(not find(function(item) return item.text == app.t("Save") end))
             equal(app.values[1], 1)
             equal(app.revision, revision)
@@ -929,7 +943,7 @@ test("Info page shows localized software version and QR link without changing co
     end
 end)
 
-test("Expanded setup footer never scrolls horizontally in either language or screen size", function()
+test("Persistent footer aligns navigation left and New tab right without horizontal overflow", function()
     for _, language in ipairs({"EN", "DE"}) do
         getGeneralSettings = function() return {language = language} end
         local app = appInstance("scrollbar-" .. language)
@@ -937,23 +951,33 @@ test("Expanded setup footer never scrolls horizontally in either language or scr
         for _, screen in ipairs({{480, 272, 227}, {320, 240, 204}, {800, 480, 412}}) do
             LCD_W, LCD_H, lvgl.PAGE_BODY_HEIGHT = screen[1], screen[2], screen[3]
             lvgl.UI_ELEMENT_HEIGHT = LCD_W == 800 and 48 or nil
-            local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control", setupOpen = true}
+            local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
             render(app, view)
             local footer = assert(find(function(item)
                 return item.type == "box" and item.children
-                    and item.children[1].text == app.t("Save")
+                    and item.children[1].text == app.footerStatus
             end))
             equal(footer.scrollBar, false)
             equal(footer.scrollDir, lvgl.SCROLL_OFF)
             equal(view.uiJob.page.params.scrollDir, lvgl.SCROLL_VER)
-            local setup = assert(find(function(item)
-                return item.type == "box" and item.children
-                    and item.children[1].text == app.i18n.p("button", "Tab settings")
-            end))
+            local setup = view.refs.controlActions.definition
             equal(#setup.children, 4)
-            equal(setup.children[3].text, "Global")
-            equal(setup.children[4].text, "Info")
-            equal(setup.flexFlow, lvgl.FLOW_ROW)
+            local labels = {app.i18n.p("button", "Tab settings"), "Global", "Info", app.t("New tab")}
+            local right = 0
+            for index, item in ipairs(setup.children) do
+                equal(string.gsub(item.text, "\n", " "), labels[index])
+                assert(item.x >= right)
+                assert(item.w > 0 and item.x + item.w <= setup.w)
+                equal(item.y, 0)
+                equal(item.h, setup.h)
+                for line in string.gmatch(item.text, "[^\n]+") do
+                    assert(lcd.sizeText(line, item.font) <= item.w)
+                end
+                right = item.x + item.w
+            end
+            equal(setup.children[1].x, 0)
+            equal(right, setup.w)
+            equal(setup.scrollDir, lvgl.SCROLL_OFF)
         end
     end
 end)
@@ -966,8 +990,6 @@ test("Tabbed UI supports create, edit, move, delete and checked updates", functi
     equal(press("Output 1"), 1)
     render(app, view)
     equal(view.refs.c1.definition.checked, true)
-    press("Setup")
-    render(app, view)
     press("New tab")
     render(app, view)
     view.edit.name = "Lights"
@@ -1448,8 +1470,6 @@ test("Momentary releases on navigation and leaving fullscreen; small view is pas
     local view = {zone = {w = 200, h = 100}, app = app, page = "control"}
     render(app, view)
     equal(press("Output 1"), 1)
-    press("Setup")
-    render(app, view)
     local control = config.copy(app.controls[1])
     control.type = 4
     assert(commit(app, "control", control))
@@ -1572,8 +1592,6 @@ test("Shared instances run one scheduler per tick and detect stale editors", fun
     for _ = 1, 200 do now = now + 1; main.background(a); main.background(b) end
     equal(a.app.phase, "ready")
     local app = a.app
-    render(app, a)
-    press("Setup")
     render(app, a)
     press("Global")
     render(app, a)
@@ -1835,8 +1853,6 @@ test("Pending UI updates can be cancelled without losing the editor draft", func
     ready(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
     render(app, view)
-    press("Setup")
-    render(app, view)
     press("Global")
     render(app, view)
     view.edit.name = "Keep this draft"
@@ -1878,8 +1894,6 @@ test("Header tab navigation respects bounds and stays out of editor pages", func
         return item.type == "button" and (item.text == "<" or item.text == ">"
             or item.text == app.tabs[1].name)
     end))
-    press("Setup")
-    render(app, view)
     press("Global")
     render(app, view)
     header = view.uiJob.page.params
@@ -1907,8 +1921,6 @@ test("Settings page headers describe the page and identify its widget, tab or co
     end
     render(app, view)
     header("Model switches", "Exterior lights (1/2)")
-    press("Setup")
-    render(app, view)
     press("Tab settings")
     render(app, view)
     header("Tab settings", "Exterior lights (1/2)")
@@ -2088,6 +2100,9 @@ end)
 
 test("Tab list action bars align at viewport edges with separators and scrollable status below", function()
     getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
     local app = appInstance()
     ready(app)
     for _, screen in ipairs({{320, 240, 204, 26}, {480, 272, 227, 32},
@@ -2141,6 +2156,9 @@ end)
 
 test("Editors keep bottom actions at the viewport edge with scrollable status", function()
     getGeneralSettings = function() return {language = "DE"} end
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 1), storage.stepSave)
     local app = appInstance()
     ready(app)
     settleAutosave(app)
@@ -2485,7 +2503,7 @@ test("Tab item rows place name, effective address and edit action beside each ot
     end
 end)
 
-test("Automatic default height fits eight buttons and puts Setup below the screen", function()
+test("Automatic default height fits eight buttons and puts footer actions below the screen", function()
     local app = appInstance()
     ready(app)
     for _, screen in ipairs({
@@ -2501,7 +2519,11 @@ test("Automatic default height fits eight buttons and puts Setup below the scree
         local cursor, rows, buttons, bottom, setup = screen[4], 0, 0, 0, false
         for _, item in ipairs(definitions) do
             if not item.visible or item.visible() then
-                if item.type == "box" then
+                if item.name == "controlActions" then
+                    assert(cursor >= screen[3], "Footer actions appear above the fold")
+                    setup = true
+                    break
+                elseif item.type == "box" then
                     rows = rows + 1
                     equal(#item.children, 2)
                     for _, child in ipairs(item.children) do
@@ -2513,10 +2535,6 @@ test("Automatic default height fits eight buttons and puts Setup below the scree
                     bottom = cursor + item.h
                 elseif item.type == "hline" then
                     assert(cursor >= screen[3], "Setup separator appears above the fold")
-                elseif item.type == "button" and item.text == "Setup" then
-                    assert(cursor >= screen[3], "Setup appears above the fold")
-                    setup = true
-                    break
                 end
                 cursor = cursor + item.h + screen[4]
             end
@@ -2590,8 +2608,6 @@ test("Global button spacing uses translated editing, applies only on confirmatio
     local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
     render(app, view)
     local originalWidth = view.refs.c1.definition.w
-    press("Einstellungen")
-    render(app, view)
     press("Global")
     render(app, view)
     equal(form("Button-Abstand:").get(), -1)
@@ -2811,8 +2827,6 @@ test("Send colors now follows the LED draft immediately without applying or savi
     ready(app)
     settleAutosave(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
-    render(app, view)
-    press("Setup")
     render(app, view)
     press("Global")
     render(app, view)
@@ -3219,8 +3233,6 @@ test("Protocol editor preserves drafts and only shows supported settings and typ
     settleAutosave(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
     render(app, view)
-    press("Setup")
-    render(app, view)
     press("Global")
     render(app, view)
     form("Name:").set("Protocol draft")
@@ -3565,8 +3577,6 @@ test("ACW editors map Momentary correctly and retain driver settings across sect
     ready(app)
     settleAutosave(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
-    render(app, view)
-    press("Setup")
     render(app, view)
     press("Global")
     render(app, view)
@@ -4002,8 +4012,6 @@ test("Shared widgets read menu language once at startup and preserve stored name
     equal(a.uiJob.page.params.title, "Setup")
     equal(a.uiJob.page.params.subtitle, "Inputs (1/1)")
     equal(a.refs.c1.definition.text, "Save")
-    press("Einstellungen")
-    render(app, a)
     press("Global")
     render(app, a)
     equal(a.uiJob.page.params.title, "Widget-Einstellungen")
@@ -4071,8 +4079,6 @@ test("German editors keep section and type identifiers stable and serialize only
     local app = appInstance()
     ready(app)
     local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
-    render(app, view)
-    press("Einstellungen")
     render(app, view)
     press("Tab Einstellungen")
     render(app, view)

@@ -56,7 +56,7 @@ Operation, configuration and the complete status display are available in fullsc
 image::.images/w1.png[Widget view with logo and status display]
 
 With the default two-column layout, automatic control height fills the visible
-operating area with exactly eight buttons. `Setup` and the status display
+operating area with exactly eight buttons. The footer and status display
 are below them and can be reached by scrolling.
 
 .Operating page with a toggle, slider, three-position buttons and group markers.
@@ -69,11 +69,13 @@ image::.images/w2.png[Operating page with different control types and exclusive 
   Tab navigation is available on the operating page and the tab control list,
   but not on editor or move pages.
   Only the controls of the active tab are constructed.
-* A separator below the controls marks the configuration area.
-  Initially, only `Setup` is visible. It reveals `Tab settings`, `New tab`,
-  `Global`, `Info` and `Save`; `Hide setup` collapses the area again.
-  The area is collapsed again after leaving fullscreen.
-  `Save` remains directly accessible on configuration pages.
+* A separator below the controls marks the footer.
+  `Tab settings`, `Global` and `Info` are always left-aligned;
+  `New tab` is right-aligned in the same row. No expansion is needed.
+  Longer button labels may wrap on narrow screens.
+  `Save` is visible on the operating and settings pages only when `Auto-Save`
+  is disabled in the applied configuration.
+  On the operating page it appears below the navigation row, beside the status.
 * `New tab` opens an editor for a new, initially empty tab.
   An unused address is suggested as its default address.
 * `Tab settings` shows a compact control list with the name,
@@ -178,7 +180,7 @@ to the right of the input. They wrap as needed, with row height adjusted accordi
 General protocol explanations remain separate paragraphs.
 Headings divide the settings into sections.
 In global widget settings and the tab and control editors,
-`Apply`, `Cancel` and `Save` sit at the bottom of the visible page.
+`Apply`, `Cancel` and, with Auto-Save disabled, `Save` sit at the bottom of the visible page.
 Status text follows below a separator and can be reached by scrolling
 the entire page.
 On the move page, only the form area scrolls;
@@ -231,8 +233,8 @@ image::.images/w7.png[Control editor on the Appearance subpage]
 
 == Information page and software version
 
-`Setup` → `Info` opens a separate, scrollable information page.
-It shows the software version (currently `3`) and a QR code linking to
+`Info` in the footer opens a separate, scrollable information page.
+It shows the software version (currently `4`) and a QR code linking to
 https://github.com/wimalopaan/LUA. The URL is also displayed below the image.
 `Control` returns to the operating page.
 The software version is a simple number in `app.lua` (`app.softwareVersion`)

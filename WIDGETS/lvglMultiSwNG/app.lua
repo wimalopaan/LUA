@@ -2,7 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
-app.softwareVersion = 3
+app.softwareVersion = 4
 app.website = "https://github.com/wimalopaan/LUA"
 app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0

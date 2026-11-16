@@ -57,7 +57,7 @@ Die Bedienung, Konfiguration und vollständige Statusanzeige erfolgen im Vollbil
 image::.images/w1.png[Widget-Ansicht mit Logo und Statusanzeige]
 
 Die automatische Elementhöhe füllt beim Standardlayout mit zwei Spalten
-den sichtbaren Bedienbereich mit genau den acht Buttons. `Einstellungen` und
+den sichtbaren Bedienbereich mit genau den acht Buttons. Die Fußzeile und
 die Statusanzeige liegen darunter und werden durch Scrollen erreichbar.
 
 .Beispiel einer Bedienseite mit Schalter, Schieberegler, 3-Positions-Tasten und Gruppenmarkierungen.
@@ -69,12 +69,13 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   im Bedienbereich entfällt. Auf Editor- und Konfigurationsseiten werden
   die Tab-Umschalter ausgeblendet.
   Nur die Bedienelemente des aktiven Tabs werden aufgebaut.
-* Unter den Bedienelementen trennt eine Linie den Konfigurationsbereich ab.
-  Standardmäßig ist dort nur `Einstellungen` sichtbar. Der Button blendet
-  `Tab Einstellungen`, `Neuer Tab`, `Global`, `Info` und `Speichern` ein; `Einstellungen ausblenden` klappt sie
-  wieder ein. Nach Verlassen des Vollbilds ist der Bereich wieder geschlossen.
-  Auf den Konfigurationsseiten ist
-  `Speichern` weiterhin direkt erreichbar.
+* Unter den Bedienelementen trennt eine Linie die Fußzeile ab.
+  `Tab Einstellungen`, `Global` und `Info` stehen dort immer links,
+  `Neuer Tab` steht rechts in derselben Zeile. Ein Aufklappen ist nicht nötig.
+  Bei schmalen Bildschirmen können längere Buttontexte umbrechen.
+  `Speichern` ist auf der Bedienseite und den Einstellungsseiten nur sichtbar,
+  wenn `Auto-Speichern` in der angewendeten Konfiguration ausgeschaltet ist.
+  Auf der Bedienseite steht es unter der Navigationszeile neben dem Status.
 * `Neuer Tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
   Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
 * `Tab Einstellungen` zeigt eine kompakte Elementliste mit Name,
@@ -180,7 +181,7 @@ rechts neben dem Eingabefeld. Bei Bedarf werden sie umgebrochen und die
 Zeilenhöhe angepasst. Allgemeine Protokollhinweise bleiben separate Absätze.
 Überschriften gliedern die Einstellungen.
 In den globalen Widget-Einstellungen sowie im Tab- und Elementeditor
-stehen `Anwenden`, `Abbrechen` und `Speichern`
+stehen `Anwenden`, `Abbrechen` und bei ausgeschaltetem Auto-Speichern auch `Speichern`
 am sichtbaren unteren Rand. Der Statustext folgt darunter hinter einer
 Trennlinie und ist durch Scrollen der gesamten Seite erreichbar.
 In der Verschiebeansicht scrollt
@@ -232,8 +233,8 @@ image::.images/w7.png[Elementeditor auf der Unterseite Aussehen]
 
 == Infoseite und Softwareversion
 
-`Einstellungen` → `Info` öffnet eine eigene, scrollbar dargestellte Infoseite.
-Sie zeigt die Softwareversion (aktuell `3`) und einen QR-Code zur Webseite
+`Info` in der Fußzeile öffnet eine eigene, scrollbar dargestellte Infoseite.
+Sie zeigt die Softwareversion (aktuell `4`) und einen QR-Code zur Webseite
 https://github.com/wimalopaan/LUA. Die URL steht auch als Text darunter.
 `Bedienung` führt zur Bedienseite zurück.
 Die Softwareversion ist eine einfache Zahl in `app.lua` (`app.softwareVersion`)
