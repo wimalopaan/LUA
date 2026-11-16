@@ -15,7 +15,7 @@ local function control()
 end
 
 function M.count()
-    if M.screen == "global" then return 5 end
+    if M.screen == "global" then return 6 end
     if M.screen == "page" then return #page()[2] + 5 end
     return 6
 end
@@ -31,6 +31,7 @@ function M.item(index)
         if index == 2 then return "Seite bearbeiten", app.page end
         if index == 3 then return "Intervall ms", app.config.interval * 10 end
         if index == 4 then return "Speichern/zurueck", "" end
+        if index == 5 then return "Softwareversion", app.version end
         return "Zurueck", ""
     elseif M.screen == "page" then
         if index == 1 then return "Seite", app.page end
@@ -138,7 +139,7 @@ local function enter()
         elseif M.row == 2 then M.screen, M.row = "page", 1
         elseif M.row == 3 then number(config.interval * 10, 50, 10000, 50)
         elseif M.row == 4 then return "save"
-        else return "close" end
+        elseif M.row == 6 then return "close" end
     elseif M.screen == "page" then
         if M.row == 1 then number(app.page, 1, #config.pages)
         elseif M.row == 2 then text(page()[3], core.titleLength, "Titel")

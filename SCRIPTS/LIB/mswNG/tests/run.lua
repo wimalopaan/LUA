@@ -514,6 +514,15 @@ editor.run(EVT_VIRTUAL_ENTER)
 equal(app.config.interval, 105)
 editor.row = 4
 equal(editor.run(EVT_VIRTUAL_ENTER), "save")
+local changesBeforeVersion = changed
+editor.run(EVT_VIRTUAL_NEXT)
+equal(editor.run(EVT_VIRTUAL_ENTER), nil)
+equal(editor.editing, nil)
+equal(changed, changesBeforeVersion)
+editor.run(EVT_VIRTUAL_NEXT)
+equal(editor.run(EVT_VIRTUAL_ENTER), "close")
+editor.run(EVT_VIRTUAL_NEXT)
+equal(editor.row, 1)
 
 -- A completely empty page remains editable and receives output 1 when adding again.
 app.config.pages[1][2] = {}
@@ -538,6 +547,12 @@ for _, size in ipairs({{128, 64}, {212, 64}, {128, 96}, {212, 96}}) do
     see("Seite bearbeiten")
     equal(rightAligned["1"], LCD_W - 1)
     equal(rightAligned["1000"], LCD_W - 1)
+    for _ = 1, 4 do run(t, EVT_VIRTUAL_NEXT) end
+    see("Softwareversion")
+    equal(rightAligned["3"], LCD_W - 1)
+    run(t, EVT_VIRTUAL_ENTER)
+    see("Softwareversion")
+    for _ = 1, 4 do run(t, EVT_VIRTUAL_PREV) end
     run(t, EVT_VIRTUAL_ENTER)
     for _ = 1, 3 do run(t, EVT_VIRTUAL_NEXT) end
     equal(rightAligned["4"], LCD_W - 1)

@@ -38,6 +38,9 @@ automatisch mit der Auswahl gescrollt.
 
 == Einstellungen
 
+Der Eintrag `Softwareversion` zeigt die Softwareversion an, beginnend mit `3`.
+Er ist nicht editierbar und unabhaengig von der Version des Speicherformats.
+
 Es gibt eine bis vier Seiten mit anfangs jeweils acht Schaltern.
 Jede Seite kann null bis zwoelf Schalter enthalten (maximal 48 insgesamt).
 Neue Seiten erhalten die erste vollstaendig freie Adresse und die Ausgaenge 1 bis 8.

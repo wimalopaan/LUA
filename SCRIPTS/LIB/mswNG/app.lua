@@ -2,7 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local telemetry = ...
-local app = {page = 1, telemetry = telemetry, dirty = false}
+local app = {version = 3, page = 1, telemetry = telemetry, dirty = false}
 local directory = "/SCRIPTS/LIB/mswNG/"
 local ui, storage, job, path, afterSave
 local slot, generation, quitting = 0, 0, false
