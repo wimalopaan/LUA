@@ -2,7 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local telemetry = ...
-local app = {version = 3, page = 1, telemetry = telemetry, dirty = false}
+local app = {version = 5, page = 1, telemetry = telemetry, dirty = false}
 local directory = "/SCRIPTS/LIB/mswNG/"
 local ui, storage, job, path, afterSave
 local slot, generation, quitting = 0, 0, false
@@ -15,11 +15,13 @@ function app.load(name, ...)
 end
 
 function app.changed()
+    app.release()
     app.dirty, app.inputDirty = true, true
     app.core.rebuild(app.sender, app.config)
 end
 
 function app.save(action)
+    app.release()
     storage = app.load("storage", app.core)
     job = storage.save(path, app.config, slot, generation)
     app.busy, afterSave = true, action
@@ -61,6 +63,13 @@ local function update()
     app.core.tick(app.sender, app.config, getTime())
 end
 
+function app.release()
+    if not app.held then return end
+    app.held[4] = 0
+    app.held = nil
+    app.core.rebuild(app.sender, app.config)
+end
+
 function app.init()
     app.core = app.load("core")
     storage = app.load("storage", app.core)
@@ -84,7 +93,10 @@ end
 function app.background()
     -- EdgeTX also calls background between foreground frames of a visible script.
     local now = getTime()
-    if lastForeground and (now < lastForeground or now - lastForeground >= 100) then ui = nil end
+    if lastForeground and (now < lastForeground or now - lastForeground >= 100) then
+        app.release()
+        ui = nil
+    end
     progress()
     poll()
     update()

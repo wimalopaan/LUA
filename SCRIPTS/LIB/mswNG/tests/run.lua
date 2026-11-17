@@ -75,8 +75,10 @@ local function reset()
         loads[name] = (loads[name] or 0) + 1
         return loadfile(root .. name)
     end
-    EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV, EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT = 1, 2, 3, 4
-    EVT_VIRTUAL_NEXT_PAGE, EVT_VIRTUAL_PREV_PAGE, EVT_VIRTUAL_MENU = 5, 6, 7
+    EVT_ENTER_FIRST, EVT_ENTER_BREAK, EVT_ENTER_LONG, EVT_ENTER_REPT = 0x61, 0x21, 0x81, 0x41
+    EVT_MENU_FIRST, EVT_MENU_BREAK, EVT_MENU_LONG, EVT_MENU_REPT = 0x62, 0x22, 0x82, 0x42
+    EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV, EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT = 1, 2, EVT_ENTER_BREAK, 4
+    EVT_VIRTUAL_NEXT_PAGE, EVT_VIRTUAL_PREV_PAGE, EVT_VIRTUAL_MENU = 5, 6, EVT_MENU_BREAK
     SMLSIZE, INVERS, BLINK, RIGHT = 1, 2, 4, 8
     LCD_W, LCD_H = 128, 64
     lcd = {
@@ -305,6 +307,8 @@ config = core.defaults()
 config.pages[1][3] = "Deck / Licht"
 config.pages[1][2][1][1] = 'Licht "A"'
 config.pages[1][2][1][5] = -101
+config.menuAction = 1
+config.pages[1][2][2][6], config.pages[1][2][2][4] = 1, 1
 local saved = finish(storage.save(path, config, 0, 0))
 assert(not saved.error)
 equal(saved.slot, 1)
@@ -319,6 +323,9 @@ local loaded = finish(storage.load(path))
 equal(loaded.result.pages[1][2][1][1], "Heck")
 equal(loaded.result.pages[1][2][1][5], -101)
 equal(loaded.result.pages[1][3], "Maschinenraum")
+equal(loaded.result.menuAction, 1)
+equal(loaded.result.pages[1][2][2][6], 1)
+equal(loaded.result.pages[1][2][2][4], 0)
 equal(loaded.generation, 2)
 local second = fs[path .. ".b"]
 fs[path .. ".b"] = string.gsub(second, "4865636b", "4865636a")
@@ -404,7 +411,7 @@ tick(sender, loaded.result)
 packet(0x00, 0xea, 0xa1, 0x07, 12, 64, 0)
 saved = finish(storage.save(path, loaded.result, loaded.slot, loaded.generation))
 assert(not saved.error, saved.error)
-assert(string.find(fs[path .. ".b"], "MSNG 3 8 1 100\n", 1, true) == 1)
+assert(string.find(fs[path .. ".b"], "MSNG 4 8 1 100 0\n", 1, true) == 1)
 loaded = finish(storage.load(path))
 assert(not loaded.error, loaded.error)
 equal(loaded.generation, 8)
@@ -416,6 +423,26 @@ loaded = finish(storage.load(path))
 assert(not loaded.error, loaded.error)
 equal(loaded.generation, 9)
 equal(loaded.result.pages[1][3], "Funktionen")
+legacy = "MSNG 3 10 1 100\nP 12 1 4465636b\nS -1 8 0 4c6567616379\n"
+legacySum = 0
+for i = 1, #legacy do legacySum = (legacySum * 33 + string.byte(legacy, i)) % 65521 end
+fs[path .. ".b"] = legacy .. "E " .. legacySum .. "\n"
+loaded = finish(storage.load(path))
+assert(not loaded.error, loaded.error)
+equal(loaded.result.pages[1][3], "Deck")
+equal(loaded.result.menuAction, 0)
+equal(loaded.result.pages[1][2][1][6], 0)
+
+for _, fields in ipairs({{4, "0"}, {1, "2"}, {1, ""}}) do
+    reset()
+    local malformed = "MSNG 4 1 1 100 " .. fields[1] .. "\nP 0 1 4465636b\nS -1 1 0 " ..
+        fields[2] .. " 4c69636874\n"
+    local sum = 0
+    for i = 1, #malformed do sum = (sum * 33 + string.byte(malformed, i)) % 65521 end
+    fs[storage.path() .. ".a"] = malformed .. "E " .. sum .. "\n"
+    loaded = finish(storage.load(storage.path()))
+    assert(loaded.error and not loaded.result)
+end
 
 -- Editor navigation, transactional edits, names, page deletion and endpoint retirement.
 reset()
@@ -477,7 +504,7 @@ editor.run(EVT_VIRTUAL_EXIT)
 app.config.pages[1][2][9][4] = 1
 core.rebuild(app.sender, app.config)
 tick(app.sender, app.config)
-editor.row = 5
+editor.row = 6
 editor.run(EVT_VIRTUAL_ENTER)
 editor.run(EVT_VIRTUAL_ENTER)
 equal(#app.config.pages[1][2], 8)
@@ -513,6 +540,29 @@ editor.run(EVT_VIRTUAL_NEXT)
 editor.run(EVT_VIRTUAL_ENTER)
 equal(app.config.interval, 105)
 editor.row = 4
+editor.run(EVT_VIRTUAL_ENTER)
+equal(editor.displayValue(), "Aus")
+for _, label in ipairs({"Bedienung", "Naechste Seite", "Setup"}) do
+    editor.run(EVT_VIRTUAL_NEXT)
+    equal(editor.displayValue(), label)
+end
+editor.run(EVT_VIRTUAL_EXIT)
+equal(app.config.menuAction, 0)
+editor.run(EVT_VIRTUAL_ENTER)
+editor.run(EVT_VIRTUAL_NEXT)
+editor.run(EVT_VIRTUAL_ENTER)
+equal(app.config.menuAction, 1)
+editor.screen, editor.row = "control", 5
+editor.run(EVT_VIRTUAL_ENTER)
+editor.run(EVT_VIRTUAL_NEXT)
+equal(editor.displayValue(), "Taster")
+editor.run(EVT_VIRTUAL_ENTER)
+equal(app.config.pages[1][2][1][6], 1)
+editor.run(EVT_VIRTUAL_ENTER)
+editor.run(EVT_VIRTUAL_PREV)
+editor.run(EVT_VIRTUAL_EXIT)
+equal(app.config.pages[1][2][1][6], 1)
+editor.screen, editor.row = "global", 5
 equal(editor.run(EVT_VIRTUAL_ENTER), "save")
 local changesBeforeVersion = changed
 editor.run(EVT_VIRTUAL_NEXT)
@@ -540,19 +590,19 @@ for _, size in ipairs({{128, 64}, {212, 64}, {128, 96}, {212, 96}}) do
     see("Funktionen 1/1")
     run(t, EVT_VIRTUAL_ENTER)
     equal(frames[#frames][7], 1)
-    for _ = 1, 10 do run(t, EVT_VIRTUAL_NEXT) end
-    run(t, EVT_VIRTUAL_MENU)
+    for _ = 1, 9 do run(t, EVT_VIRTUAL_NEXT) end
+    run(t, EVT_VIRTUAL_ENTER)
     equal(loads["editor.lua"], 1)
     see("Einstellungen")
     see("Seite bearbeiten")
     equal(rightAligned["1"], LCD_W - 1)
     equal(rightAligned["1000"], LCD_W - 1)
-    for _ = 1, 4 do run(t, EVT_VIRTUAL_NEXT) end
+    for _ = 1, 5 do run(t, EVT_VIRTUAL_NEXT) end
     see("Softwareversion")
-    equal(rightAligned["3"], LCD_W - 1)
+    equal(rightAligned["5"], LCD_W - 1)
     run(t, EVT_VIRTUAL_ENTER)
     see("Softwareversion")
-    for _ = 1, 4 do run(t, EVT_VIRTUAL_PREV) end
+    for _ = 1, 5 do run(t, EVT_VIRTUAL_PREV) end
     run(t, EVT_VIRTUAL_ENTER)
     for _ = 1, 3 do run(t, EVT_VIRTUAL_NEXT) end
     equal(rightAligned["4"], LCD_W - 1)
@@ -568,7 +618,7 @@ for _, size in ipairs({{128, 64}, {212, 64}, {128, 96}, {212, 96}}) do
     run(t, EVT_VIRTUAL_NEXT_PAGE)
     run(t, EVT_VIRTUAL_EXIT)
     run(t, EVT_VIRTUAL_EXIT)
-    for _ = 1, 2 do run(t, EVT_VIRTUAL_NEXT) end
+    for _ = 1, 3 do run(t, EVT_VIRTUAL_NEXT) end
     run(t, EVT_VIRTUAL_ENTER)
     for _ = 1, 300 do run(t) end
     see("Funktionen 1/4")
@@ -581,6 +631,139 @@ for _, size in ipairs({{128, 64}, {212, 64}, {128, 96}, {212, 96}}) do
     see("Funktionen 1/4")
     equal(frames[#frames][8], 0) -- runtime switch states are never restored from disk
     equal(handles, 0)
+end
+
+-- MENU actions are disabled by default and only affect the control screen.
+reset()
+local input = assert(loadfile(root .. "app.lua"))(true)
+input.init()
+for _ = 1, 300 do run(input) end
+assert(core.addPage(input.config))
+input.changed()
+for _, event in ipairs({EVT_MENU_FIRST, EVT_MENU_LONG, EVT_MENU_REPT, EVT_VIRTUAL_MENU}) do run(input, event) end
+equal(input.config.pages[1][2][1][4], 0)
+equal(input.page, 1)
+equal(loads["editor.lua"], nil)
+input.config.menuAction = 2
+run(input, EVT_MENU_FIRST)
+equal(input.page, 1)
+run(input, EVT_VIRTUAL_MENU)
+equal(input.page, 2)
+run(input, EVT_VIRTUAL_MENU)
+equal(input.page, 1)
+input.config.menuAction = 3
+run(input, EVT_VIRTUAL_MENU)
+see("Einstellungen")
+input.config.menuAction = 2
+run(input, EVT_VIRTUAL_MENU)
+equal(input.page, 1)
+see("Einstellungen")
+run(input, EVT_VIRTUAL_EXIT)
+input.config.menuAction = 1
+for _ = 1, 9 do run(input, EVT_VIRTUAL_NEXT) end
+run(input, EVT_MENU_FIRST)
+see("Einstellungen")
+run(input, EVT_VIRTUAL_MENU)
+see("Einstellungen")
+
+-- The physical key behind virtual MENU varies; every phase must follow that key.
+for _, menuBreak in ipairs({0x22, 0x29, 0x2a, 0x2b}) do
+    reset()
+    EVT_VIRTUAL_MENU = menuBreak
+    local first, long, repeated = menuBreak + 0x40, menuBreak + 0x60, menuBreak + 0x20
+    input = assert(loadfile(root .. "app.lua"))(true)
+    input.init()
+    for _ = 1, 300 do run(input) end
+    input.config.menuAction = 1
+    local controls = input.config.pages[1][2]
+    controls[2][6] = 1
+    input.changed()
+    run(input, first)
+    equal(controls[1][4], 1)
+    run(input, long)
+    run(input, repeated)
+    run(input, menuBreak)
+    equal(controls[1][4], 1)
+    run(input, EVT_VIRTUAL_ENTER)
+    equal(controls[1][4], 0)
+    run(input, EVT_VIRTUAL_NEXT)
+    run(input, EVT_VIRTUAL_ENTER)
+    equal(controls[2][4], 0)
+    run(input)
+    see("Menutaste nutzen")
+    run(input, EVT_VIRTUAL_EXIT)
+    run(input, first)
+    equal(controls[2][4], 1)
+    packet(0, 0xea, 0xa1, 0x07, 0, 0, 4)
+    run(input, long)
+    for _ = 1, 8 do
+        now = now + 40
+        run(input, repeated)
+        background(input)
+        run(input)
+        equal(controls[2][4], 1)
+    end
+    -- Some keys (notably SHIFT) produce no REPT events while held.
+    for _ = 1, 8 do
+        now = now + 40
+        run(input)
+        background(input)
+        equal(controls[2][4], 1)
+    end
+    run(input, menuBreak)
+    equal(controls[2][4], 0)
+    packet(0, 0xea, 0xa1, 0x07, 0, 0, 0)
+    run(input, first)
+    run(input, EVT_VIRTUAL_PREV)
+    equal(controls[2][4], 0)
+    run(input, menuBreak)
+    equal(controls[1][4], 0)
+    run(input, EVT_VIRTUAL_ENTER)
+    run(input, EVT_VIRTUAL_NEXT)
+    run(input, first)
+    blocked = true
+    run(input, menuBreak)
+    equal(controls[2][4], 0)
+    assert(input.sender.pending)
+    blocked = false
+    run(input)
+    packet(0, 0xea, 0xa1, 0x07, 0, 0, 1)
+    run(input, first)
+    now = now + 98
+    background(input)
+    equal(controls[2][4], 1)
+    background(input)
+    equal(controls[2][4], 0)
+    equal(controls[1][4], 1)
+    packet(0, 0xea, 0xa1, 0x07, 0, 0, 1)
+    run(input, menuBreak)
+    equal(controls[2][4], 0)
+    run(input, EVT_VIRTUAL_NEXT)
+    run(input, first)
+    run(input, EVT_VIRTUAL_EXIT)
+    equal(controls[2][4], 0)
+    run(input, first)
+    run(input, EVT_VIRTUAL_NEXT_PAGE)
+    equal(controls[2][4], 0)
+    run(input, EVT_VIRTUAL_NEXT)
+    run(input, first)
+    equal(controls[2][4], 1)
+    input.save("close")
+    equal(controls[2][4], 0)
+    for _ = 1, 300 do run(input) end
+    controls[1][5] = 1
+    switchValues[1] = true
+    run(input, first)
+    run(input, menuBreak)
+    equal(controls[1][4], 1)
+    see("Steuerung durch")
+    run(input, EVT_VIRTUAL_EXIT)
+    run(input, EVT_VIRTUAL_NEXT)
+    run(input, first)
+    equal(controls[2][4], 1)
+    now = -1
+    background(input)
+    equal(controls[2][4], 0)
 end
 
 -- Long titles persist and reserve room for the page number and unsaved marker.
@@ -672,7 +855,8 @@ packet(0, 0xea, 0xa1, 0x09, 4, 0, 0, 4, 1, 0, 1, 2, 0, 0, 3, 0, 0)
 local uiLoads = loads["ui.lua"]
 run(telemetry)
 equal(loads["ui.lua"], uiLoads + 1)
-run(telemetry, EVT_VIRTUAL_MENU)
+for _ = 1, 9 do run(telemetry, EVT_VIRTUAL_NEXT) end
+run(telemetry, EVT_VIRTUAL_ENTER)
 background(telemetry)
 run(telemetry, EVT_VIRTUAL_ENTER) -- foreground editor survives interleaved background calls
 background(telemetry)
@@ -706,7 +890,8 @@ equal(handles, 0)
 
 reset()
 local t = tool()
-run(t, EVT_VIRTUAL_MENU)
+for _ = 1, 9 do run(t, EVT_VIRTUAL_NEXT) end
+run(t, EVT_VIRTUAL_ENTER)
 run(t, EVT_VIRTUAL_ENTER)
 run(t, EVT_VIRTUAL_NEXT)
 run(t, EVT_VIRTUAL_ENTER)

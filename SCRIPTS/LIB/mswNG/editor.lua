@@ -15,9 +15,9 @@ local function control()
 end
 
 function M.count()
-    if M.screen == "global" then return 6 end
+    if M.screen == "global" then return 7 end
     if M.screen == "page" then return #page()[2] + 5 end
-    return 6
+    return 7
 end
 
 function M.title()
@@ -30,8 +30,9 @@ function M.item(index)
         if index == 1 then return "Seiten", #app.config.pages end
         if index == 2 then return "Seite bearbeiten", app.page end
         if index == 3 then return "Intervall ms", app.config.interval * 10 end
-        if index == 4 then return "Speichern/zurueck", "" end
-        if index == 5 then return "Softwareversion", app.version end
+        if index == 4 then return "Menutaste", core.menuActions[(app.config.menuAction or 0) + 1] end
+        if index == 5 then return "Speichern/zurueck", "" end
+        if index == 6 then return "Softwareversion", app.version end
         return "Zurueck", ""
     elseif M.screen == "page" then
         if index == 1 then return "Seite", app.page end
@@ -52,7 +53,8 @@ function M.item(index)
             local name = type(getSwitchName) == "function" and getSwitchName(id)
             return "Steuerung", name or ("Fehlt:" .. id)
         end
-        if index == 5 then return "Loeschen", "" end
+        if index == 5 then return "Typ", core.controlTypes[(control()[6] or 0) + 1] end
+        if index == 6 then return "Loeschen", "" end
         return "Zurueck", ""
     end
 end
@@ -66,7 +68,13 @@ local function text(value, length, label)
     M.length, M.textLabel = length, label
 end
 
+local function choice(value, labels)
+    number(value, 0, #labels - 1)
+    M.editing, M.labels = "choice", labels
+end
+
 function M.displayValue()
+    if M.editing == "choice" then return M.labels[M.value + 1] end
     if M.editing ~= "switch" then return M.value end
     local id = M.switches[M.value]
     return id == 0 and "Manuell" or getSwitchName(id) or ("Fehlt:" .. id)
@@ -109,8 +117,10 @@ local function apply()
                 if not ok then break end
             end
             app.page = math.min(app.page, #config.pages)
-        else
+        elseif M.row == 3 then
             config.interval = M.value / 10
+        else
+            config.menuAction = M.value
         end
     elseif M.screen == "page" then
         if M.row == 1 then
@@ -125,8 +135,10 @@ local function apply()
             ok, err = core.route(config, page(), c, M.value, c[3])
         elseif M.row == 3 then
             ok, err = core.route(config, page(), c, c[2], M.value)
-        else
+        elseif M.row == 4 then
             c[5], c[4] = M.switches[M.value], 0
+        else
+            c[6], c[4] = M.value, 0
         end
     end
     if ok then app.changed(); M.editing, M.confirm = nil, nil else app.message = err end
@@ -138,8 +150,9 @@ local function enter()
         if M.row == 1 then number(#config.pages, 1, 4)
         elseif M.row == 2 then M.screen, M.row = "page", 1
         elseif M.row == 3 then number(config.interval * 10, 50, 10000, 50)
-        elseif M.row == 4 then return "save"
-        elseif M.row == 6 then return "close" end
+        elseif M.row == 4 then choice(config.menuAction or 0, core.menuActions)
+        elseif M.row == 5 then return "save"
+        elseif M.row == 7 then return "close" end
     elseif M.screen == "page" then
         if M.row == 1 then number(app.page, 1, #config.pages)
         elseif M.row == 2 then text(page()[3], core.titleLength, "Titel")
@@ -160,7 +173,8 @@ local function enter()
         elseif M.row == 2 then number(c[2], -1, 255)
         elseif M.row == 3 then number(c[3], 1, 8)
         elseif M.row == 4 then switchEdit()
-        elseif M.row == 5 then M.confirm = "Schalter loeschen?"
+        elseif M.row == 5 then choice(c[6] or 0, core.controlTypes)
+        elseif M.row == 6 then M.confirm = "Schalter loeschen?"
         else M.screen, M.row = "page", M.control + 3 end
     end
 end

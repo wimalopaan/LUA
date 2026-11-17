@@ -2,8 +2,11 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local M = {maxPages = 4, maxSwitches = 12, nameLength = 12, titleLength = 20, defaultTitle = "Funktionen"}
+M.menuActions = {"Aus", "Bedienung", "Naechste Seite", "Setup"}
+M.controlTypes = {"Schalter", "Taster"}
 
--- Page: {default address, controls, title}; control: {name, address (-1 inherits), output, state, EdgeTX switch ID}.
+-- Page: {default address, controls, title}.
+-- Control: {name, address (-1 inherits), output, state, EdgeTX switch ID, type (0: toggle, 1: momentary)}.
 function M.address(page, control)
     return control[2] == -1 and page[1] or control[2]
 end
@@ -41,13 +44,13 @@ function M.addPage(config)
     while addresses[address] do address = address + 1 end
     if address == 256 then return nil, "Keine freie Adresse" end
     local page = {address, {}, M.defaultTitle}
-    for output = 1, 8 do page[2][output] = {"Ausgang " .. output, -1, output, 0, 0} end
+    for output = 1, 8 do page[2][output] = {"Ausgang " .. output, -1, output, 0, 0, 0} end
     config.pages[#config.pages + 1] = page
     return true
 end
 
 function M.defaults()
-    local config = {pages = {}, interval = 100}
+    local config = {pages = {}, interval = 100, menuAction = 0}
     M.addPage(config)
     return config
 end
@@ -61,7 +64,8 @@ local function validText(value, length)
 end
 
 function M.validate(config)
-    if type(config) ~= "table" or not integer(config.interval, 5, 1000) or type(config.pages) ~= "table"
+    if type(config) ~= "table" or not integer(config.interval, 5, 1000)
+        or not integer(config.menuAction or 0, 0, 3) or type(config.pages) ~= "table"
         or #config.pages < 1 or #config.pages > M.maxPages then
         return nil, "Ungueltige Einstellungen"
     end
@@ -75,7 +79,8 @@ function M.validate(config)
         for _, control in ipairs(page[2]) do
             if type(control) ~= "table" or not validText(control[1], M.nameLength)
                 or not integer(control[2], -1, 255) or not integer(control[3], 1, 8)
-                or not integer(control[5] or 0, -32767, 32767) then
+                or not integer(control[5] or 0, -32767, 32767)
+                or not integer(control[6] or 0, 0, 1) then
                 return nil, "Ungueltiger Schalter"
             end
             local key = M.address(page, control) * 8 + control[3]
@@ -90,7 +95,7 @@ function M.addSwitch(config, page)
     if #page[2] >= M.maxSwitches then return nil, "Max. 12 Schalter" end
     local address, output = M.free(config, page[1])
     if not address then return nil, "Kein freier Ausgang" end
-    page[2][#page[2] + 1] = {"Ausgang " .. output, address == page[1] and -1 or address, output, 0, 0}
+    page[2][#page[2] + 1] = {"Ausgang " .. output, address == page[1] and -1 or address, output, 0, 0, 0}
     return true
 end
 

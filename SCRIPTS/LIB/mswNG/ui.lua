@@ -6,6 +6,10 @@ local core = app.core
 local M = {}
 local editor, exitRow
 local selected = 1
+-- Virtual MENU is a BREAK event; derive its other phases from the exported ENTER phases.
+local menuFirst = EVT_VIRTUAL_MENU + EVT_ENTER_FIRST - EVT_ENTER_BREAK
+local menuLong = EVT_VIRTUAL_MENU + EVT_ENTER_LONG - EVT_ENTER_BREAK
+local menuRepeat = EVT_VIRTUAL_MENU + EVT_ENTER_REPT - EVT_ENTER_BREAK
 
 local function header(text)
     lcd.drawFilledRectangle(0, 0, LCD_W, 9)
@@ -47,12 +51,12 @@ local function drawControls()
         local control = controls[index]
         local text
         if control then
-            text = (control[4] == 1 and "+" or "-") ..
+            text = (control[4] == 1 and "+" or "-") .. (control[6] == 1 and "T" or "") ..
                 ((control[5] or 0) ~= 0 and ">" or "") .. control[1]
         else text = index == #controls + 1 and "Seite >" or "Setup" end
         lcd.drawText(x + 2, y + math.floor((cellHeight - 8) / 2), fit(text, cellWidth - 5), flags)
     end
-    footer(status() or "ENTER +/-  PAGE >")
+    footer(status() or (app.config.menuAction == 1 and "ENTER +/- MENU Taster" or "ENTER +/-  PAGE >"))
 end
 
 local function drawEditor()
@@ -90,14 +94,41 @@ local function drawEditor()
     footer(status() or (editor.editing and "ENTER OK EXIT Abbruch" or "ENTER edit EXIT zurueck"))
 end
 
+local function activate(controls, viaMenu)
+    local control = controls[selected]
+    if control then
+        if (control[5] or 0) ~= 0 then
+            app.message = "Steuerung durch Schalter"
+        elseif control[6] == 1 then
+            if viaMenu then
+                app.held, control[4] = control, 1
+                core.rebuild(app.sender, app.config)
+            else
+                app.message = app.config.menuAction == 1 and "Taster: Menutaste nutzen"
+                    or "Menutaste: Bedienung waehlen"
+            end
+        else
+            control[4] = 1 - control[4]
+            core.rebuild(app.sender, app.config)
+        end
+    elseif selected == #controls + 1 then
+        app.page, selected = app.page % #app.config.pages + 1, 1
+    else
+        editor = app.load("editor", app)
+    end
+end
+
 function M.run(event)
+    if app.held and event ~= 0 and event ~= menuLong and event ~= menuRepeat then app.release() end
     lcd.clear()
     if app.busy then
+        app.release()
         header("MultiSwitchNG")
         footer("SD laden/speichern...")
         return 0
     end
     if app.fatal then
+        app.release()
         header("mswNG SD-Fehler")
         lcd.drawText(0, 19, fit(app.fatal, LCD_W), SMLSIZE)
         footer(app.telemetry and "Konfiguration pruefen" or "EXIT beendet")
@@ -140,18 +171,16 @@ function M.run(event)
             app.page, selected = (app.page - 1 + delta) % #app.config.pages + 1, 1
         elseif event == EVT_VIRTUAL_NEXT then selected = selected % (#controls + 2) + 1
         elseif event == EVT_VIRTUAL_PREV then selected = (selected - 2) % (#controls + 2) + 1
+        elseif event == menuFirst and app.config.menuAction == 1 then
+            activate(controls, true)
         elseif event == EVT_VIRTUAL_MENU then
-            if type(killEvents) == "function" then killEvents(event) end
-            editor = app.load("editor", app)
-        elseif event == EVT_VIRTUAL_ENTER then
-            if selected <= #controls then
-                if (controls[selected][5] or 0) == 0 then
-                    controls[selected][4] = 1 - controls[selected][4]
-                    core.rebuild(app.sender, app.config)
-                else app.message = "Steuerung durch Schalter" end
-            elseif selected == #controls + 1 then
+            if app.config.menuAction == 2 then
                 app.page, selected = app.page % #app.config.pages + 1, 1
-            else editor = app.load("editor", app) end
+            elseif app.config.menuAction == 3 then
+                editor = app.load("editor", app)
+            end
+        elseif event == EVT_VIRTUAL_ENTER then
+            activate(controls, false)
         end
         if editor then drawEditor() else drawControls() end
     end

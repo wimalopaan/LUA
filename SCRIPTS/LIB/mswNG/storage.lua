@@ -81,7 +81,11 @@ local function readStep(job)
     if err then return failure(job, err) end
     if not text then return end
     if job.phase == "header" then
-        local version, generation, pages, interval = string.match(text, "^MSNG ([23]) (%d+) (%d+) (%d+)$")
+        local version, generation, pages, interval, menuAction =
+            string.match(text, "^MSNG (4) (%d+) (%d+) (%d+) (%d+)$")
+        if not version then
+            version, generation, pages, interval = string.match(text, "^MSNG ([23]) (%d+) (%d+) (%d+)$")
+        end
         if not generation then
             local legacyDestination
             generation, pages, interval, legacyDestination =
@@ -95,11 +99,11 @@ local function readStep(job)
             return failure(job, "SD: Falsches Dateiformat")
         end
         job.generation, job.pagesLeft, job.version = generation, pages, tonumber(version) or 1
-        job.config = {pages = {}, interval = tonumber(interval)}
+        job.config = {pages = {}, interval = tonumber(interval), menuAction = tonumber(menuAction) or 0}
         job.phase = "page"
     elseif job.phase == "page" then
         local address, count, title
-        if job.version == 3 then
+        if job.version >= 3 then
             address, count, title = string.match(text, "^P (%d+) (%d+) ([%x]+)$")
             if not title or #title > core.titleLength * 2 or #title % 2 ~= 0 then
                 return failure(job, "SD: Ungueltiger Titel")
@@ -118,12 +122,19 @@ local function readStep(job)
         job.pagesLeft, job.controlsLeft = job.pagesLeft - 1, count
         job.phase = count > 0 and "control" or (job.pagesLeft > 0 and "page" or "end")
     elseif job.phase == "control" then
-        local address, output, id, name = string.match(text, "^S (%-?%d+) (%d+) (%-?%d+) ([%x]+)$")
+        local address, output, id, kind, name
+        if job.version == 4 then
+            address, output, id, kind, name =
+                string.match(text, "^S (%-?%d+) (%d+) (%-?%d+) (%d+) ([%x]+)$")
+        else
+            address, output, id, name = string.match(text, "^S (%-?%d+) (%d+) (%-?%d+) ([%x]+)$")
+        end
         if not name or #name > 24 or #name % 2 ~= 0 then
             return failure(job, "SD: Ungueltiger Schalter")
         end
         name = unhex(name)
-        job.page[2][#job.page[2] + 1] = {name, tonumber(address), tonumber(output), 0, tonumber(id)}
+        job.page[2][#job.page[2] + 1] = {name, tonumber(address), tonumber(output), 0,
+                                      tonumber(id), tonumber(kind) or 0}
         job.controlsLeft = job.controlsLeft - 1
         if job.controlsLeft == 0 then job.phase = job.pagesLeft > 0 and "page" or "end" end
     else
@@ -154,7 +165,8 @@ end
 local function writeStep(job)
     local text
     if job.page == 0 then
-        text = string.format("MSNG 3 %d %d %d\n", job.generation, #job.config.pages, job.config.interval)
+        text = string.format("MSNG 4 %d %d %d %d\n", job.generation, #job.config.pages,
+                             job.config.interval, job.config.menuAction or 0)
         job.page = 1
     elseif job.page > #job.config.pages then
         text = "E " .. job.sum .. "\n"
@@ -166,7 +178,8 @@ local function writeStep(job)
         else
             local control = page[2][job.control]
             local name = hex(control[1])
-            text = string.format("S %d %d %d %s\n", control[2], control[3], control[5] or 0, name)
+            text = string.format("S %d %d %d %d %s\n", control[2], control[3], control[5] or 0,
+                                 control[6] or 0, name)
             job.control = job.control + 1
         end
         if job.control > #page[2] then job.page, job.control = job.page + 1, 0 end

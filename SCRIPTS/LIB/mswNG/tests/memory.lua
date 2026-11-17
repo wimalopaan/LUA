@@ -8,6 +8,7 @@ local files, fileCount = {}, 0
 local core = assert(loadfile(root .. "core.lua"))()
 local storage = assert(loadfile(root .. "storage.lua"))(core)
 local config = core.defaults()
+config.menuAction = 3
 for _ = 1, 3 do assert(core.addPage(config)) end
 for p, page in ipairs(config.pages) do
     for _ = 1, 4 do assert(core.addSwitch(config, page)) end
@@ -40,8 +41,9 @@ assert(not job.error)
 config, job, storage, core = nil, nil, nil, nil
 LCD_W, LCD_H, SMLSIZE, INVERS, BLINK = 128, 64, 1, 2, 4
 RIGHT = 8
-EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV, EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT = 1, 2, 3, 4
-EVT_VIRTUAL_NEXT_PAGE, EVT_VIRTUAL_PREV_PAGE, EVT_VIRTUAL_MENU = 5, 6, 7
+EVT_ENTER_FIRST, EVT_ENTER_BREAK, EVT_ENTER_LONG, EVT_ENTER_REPT = 0x61, 0x21, 0x81, 0x41
+EVT_VIRTUAL_NEXT, EVT_VIRTUAL_PREV, EVT_VIRTUAL_ENTER, EVT_VIRTUAL_EXIT = 1, 2, EVT_ENTER_BREAK, 4
+EVT_VIRTUAL_NEXT_PAGE, EVT_VIRTUAL_PREV_PAGE, EVT_VIRTUAL_MENU = 5, 6, 0x22
 local now = 0
 getTime = function() now = now + 1; return now end
 crossfireTelemetryPush = function() return true end
