@@ -388,6 +388,29 @@ local function switchPicker(record, key)
             set = function(value) record[key] = value end}
 end
 
+local function localSwitchPicker(record)
+    local names, targets, selected = {t("None")}, {0}, 1
+    local count = app.localout.hasVirtual() and 128 or 64
+    for target = 1, count do
+        if app.localout.available(target) then
+            names[#names + 1], targets[#targets + 1] = app.localout.name(target), target
+            if target == record.localSwitch then selected = #names end
+        end
+    end
+    if record.localSwitch > 0 and selected == 1 then
+        names[#names + 1] = t("Invalid assignment")
+        targets[#targets + 1] = record.localSwitch
+        selected = #names
+    end
+    return {type = "choice", values = names, w = scaled(180),
+        filter = function(value)
+            local target = targets[value]
+            return target == 0 or app.localout.available(target) == true
+        end,
+        get = function() return selected end,
+        set = function(value) selected, record.localSwitch = value, targets[value] end}
+end
+
 local function typePicker(view, record)
     local ids, names, positions = {}, {}, {}
     for index, id in ipairs(app.config.typeIds[app.data.header.protocol]) do
@@ -409,7 +432,26 @@ local function editorPage(view, width)
     local function add(caption, input, explanation)
         children[#children + 1] = field(caption, input, width, explanation)
     end
-    if kind == "config" then
+    if kind == "config" and view.editSection == "Virtuals" then
+        section("Virtual switches")
+        children[#children + 1] = hint("Selected switches are activated after Apply and on startup.", width)
+        children[#children + 1] = hint("Other activations are left unchanged. Remove assignments before deactivating.", width)
+        children[#children + 1] = actionRow({
+            button("Global", function() view.editSection, view.renderRevision = "Basic", nil end),
+        }, width)
+        for number = 1, 64 do
+            local id = app.localTargets[number + 64]
+            add(app.localout.name(number + 64) .. ":", {
+                type = "toggle",
+                get = function() return app.config.virtualEnabled(record, number) and 1 or 0 end,
+                set = function(value) app.config.setVirtualEnabled(record, number, value) end,
+                active = function()
+                    return not (app.config.virtualEnabled(app.data.header, number)
+                        and app.localTargets[number + 64])
+                end,
+            }, id and t("Assigned: %s", app.controls[id].name) or nil)
+        end
+    elseif kind == "config" then
         section("General")
         add("Name:", text(record, "name", 32))
         add("Auto-Save:", toggle(record, "autoSave"))
@@ -440,6 +482,11 @@ local function editorPage(view, width)
             if app.sender.protocol ~= 0 then
                 children[#children + 1] = hint("Apply CRSF before sending colors.", width)
             end
+        end
+        if app.localout.canActivateVirtual() then
+            children[#children + 1] = actionRow({
+                button("Virtual switches", function() view.editSection, view.renderRevision = "Virtuals", nil end),
+            }, width)
         end
     elseif kind == "tab" then
         section("General")
@@ -479,6 +526,15 @@ local function editorPage(view, width)
         if record.type ~= 5 then
             section("Exclusive group")
             add("Mutex group:", number(record, "group", 0, 255), "0: no group")
+        end
+        if record.type ~= 5 or record.localSwitch ~= 0 then
+            section("Local switch output")
+            add("Set switch:", localSwitchPicker(record), "L01..L64: Sticky")
+            children[#children + 1] = hint("Independent of CRSF/S.Port; active positions set the switch.", width)
+            if record.localSwitch > 0 then
+                local valid, err = app.localout.available(record.localSwitch)
+                if not valid then children[#children + 1] = hint(err, width) end
+            end
         end
     elseif view.editSection == "Appearance" then
         section("Appearance")
@@ -642,6 +698,9 @@ local function pageHeader(view, job)
     end
     if view.page == "editor" and view.edit then
         params.title, params.subtitle = editorTitles[view.editKind], view.edit.name
+        if view.editKind == "config" and view.editSection == "Virtuals" then
+            params.title = t("Virtual switches")
+        end
         if view.editKind == "tab" and app.tabs and app.tabs[view.edit.id] then
             params.title = t("Edit tab")
         end
@@ -783,7 +842,7 @@ local function stepBuild(view)
             else
                 local items = {}
                 for _, section in ipairs({"Basic", "Inputs", "Appearance"}) do
-                    local item = button(section, function()
+                    local item = button(section == "Inputs" and "Inputs/outputs" or section, function()
                         view.editSection, view.renderRevision = section, nil
                     end)
                     item.checked = (view.editSection or "Basic") == section

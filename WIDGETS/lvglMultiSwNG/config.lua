@@ -19,6 +19,7 @@ local schemas = {
         destination = {0, 255}, interval = {5, 1000}, sendColors = {0, 1}, autoSave = {0, 1},
         buttonSpacing = {-1, 40},
         protocol = {0, 3}, sportPhysicalId = {0, 0x1b}, sportAppId = {0, 255},
+        virtualSwitches = 64,
     },
     tab = {
         id = {1, 2147483647}, name = 32, address = {0, 255},
@@ -32,6 +33,7 @@ local schemas = {
         switch2 = {-2147483648, 2147483647}, source = {-2147483648, 2147483647},
         activation = {-2147483648, 2147483647}, group = {0, 255}, image = 128,
         sportType = {0, 255}, sportOptions = {0, 255}, sportPwmOn = {0, 255},
+        localSwitch = {0, 128},
     },
 }
 
@@ -52,6 +54,13 @@ function M.validateRecord(record)
     end
     if record.kind == "tab" and record.height > 0 and record.height < 30 then
         return nil, t("Invalid tab.height: use 0 or 30..240")
+    end
+    if record.kind == "config" and (#record.virtualSwitches ~= 64
+        or string.find(record.virtualSwitches, "[^01]")) then
+        return nil, t("Invalid config.virtualSwitches")
+    end
+    if record.kind == "control" and record.type == 5 and record.localSwitch ~= 0 then
+        return nil, t("Slider cannot set a local switch: %s", record.name)
     end
     for key in pairs(record) do
         if key ~= "kind" and schema[key] == nil then
@@ -75,6 +84,7 @@ function M.newControl(id, tab, output)
         color = COLOR_THEME_SECONDARY3, textColor = COLOR_THEME_PRIMARY3, font = 0,
         visible = 1, switch = 0, switch2 = 0, source = 0, activation = 0,
         group = 0, image = "", sportType = 1, sportOptions = 0, sportPwmOn = 255,
+        localSwitch = 0,
     }
 end
 
@@ -83,12 +93,23 @@ function M.defaults()
         header = {kind = "config", version = 1, generation = 0, name = "MultiSwitch NG",
                   destination = 0, interval = 100, sendColors = 0, autoSave = 1,
                   buttonSpacing = -1,
-                  protocol = 0, sportPhysicalId = 0, sportAppId = 0x51},
+                  protocol = 0, sportPhysicalId = 0, sportAppId = 0x51,
+                  virtualSwitches = string.rep("0", 64)},
         tabs = {{kind = "tab", id = 1, name = t("Tab %d", 1), address = 0, columns = 2, height = 0}},
         controls = {},
     }
     for i = 1, 8 do config.controls[i] = M.newControl(i, 1, i) end
     return config
+end
+
+function M.virtualEnabled(header, number)
+    return string.byte(header.virtualSwitches, number) == 49
+end
+
+function M.setVirtualEnabled(header, number, enabled)
+    header.virtualSwitches = string.sub(header.virtualSwitches, 1, number - 1)
+        .. ((enabled == true or enabled == 1) and "1" or "0")
+        .. string.sub(header.virtualSwitches, number + 1)
 end
 
 function M.address(control, tab)
@@ -97,7 +118,7 @@ function M.address(control, tab)
 end
 
 function M.builder()
-    return {config = {tabs = {}, controls = {}}, tabs = {}, ids = {}, endpoints = {}}
+    return {config = {tabs = {}, controls = {}}, tabs = {}, ids = {}, endpoints = {}, localSwitches = {}}
 end
 
 function M.append(builder, record)
@@ -108,15 +129,17 @@ function M.append(builder, record)
         if record.protocol == nil then record.protocol = 0 end
         if record.sportPhysicalId == nil then record.sportPhysicalId = 0 end
         if record.sportAppId == nil then record.sportAppId = 0x51 end
+        if record.virtualSwitches == nil then record.virtualSwitches = string.rep("0", 64) end
     elseif type(record) == "table" and record.kind == "control"
         and (record.sportType == nil or record.sportOptions == nil or record.sportPwmOn == nil
-            or record.leftText == nil or record.rightText == nil) then
+            or record.leftText == nil or record.rightText == nil or record.localSwitch == nil) then
         record = M.copy(record)
         if record.sportType == nil then record.sportType = 1 end
         if record.sportOptions == nil then record.sportOptions = 0 end
         if record.sportPwmOn == nil then record.sportPwmOn = 255 end
         if record.leftText == nil then record.leftText = t("Left") end
         if record.rightText == nil then record.rightText = t("Right") end
+        if record.localSwitch == nil then record.localSwitch = 0 end
     end
     local ok, err = M.validateRecord(record)
     if not ok then return nil, err end
@@ -146,6 +169,12 @@ function M.append(builder, record)
         end
         if builder.endpoints[endpoint] then
             return nil, t("Address/output already assigned: %d/%d", M.address(record, tab), record.output)
+        end
+        if record.localSwitch > 0 then
+            if builder.localSwitches[record.localSwitch] then
+                return nil, t("Local switch already assigned: %s", record.name)
+            end
+            builder.localSwitches[record.localSwitch] = true
         end
         builder.ids[record.id], builder.endpoints[endpoint] = true, true
         config.controls[#config.controls + 1] = record
