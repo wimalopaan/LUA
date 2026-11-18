@@ -4,7 +4,7 @@
 local app = ...
 app.softwareVersion = 4
 app.website = "https://github.com/wimalopaan/LUA"
-app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
+app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "localout", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0
 app.values, app.inputIndex = {}, 1
 app.inputErrors, app.inputErrorCount = {}, 0
@@ -37,6 +37,8 @@ function app.operationStatus()
         local error = t("Source unavailable: %s", detail)
         status = status and (status .. "; " .. error) or error
     end
+    local localError = app.localout.status()
+    if localError then status = status and (status .. "; " .. localError) or localError end
     status = status or t("Outputs ready")
     if progress then status = progress .. "; " .. status end
     if app.sender.notice then return status .. "; " .. app.sender.notice end
@@ -74,6 +76,7 @@ local function completePrepare(job)
         -- Only references are exchanged here; no configuration-sized loop runs.
         app.data, app.tabs, app.controls = state.data, state.tabs, state.controls
         app.values, app.physical, app.winners = state.values, state.physical, state.winners
+        app.localTargets = state.localTargets
         app.groupCounts = state.groupCounts
         app.inputErrors, app.inputErrorCount = state.inputErrors, state.inputErrorCount
         app.inputErrorId = state.inputErrorId
@@ -144,6 +147,7 @@ local function setState(state, id, value, changed)
 end
 
 local function mirror(id, value)
+    app.localout.changed(id)
     local job = app.prepare
     if job and job.preserve[id] then
         setState(job.state, id, value)
@@ -310,6 +314,7 @@ function app.tick()
         else loadComplete() end
     elseif app.phase == "ready" or app.phase == "prepare" then
         if app.data then
+            app.localout.tick()
             inputs()
             if app.backend.colors then
                 local quality = getValue("RQly")
