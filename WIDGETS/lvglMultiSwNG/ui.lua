@@ -402,6 +402,62 @@ local function typePicker(view, record)
         set = function(value) record.type = ids[value]; view.renderRevision = nil end}
 end
 
+local function importPage(view, width)
+    local scan = view.importScan
+    local children = {heading("Import configuration", width)}
+    if not scan.done then
+        children[#children + 1] = hint("Searching model configurations ...", width)
+    elseif scan.error then
+        children[#children + 1] = hint(scan.error, width)
+    elseif #scan.sources == 0 then
+        children[#children + 1] = hint("No other model configuration found", width)
+    else
+        children[#children + 1] = field("Source model:", {
+            type = "choice", values = scan.names,
+            get = function() return view.importSource end,
+            set = function(value) view.importSource, view.renderRevision = value, nil end,
+        }, width)
+        if scan.errors[view.importSource] then
+            children[#children + 1] = hint(scan.errors[view.importSource], width)
+        end
+        children[#children + 1] = hint("Replaces all widget settings, tabs and controls. The source stays unchanged.", width)
+        children[#children + 1] = hint("Check switch, source and output assignments for the current model.", width)
+    end
+    return children
+end
+
+local function importActions(view)
+    return {
+        button("Import", function()
+            if not unchanged(view.importRevision) then return end
+            local scan = view.importScan
+            local source = scan.sources[view.importSource]
+            lvgl.confirm({title = t("Import configuration"),
+                message = t("Replace the current widget configuration with %s? Unsaved changes and editor drafts will be discarded.",
+                    scan.names[view.importSource]),
+                confirm = function()
+                    if not unchanged(view.importRevision) then return end
+                    local job = app.import(source, function(ok)
+                        view.pending, view.renderRevision = nil, nil
+                        if ok then
+                            view.importScan = nil
+                            view.tab = app.data.tabs[1].id
+                            navigate(view, "control")
+                        end
+                    end)
+                    if job then view.pending, view.renderRevision = job, nil end
+                end})
+        end, function()
+            local scan = view.importScan
+            return scan.done and not scan.error and scan.sources[view.importSource] ~= nil and not app.saveJob
+        end),
+        button("Cancel", function()
+            view.importScan = nil
+            navigate(view, "editor")
+        end),
+    }
+end
+
 local function editorPage(view, width)
     local record, kind = view.edit, view.editKind
     local children = {}
@@ -441,6 +497,15 @@ local function editorPage(view, width)
                 children[#children + 1] = hint("Apply CRSF before sending colors.", width)
             end
         end
+        section("Management")
+        children[#children + 1] = actionRow({
+            button("Import configuration", function()
+                if not unchanged(view.editRevision) then return end
+                view.importScan = app.storage.scan(app.modelsDir, app.path)
+                view.importSource, view.importRevision = 1, app.revision
+                navigate(view, "import")
+            end, function() return not app.saveJob end),
+        }, width)
     elseif kind == "tab" then
         section("General")
         add("Name:", text(record, "name", 32))
@@ -610,7 +675,7 @@ local function beginBuild(view, full)
         job.rowPad = 0
     end
     job.fixed = app.phase == "ready" and view.page ~= "control" and view.page ~= "info" and not view.pending
-    job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor")
+    job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor" or view.page == "import")
     if job.fixed then
         local elementHeight = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
         job.footerHeight = elementHeight + scaled(66)
@@ -651,6 +716,8 @@ local function pageHeader(view, job)
         params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
     elseif view.page == "info" then
         params.title, params.subtitle = t("Info"), "MultiSwitch NG"
+    elseif view.page == "import" then
+        params.title, params.subtitle = t("Import configuration"), t("Source model:")
     end
     if app.phase == "ready" and (view.page == "control" or view.page == "tab") and not view.pending then
         local page = view.page
@@ -825,6 +892,7 @@ local function stepBuild(view)
             if not app.tabs[view.tab] then view.tab = app.data.tabs[1].id end
             if view.page == "info" then nodes(job, infoPage(view, width), job.content, "finish")
             elseif view.page == "editor" then nodes(job, editorPage(view, width), job.content, "footer")
+            elseif view.page == "import" then nodes(job, importPage(view, width), job.content, "footer")
             elseif view.page == "move" then
                 job.targets = {names = {}, ids = {}, positions = {}}
                 job.phase = "targets"
@@ -892,6 +960,7 @@ local function stepBuild(view)
             local actions
             if view.page == "editor" then actions = editorActions(view)
             elseif view.page == "move" then actions = moveActions(view)
+            elseif view.page == "import" then actions = importActions(view)
             else actions = {button("Control", function() navigate(view, "control") end)} end
             if app.data.header.autoSave == 0 then
                 actions[#actions + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
@@ -937,6 +1006,10 @@ end
 
 function M.refresh(view)
     local full = lvgl.isFullScreen() or lvgl.isAppMode()
+    if view.page == "import" and view.importScan and not view.importScan.done then
+        app.storage.stepScan(view.importScan)
+        if view.importScan.done then view.renderRevision = nil end
+    end
     if view.full and not full then
         release(view)
         view.page = "control"

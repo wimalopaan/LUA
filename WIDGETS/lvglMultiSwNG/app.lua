@@ -2,6 +2,7 @@
 -- Copyright (C) 2026 Wilhelm Meier
 
 local app = ...
+app.modelsDir = app.dir .. "models/"
 app.softwareVersion = 4
 app.website = "https://github.com/wimalopaan/LUA"
 app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "runtime", "ui"}
@@ -86,7 +87,8 @@ local function completePrepare(job)
         app.revision = app.revision + 1
         if job.dirty then app.dirty = true
         else app.dirty = false end
-        if job.change and autoSave then app.autoSavePending = true end
+        if job.replace then app.warning = job.warning end
+        if job.change and autoSave or job.replace then app.autoSavePending = true end
         job.success = true
     end
     if job.callback then job.callback(job.success, job.error) end
@@ -111,9 +113,34 @@ function app.commit(kind, record, remove, callback)
     return beginPrepare(app.data, {kind = kind, record = app.config.copy(record), remove = remove}, callback, true)
 end
 
+function app.import(source, callback)
+    if app.phase ~= "ready" or app.prepare or app.saveJob then
+        app.error = t("Wait for configuration operations to finish")
+        return
+    end
+    if not app.storage.sourceName(source) or string.lower(app.modelsDir .. source) == string.lower(app.path) then
+        app.error = t("Select another model configuration")
+        return
+    end
+    app.error = nil
+    app.prepare = {
+        phase = "import", index = 1, preserve = {}, replace = true, dirty = true, callback = callback,
+        loads = {a = app.storage.load(app.modelsDir .. source .. ".a.lua"),
+                 b = app.storage.load(app.modelsDir .. source .. ".b.lua")},
+    }
+    return app.prepare
+end
+
 function app.cancelUpdate(job)
-    if app.prepare ~= job or not job.change then return end
-    job.done, job.error = true, t("Configuration update cancelled")
+    if app.prepare ~= job or not (job.change or job.replace) then return end
+    local reason = t("Configuration update cancelled")
+    if job.loads then
+        local ok, err = app.storage.cancelLoad(job.loads.a)
+        if not ok then reason = reason .. "; " .. err end
+        ok, err = app.storage.cancelLoad(job.loads.b)
+        if not ok then reason = reason .. "; " .. err end
+    end
+    job.done, job.error = true, reason
     completePrepare(job)
 end
 
@@ -188,6 +215,8 @@ function app.save()
     app.autoSaveRevision, app.autoSavePending = app.revision, nil
     local generation = app.generation + 1
     if generation > 2147483647 then app.saveError = t("Configuration generation overflow"); return end
+    local ok, err = app.storage.ensureDirectory(app.modelsDir)
+    if not ok then app.saveError = t("Save failed: %s", err); return end
     local slot = app.slot == "a" and "b" or "a"
     app.saveRevision, app.saveSlot, app.saveGeneration = app.revision, slot, generation
     app.saveSnapshot = app.data
@@ -203,13 +232,43 @@ function app.reset()
     app.generation = app.generation or 0
 end
 
-local function loadComplete()
-    local a, b = app.loads.a, app.loads.b
+local function selectLoaded(loads)
+    local a, b = loads.a, loads.b
     local chosen, slot
     if a.result then chosen, slot = a.result, "a" end
     if b.result and (not chosen or b.result.header.generation > chosen.header.generation) then
         chosen, slot = b.result, "b"
     end
+    return chosen, slot
+end
+
+local function stepImport(job)
+    local a, b = job.loads.a, job.loads.b
+    if not a.done then app.storage.stepLoad(a)
+    elseif not b.done then app.storage.stepLoad(b)
+    else
+        local chosen, slot = selectLoaded(job.loads)
+        if not chosen then
+            job.done, job.error = true, t("Cannot load configuration: A: %s; B: %s",
+                tostring(a.error or t("missing")), tostring(b.error or t("missing")))
+            return
+        end
+        local broken = slot == "a" and b or a
+        if not broken.result and not broken.missing then
+            job.warning = t("Recovered configuration; other slot: %s", broken.error)
+        end
+        -- Preserve the job identity used by the UI and cancellation callbacks.
+        local prepared = app.runtime.begin(chosen, app)
+        for key, value in pairs(prepared) do job[key] = value end
+        job.loads = nil
+        return
+    end
+    job.index = job.index + 1
+end
+
+local function loadComplete()
+    local a, b = app.loads.a, app.loads.b
+    local chosen, slot = selectLoaded(app.loads)
     if chosen then
         app.slot, app.generation = slot, chosen.header.generation
         beginPrepare(chosen, nil, nil, false)
@@ -325,7 +384,8 @@ function app.tick()
         end
         if app.prepare then
             local job = app.prepare
-            app.runtime.step(job)
+            if job.loads then stepImport(job)
+            else app.runtime.step(job) end
             if job.done then completePrepare(job) end
         end
         if not app.prepare and app.dirty and not app.saveJob and (app.data.header.autoSave == 1 or app.autoSavePending)

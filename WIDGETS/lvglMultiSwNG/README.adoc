@@ -520,12 +520,52 @@ maximalen Widget-Größe. Simulatorwerte ersetzen diese Hardwaremessung nicht.
 
 == Konfigurationsdateien
 
-Je Modell werden im Widget-Verzeichnis zwei wechselnde Dateien verwendet:
+Je Modell werden im Unterordner `models/` des Widget-Verzeichnisses
+zwei wechselnde Dateien verwendet:
 `model_<Modellkennung als Hex>.a.lua` und `.b.lua`.
+Der Ordner wird beim Speichern bei Bedarf angelegt.
+Vorhandene Konfigurationsdateien bitte selbst mit unveränderten Dateinamen
+nach `models/` verschieben, jeweils beide Dateien eines Modells.
+Im Widget-Hauptverzeichnis wird nicht mehr nach Konfigurationen gesucht;
+eine automatische Übernahme findet nicht statt.
 Die Modellkennung ist `model.getInfo().filename`, falls vorhanden,
 sonst der Modellname. Bei Verwendung des Modellnamens führt Umbenennen
 zu einem anderen Dateipaar.
 Die bisherige MultiSwitch-Konfiguration wird weder geladen noch überschrieben.
+
+=== Konfiguration eines anderen Modells übernehmen
+
+Unter `Global` → `Konfiguration importieren` lässt sich eine gespeicherte
+Konfiguration eines anderen Modells auswählen. Die Liste enthält die im
+Unterordner `models/` vorhandenen NG-Konfigurationen, ohne das aktuelle Modell
+und ohne doppelte Einträge für die beiden Speicherdateien. Angezeigt wird der
+tatsächliche Modellname aus der zugehörigen EdgeTX-Datei unter `/MODELS/`,
+nicht deren YML-Dateiname. Wurde eine Konfiguration ohne Modell-Dateikennung
+gespeichert, enthält ihre Kennung bereits den Modellnamen.
+Ist ein Modellname nicht lesbar, kennzeichnet die Auswahl dies ausdrücklich
+mit der Dateikennung; die Fehlerursache wird zusätzlich angezeigt.
+
+`Importieren` verlangt eine Bestätigung, bevor sämtliche Widget-Einstellungen,
+Tabs und Elemente ersetzt werden. Ungespeicherte Änderungen und offene Entwürfe
+werden dabei verworfen. `Abbrechen` kehrt ohne Übernahme zum bisherigen
+Global-Entwurf zurück. Während des Ladens und der Vorbereitung lässt sich
+die Übernahme über `Änderung abbrechen` stoppen.
+
+Wie beim normalen Laden wird der neueste vollständige, gültige Speicherstand
+aus den beiden Quelldateien verwendet. Bei einem Ladefehler bleibt die aktuelle
+Konfiguration unverändert. Die Quelldateien werden niemals beschrieben.
+Nach erfolgreicher Übernahme wird die Kopie unter der Kennung des aktuellen
+Modells gespeichert, auch wenn Auto-Speichern ausgeschaltet ist; dessen
+Speichergeneration wird unabhängig vom Quellmodell fortgeführt.
+Speicherfehler bleiben sichtbar und die Kopie als ungespeichert markiert.
+
+Schaltzustände werden nicht übernommen. Die physischen Eingänge des aktuellen
+Modells wirken anschließend wie gewohnt. Schalter-, Quellen-, Adress- und
+Ausgangszuordnungen deshalb vor dem Einsatz prüfen. EdgeTX-Modelleinstellungen
+wie Mischer oder logische Schalter werden nicht kopiert. Der Import unterstützt
+die NG-Konfigurationen, nicht das Dateiformat des Vorgänger-Widgets.
+
+=== Dateiformat
 
 Jede Datei ist eine gültige Lua-Datei mit `return {`, einer Liste flacher
 Datensätze und abschließendem `}`. Die Datensätze haben `kind="config"`,

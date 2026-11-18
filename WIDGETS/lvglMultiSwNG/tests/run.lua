@@ -3,6 +3,7 @@
 
 -- Run from lvglMultiSwNG: lua tests/run.lua
 local root = (string.match(arg[0], "^(.*)tests/") or "")
+local modelsDir = root .. "models/"
 local hostIO = io
 local stringMetatable = debug.getmetatable("")
 -- Reproduce the simulator's lack of string method lookup.
@@ -105,11 +106,15 @@ local function reset()
     getVersion = function() return "3.0.0", "tx16s" end
     getGeneralSettings = function() return {language = "EN", voice = "de"} end
     serialWrite = nil
+    dir = nil
     getSwitchValue = function(id) return switches[id] or false end
     getSourceValue = function(id) return sources[id] end
     getValue = function() return quality end
     model = {getInfo = function() return {name = "Model/1"} end}
+    local directories = {}
+    mkdir = function(path) directories[path] = true; return 0 end
     fstat = function(path)
+        if directories[path] then return {attrib = 0x10} end
         if fs[path] ~= nil then return {size = #fs[path]} end
     end
     lcd = {
@@ -1573,14 +1578,86 @@ test("Missing simulator model identity waits and retries without loading or writ
     for _ = 1, 200 do now = now + 1; main.background(a); main.background(b) end
     equal(a.app, b.app)
     equal(a.app.phase, "ready")
-    equal(a.app.path, root .. "model_6d6f64656c312e796d6c")
+    equal(a.app.path, modelsDir .. "model_6d6f64656c312e796d6c")
 end)
 
 test("Empty model filename falls back to the model name", function()
     local main = assert(loadfile(root .. "main.lua"))()
     model.getInfo = function() return {filename = "", name = "Model/1"} end
     local view = main.create({w = 480, h = 272}, {}, root)
-    equal(view.app.path, root .. "model_4d6f64656c2f31")
+    equal(view.app.path, modelsDir .. "model_4d6f64656c2f31")
+end)
+
+test("Model loading and saving use only models even when newer root configurations exist", function()
+    local source = "model_6d6f64656c312e796d6c"
+    local data = config.defaults()
+    data.header.autoSave, data.header.name = 0, "Ignored root configuration"
+    finish(storage.save(root .. source .. ".a.lua", data, 100), storage.stepSave)
+    local legacy = fs[root .. source .. ".a.lua"]
+    data.header.name = "Models configuration"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 3), storage.stepSave)
+    model.getInfo = function() return {filename = "model1.yml"} end
+    local main = assert(loadfile(root .. "main.lua"))()
+    local view = main.create({w = 480, h = 272}, {}, root)
+    for _ = 1, 200 do now = now + 1; main.background(view) end
+    equal(view.app.phase, "ready", view.app.error)
+    equal(view.app.modelsDir, modelsDir)
+    equal(view.app.data.header.name, "Models configuration")
+    equal(view.app.generation, 3)
+    local header = config.copy(view.app.data.header)
+    header.name = "Saved in models"
+    assert(commit(view.app, "config", header))
+    save(view.app)
+    local saved = finish(storage.load(modelsDir .. source .. ".b.lua"), storage.stepLoad)
+    equal(saved.result.header.name, "Saved in models")
+    equal(saved.result.header.generation, 4)
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    equal(fs[root .. source .. ".b.lua"], nil)
+end)
+
+test("Missing models directories are created on save and creation errors never fall back to the root", function()
+    local source = "model_6d6f64656c312e796d6c"
+    local data = config.defaults()
+    data.header.name = "Must not be migrated"
+    finish(storage.save(root .. source .. ".a.lua", data, 20), storage.stepSave)
+    local legacy, writes = fs[root .. source .. ".a.lua"], writeCount
+    local create, calls = mkdir, 0
+    mkdir = function(path)
+        equal(path, modelsDir)
+        calls = calls + 1
+        return 7
+    end
+    model.getInfo = function() return {filename = "model1.yml"} end
+    local main = assert(loadfile(root .. "main.lua"))()
+    local view = main.create({w = 480, h = 272}, {}, root)
+    for _ = 1, 200 do now = now + 1; main.background(view) end
+    equal(view.app.phase, "ready")
+    equal(view.app.data.header.name, "MultiSwitch NG")
+    contains(view.app.saveError, "Cannot create directory")
+    equal(view.app.dirty, true)
+    equal(calls, 1)
+    equal(writeCount, writes)
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    equal(fs[modelsDir .. source .. ".a.lua"], nil)
+    mkdir = create
+    local open = io.open
+    io.open = function(path, mode)
+        if mode == "w" then assert(fstat(modelsDir), "Save started before creating models") end
+        return open(path, mode)
+    end
+    save(view.app)
+    equal(view.app.dirty, false)
+    assert(fs[modelsDir .. source .. ".a.lua"])
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    mkdir = nil
+    assert(storage.ensureDirectory(modelsDir))
+    local ok, err = storage.ensureDirectory(modelsDir .. "missing/")
+    assert(not ok)
+    contains(err, "Directory creation API unavailable")
+    fs[modelsDir .. "file"] = "not a directory"
+    ok, err = storage.ensureDirectory(modelsDir .. "file")
+    assert(not ok)
+    contains(err, "Not a directory")
 end)
 
 test("Shared instances run one scheduler per tick and detect stale editors", function()
@@ -2719,6 +2796,360 @@ test("Startup Auto-Save failures remain visible without endless retries", functi
     equal(app.dirty, false)
     equal(app.generation, 1)
     contains(app.status(), "Configuration saved")
+end)
+
+test("Model discovery is incremental, decodes model identifiers and deduplicates save slots", function()
+    local entries = {"model_43757272656e74.a.lua", "model_43757272656E74.b.lua", "app.lua",
+        "model_4f74686572.b.lua", "model_4F74686572.a.lua", "model_53c3bc64.a.lua",
+        "model_123.a.lua", "model_00.a.lua", "model_zz.a.lua", "model_41.lua"}
+    local count = 0
+    dir = function(directory)
+        equal(directory, modelsDir)
+        return function() count = count + 1; return entries[count] end
+    end
+    local scan = storage.scan(modelsDir, modelsDir .. "model_43757272656e74")
+    while not scan.done do
+        local before = count
+        storage.stepScan(scan)
+        equal(count, before + 1, "Unbounded directory scan")
+    end
+    equal(#scan.sources, 2)
+    equal(scan.sources[1], "model_4f74686572")
+    equal(scan.names[1], "Other")
+    equal(scan.names[2], "S" .. string.char(195, 188) .. "d")
+    equal(scan.iterator, nil)
+    dir = nil
+    contains(storage.scan(modelsDir).error, "Directory listing API unavailable")
+    dir = function() end
+    contains(storage.scan(modelsDir).error, "Cannot list")
+end)
+
+test("Model import selects the newest valid slot and saves a full independent copy with target generations", function()
+    local target = config.defaults()
+    target.header.autoSave = 0
+    local path, source = modelsDir .. "model_43757272656e74", "model_4f74686572"
+    finish(storage.save(path .. ".a.lua", target, 7), storage.stepSave)
+    local data = config.defaults()
+    data.header.autoSave, data.header.name = 0, "Other widget"
+    data.header.protocol, data.header.sportPhysicalId, data.header.sportAppId = 1, 13, 82
+    data.tabs[1].name, data.tabs[1].address, data.tabs[1].columns = "Other tab", 11, 3
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 19
+    data.controls[1].name, data.controls[1].tab = "Imported light", 2
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 90), storage.stepSave)
+    data.controls[1].color = 0x12348000
+    finish(storage.save(modelsDir .. source .. ".b.lua", data, 2147483647), storage.stepSave)
+    local a, b = fs[modelsDir .. source .. ".a.lua"], fs[modelsDir .. source .. ".b.lua"]
+    local app = appInstance(path)
+    ready(app)
+    app.set(1, 1)
+    advance(app, 16)
+    local original = app.data
+    local job = assert(app.import(source))
+    advance(app)
+    equal(app.data, original)
+    assert(not app.commit("config", config.copy(app.data.header)))
+    contains(app.error, "already in progress")
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    equal(app.data.header.name, "Other widget")
+    equal(app.data.header.autoSave, 0)
+    equal(#app.data.tabs, 2)
+    equal(app.tabs[1].columns, 3)
+    equal(app.controls[1].name, "Imported light")
+    equal(app.controls[1].color, 0x12348000)
+    equal(app.addresses[1], 19)
+    equal(app.values[1], 0)
+    equal(app.sender.protocol, 1)
+    equal(app.path, path)
+    equal(app.generation, 7)
+    assert(#app.sender.off[0] > 0, "Previous outputs were not retired")
+    settleAutosave(app)
+    equal(app.generation, 8)
+    equal(app.dirty, false)
+    equal(fs[modelsDir .. source .. ".a.lua"], a)
+    equal(fs[modelsDir .. source .. ".b.lua"], b)
+    local saved = finish(storage.load(path .. ".b.lua"), storage.stepLoad)
+    equal(saved.result.header.generation, 8)
+    equal(saved.result.controls[1].name, "Imported light")
+    local fresh = appInstance(path)
+    ready(fresh)
+    equal(fresh.controls[1].name, "Imported light")
+    equal(fresh.values[1], 0)
+    equal(fresh.data.header.autoSave, 0)
+    equal(fresh.sender.protocol, 1)
+end)
+
+test("Model selection reads real EdgeTX header names and decodes quoted and hex-escaped strings", function()
+    local cases = {
+        {'"Bagger"', "Bagger"},
+        {'"Truck: \\x22Front\\x22 #1"', 'Truck: "Front" #1'},
+        {'"S\\xC3\\xBCd\\x5C1"', "S" .. string.char(195, 188) .. "d\\1"},
+        {"'Pilot''s model'", "Pilot's model"},
+        {"Plain model # trailing comment", "Plain model"},
+    }
+    local entries = {}
+    for index, case in ipairs(cases) do
+        local filename = "model" .. index .. ".yml"
+        local hex = {}
+        for byte = 1, #filename do hex[byte] = string.format("%02x", string.byte(filename, byte)) end
+        entries[index] = "model_" .. table.concat(hex) .. ".a.lua"
+        fs["/MODELS/" .. filename] = 'semver: 2.11.0\r\nheader:\r\n  bitmap: "test"\r\n  name: '
+            .. case[1] .. '\r\ntimers:\r\n  name: "Not the model name"\r\n' .. string.rep("# padding\n", 200)
+    end
+    dir = function(directory)
+        equal(directory, modelsDir)
+        local index = 0
+        return function() index = index + 1; return entries[index] end
+    end
+    local scan = storage.scan(modelsDir)
+    while not scan.done do
+        local before = readCount
+        storage.stepScan(scan)
+        assert(readCount - before <= 1, "More than one bounded model header read per scan step")
+    end
+    equal(#scan.names, #cases)
+    for index, case in ipairs(cases) do
+        equal(scan.names[index], case[2])
+        equal(scan.errors[index], nil)
+    end
+end)
+
+test("Unreadable model names have explicit placeholders and errors instead of pretending filenames are names", function()
+    local entries = {"model_6d6f64656c312e796d6c.a.lua", "model_6d6f64656c322e796d6c.a.lua",
+        "model_6d6f64656c332e796d6c.a.lua"}
+    fs["/MODELS/model2.yml"] = 'semver: 2.11.0\ntimers:\n  name: "Wrong name"\n'
+    fs["/MODELS/model3.yml"] = 'header:\n  name: "Broken\\xZZ"\n'
+    dir = function()
+        local index = 0
+        return function() index = index + 1; return entries[index] end
+    end
+    local scan = finish(storage.scan(modelsDir), storage.stepScan)
+    equal(#scan.sources, 3)
+    for index = 1, 3 do
+        contains(scan.names[index], "Model name unavailable")
+        contains(scan.errors[index], "/MODELS/model" .. index .. ".yml")
+    end
+    fs["/MODELS/model1.yml"] = 'header:\n  name: "Actual name"\n'
+    io.close = function(file) file.closed = true; return nil, "SD close failed" end
+    scan = finish(storage.scan(modelsDir), storage.stepScan)
+    contains(scan.names[1], "Model name unavailable")
+    contains(scan.errors[1], "SD close failed")
+end)
+
+test("Model import falls back from corrupt slots but never replaces the target with missing or invalid data", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 4), storage.stepSave)
+    data.header.name = "Recovered source"
+    local source = "model_4f74686572"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 8), storage.stepSave)
+    fs[modelsDir .. source .. ".b.lua"] = "broken source"
+    local app = appInstance()
+    ready(app)
+    local job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    contains(app.warning, "Recovered configuration")
+    settleAutosave(app)
+    local original, writes, slot, generation = app.data, writeCount, app.slot, app.generation
+    fs[modelsDir .. source .. ".a.lua"] = "invalid source"
+    app.set(1, 1)
+    job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    equal(job.success, false)
+    contains(job.error, "Cannot load configuration")
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    equal(app.slot, slot)
+    equal(app.generation, generation)
+    equal(writeCount, writes)
+    job = assert(app.import("model_4d697373696e67"))
+    finish(job, function() advance(app) end)
+    equal(job.success, false)
+    equal(app.data, original)
+    equal(writeCount, writes)
+    for _, invalid in ipairs({"../model_41", "model_4", "model_zz", "./" .. source, ""}) do
+        assert(not app.import(invalid))
+        contains(app.error, "Select another model")
+    end
+end)
+
+test("Cancelling model import closes both files and preserves live configuration and values", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 2), storage.stepSave)
+    local source = "model_4f74686572"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 3), storage.stepSave)
+    finish(storage.save(modelsDir .. source .. ".b.lua", data, 4), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local original, writes = app.data, writeCount
+    local job = assert(app.import(source))
+    local a, b = job.loads.a.file, job.loads.b.file
+    app.set(1, 1)
+    app.cancelUpdate(job)
+    assert(a.closed and b.closed)
+    equal(job.success, false)
+    equal(app.prepare, nil)
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    job = assert(app.import(source))
+    for _ = 1, 2000 do
+        if job.phase == "retire-sliders" then break end
+        advance(app)
+    end
+    equal(job.phase, "retire-sliders")
+    app.cancelUpdate(job)
+    equal(app.prepare, nil)
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    equal(writeCount, writes)
+    job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    equal(app.values[1], 0, "Imported mappings inherited a latched runtime state")
+    settleAutosave(app)
+end)
+
+test("Model import rejects its own configuration and busy saves and reports target save failures", function()
+    local path, source = modelsDir .. "model_43757272656e74", "model_4f74686572"
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save(path .. ".a.lua", data, 6), storage.stepSave)
+    data.header.name = "Imported despite full SD"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 100), storage.stepSave)
+    local originalSource = fs[modelsDir .. source .. ".a.lua"]
+    local app = appInstance(path)
+    ready(app)
+    assert(not app.import("model_43757272656e74"))
+    contains(app.error, "Select another model")
+    assert(not app.import("model_43757272656E74"))
+    contains(app.error, "Select another model")
+    app.save()
+    assert(not app.import(source))
+    contains(app.error, "Wait for configuration operations")
+    save(app)
+    writeFailure = true
+    local job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    settleAutosave(app)
+    equal(app.data.header.name, "Imported despite full SD")
+    equal(app.dirty, true)
+    contains(app.saveError, "SD full")
+    equal(fs[modelsDir .. source .. ".a.lua"], originalSource)
+    writeFailure = false
+    save(app)
+    equal(app.dirty, false)
+    equal(fs[modelsDir .. source .. ".a.lua"], originalSource)
+end)
+
+test("Localized model import keeps drafts on cancel and confirms before replacing and persisting the target", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local path, source = modelsDir .. "model_43757272656e74", "model_6d6f64656c322e796d6c"
+        fs["/MODELS/model2.yml"] = 'semver: 2.11.0\nheader:\n  name: "Other"\n'
+        local data = config.defaults()
+        data.header.autoSave = 0
+        finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+        data.header.name = "Imported " .. language
+        finish(storage.save(modelsDir .. source .. ".a.lua", data, 30), storage.stepSave)
+        local sourceBytes = fs[modelsDir .. source .. ".a.lua"]
+        dir = function(directory)
+            equal(directory, modelsDir)
+            local entries = {"model_43757272656e74.a.lua", source .. ".a.lua", source .. ".b.lua"}
+            local index = 0
+            return function() index = index + 1; return entries[index] end
+        end
+        local app = appInstance(path)
+        ready(app)
+        local label = language == "DE" and "Konfiguration importieren" or "Import configuration"
+        local action = language == "DE" and "Importieren" or "Import"
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+        render(app, view)
+        press("Global")
+        render(app, view)
+        form("Name:").set("Keep this draft")
+        press(label)
+        render(app, view)
+        equal(view.uiJob.page.params.title, label)
+        local picker = form(language == "DE" and "Quellmodell:" or "Source model:")
+        equal(#picker.values, 1)
+        equal(picker.values[1], "Other")
+        press(language == "DE" and "Abbrechen" or "Cancel")
+        render(app, view)
+        equal(form("Name:").value, "Keep this draft")
+        press(label)
+        render(app, view)
+        local original, writes = app.data, writeCount
+        press(action)
+        equal(app.data, original)
+        equal(writeCount, writes)
+        equal(app.prepare, nil)
+        local dialog = dialogs[#dialogs]
+        equal(dialog.title, label)
+        contains(dialog.message, "Other")
+        dialog.confirm()
+        for _ = 1, 30 do app.ui.refresh(view) end
+        assert(view.uiReady and view.pending)
+        press(language == "DE" and "Änderung abbrechen" or "Cancel update")
+        render(app, view)
+        equal(view.page, "import")
+        equal(app.data, original)
+        equal(writeCount, writes)
+        press(action)
+        dialogs[#dialogs].confirm()
+        render(app, view)
+        equal(view.page, "control")
+        equal(app.data.header.name, "Imported " .. language)
+        settleAutosave(app)
+        equal(app.dirty, false)
+        equal(fs[modelsDir .. source .. ".a.lua"], sourceBytes)
+    end
+end)
+
+test("Model import displays unavailable or empty source lists and guards stale confirmations", function()
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    press("Global")
+    render(app, view)
+    press("Import configuration")
+    render(app, view)
+    assert(find(function(item) return item.text == "Directory listing API unavailable" end))
+    local action = find(function(item) return item.type == "button" and item.text == "Import" end)
+    assert(not action.active())
+    press("Cancel")
+    render(app, view)
+    dir = function() return function() end end
+    press("Import configuration")
+    render(app, view)
+    assert(find(function(item) return item.text == "No other model configuration found" end))
+    action = find(function(item) return item.type == "button" and item.text == "Import" end)
+    assert(not action.active())
+    press("Cancel")
+    render(app, view)
+    dir = function()
+        local found = false
+        return function()
+            if not found then found = true; return "model_4f74686572.a.lua" end
+        end
+    end
+    press("Import configuration")
+    render(app, view)
+    press("Import")
+    local dialog = dialogs[#dialogs]
+    local control = config.copy(app.controls[1])
+    control.name = "Changed in another view"
+    assert(commit(app, "control", control))
+    settleAutosave(app)
+    dialog.confirm()
+    equal(app.prepare, nil)
+    equal(app.controls[1].name, "Changed in another view")
+    contains(app.error, "Configuration changed in another view")
 end)
 
 test("Unreadable existing slots are not overwritten by startup Auto-Save", function()
