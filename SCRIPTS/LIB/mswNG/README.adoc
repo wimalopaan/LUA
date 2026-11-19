@@ -10,7 +10,8 @@ Fuer den normalen Modellbetrieb `SCRIPTS/TELEMETRY/mswNG.lua` kopieren
 und im Modell als Telemetrie-Skript auswaehlen.
 Alternativ `SCRIPTS/TOOLS/mswNG.lua` kopieren und _MultiSwitchNG_ im Tools-Menue starten.
 Beide Einstiege verwenden denselben Code und dieselben Konfigurationsdateien.
-Im Modell muss ein CRSF-/ExpressLRS-Sendemodul aktiviert sein.
+Im Modell muss ein zum gewaehlten Protokoll passendes Sendemodul aktiviert sein:
+CRSF/ExpressLRS oder S.Port.
 Das bisherige Telemetrie-Skript und die Widgets bleiben unveraendert.
 
 == Bedienung
@@ -41,7 +42,7 @@ automatisch mit der Auswahl gescrollt.
 
 == Einstellungen
 
-Der Eintrag `Softwareversion` zeigt die Softwareversion an, aktuell `5`.
+Der Eintrag `Softwareversion` zeigt die Softwareversion an, aktuell `6`.
 Er ist nicht editierbar und unabhaengig von der Version des Speicherformats.
 
 Die globale Einstellung `Menutaste` bestimmt die Aktion auf der Funktionsseite:
@@ -114,21 +115,54 @@ ENTER wechselt zum naechsten Zeichen, PAGE bestaetigt den gesamten Namen.
 PAGE lang geht ein Zeichen zurueck, EXIT bricht die Namenseingabe ab.
 Nach dem letzten Zeichen (12 beim Schalternamen, 20 beim Seitentitel) bestaetigt auch ENTER.
 
+`Protokoll` waehlt global zwischen `CRSF` (Standard) und `S.Port WM`.
+Alle Seiten verwenden dasselbe Protokoll.
+Bei WM sind zusaetzlich `Physical-ID` (0 bis 27, Standard 0) und
+`App-ID` (0 bis 255, Standard 81 bzw. `0x51`) einstellbar.
+Diese IDs bleiben auch bei CRSF gespeichert, sind dort aber ohne Wirkung.
+
 Die CRSF-Zieladresse ist fest auf Broadcast `0x00` eingestellt.
 Die Schalteradressen (0 bis 255) bleiben unabhaengig davon konfigurierbar.
 Das Wiederholintervall ist von 50 bis 10000 ms einstellbar (Standard: 1000 ms).
 Schalterbetaetigungen werden unabhaengig vom Intervall sofort zur Uebertragung
-vorgemerkt. FIFO-/CRSF-Fehler werden angezeigt; ausstehende Daten werden wiederholt versucht.
+vorgemerkt. API-/Sendefehler werden angezeigt; ausstehende Daten werden wiederholt versucht.
 Eine erfolgreiche Uebergabe an das Sendemodul ist keine Empfangsbestaetigung.
 Sehr kurze Tasterbetaetigungen koennen bei belegter Sendewarteschlange unuebertragen
 bleiben; das Skript stellt nach dem Loslassen keinen verzoegerten Ein-Impuls zu.
 
-Die Uebertragung verwendet SET4 (`0x07`) fuer eine Adresse bzw.
+Die CRSF-Uebertragung verwendet SET4 (`0x07`) fuer eine Adresse bzw.
 SET4M (`0x09`) fuer mehrere Adressen, hoechstens 18 Adressgruppen pro Paket.
 Beide verwenden die MultiSwitch-Realm `0xa1`, Quelle `0xea` und Big-Endian-Zustandswoerter.
 Die Bedienung verwendet wie das Telemetrie-Skript die Zustaende 0 (Aus) und 1 (Ein).
 Siehe https://github.com/wimalopaan/Electronics/blob/main/docs/protocols.adoc#crsf_sw[Protokoll].
-S.Port und weitere Widget-Sonderfunktionen sind nicht Bestandteil von mswNG.
+
+S.Port WM verwendet dasselbe Zustandswort mit zwei Bits pro Ausgang:
+
+----
+sportTelemetryPush(physicalId, 0x31, appId * 256 + address, state)
+----
+
+Das untere Byte der Data-ID ist die Schalteradresse, das obere die `App-ID`.
+Pro Aufruf werden hoechstens acht Adressen geprueft und ein Telegramm gesendet.
+Ein umlaufender Zeiger verarbeitet alle Adressen fair, auch nach abgelehnten
+Sendeversuchen oder Aenderungen anderer Schalter. Nur der Rueckgabewert `true`
+gilt als Annahme. Abgelehnte Adressen bleiben mit ihrem aktuellen Zustand
+ausstehend; der Fehler bleibt auch nach erfolgreichen Sendungen anderer Adressen sichtbar.
+Das konfigurierte Intervall gilt je Adresse.
+Das angesprochene Geraet darf nicht bereits als Telemetriesensor in EdgeTX
+registriert sein, da dies die Ausgabe blockieren kann. Eine Ablehnung meldet
+deshalb HF-Konfiguration, FIFO und Sensorkonflikte als moegliche Ursachen.
+ACW und weitere Widget-Sonderfunktionen sind nicht Bestandteil von mswNG.
+
+Bei Protokollwechsel sowie WM-ID-Aenderungen werden zuvor erfolgreich
+eingeschaltete Adressen ueber den alten Transport mit den alten IDs ausgeschaltet.
+Diese Abschaltungen bleiben auch ueber weitere Aenderungen erhalten.
+Abschaltungen des aktuellen Protokolls haben Vorrang; ein nicht mehr erreichbares
+altes Protokoll blockiert dagegen nicht die neue Ausgabe.
+`Alte Abschaltung ausstehend` bleibt sichtbar, bis alle Nulltelegramme angenommen wurden.
+Vor dem Umstellen des HF-Moduls daher moeglichst alle Ausgaenge ausschalten und
+die erfolgreiche Uebergabe abwarten; ein unerreichbarer Empfaenger kann nicht
+zuverlaessig ausgeschaltet werden.
 
 == Speicherung und Laufzeit
 
@@ -138,11 +172,12 @@ Die Dateien `model-<hexkodierter Modellname>.a` und `.b` liegen in `SCRIPTS/LIB/
 Ein umbenanntes Modell erhaelt eine eigene Konfiguration; gleichnamige Modelle
 teilen sich die Dateien.
 Es gibt keine automatische Uebernahme der alten Telemetrie-/Widget-Konfiguration.
-Bestehende mswNG-Konfigurationen in den Dateiformaten 1 bis 3 werden weiterhin gelesen;
+Bestehende mswNG-Konfigurationen in den Dateiformaten 1 bis 4 werden weiterhin gelesen;
 die fruehere CRSF-Zieladresse wird ignoriert. Sie erhalten die Menutastenaktion `Aus`
-und fuer alle Schaltflaechen den Typ `Schalter`.
-Beim Speichern wird Format 4 mit Seitentiteln, Menutastenaktion und Schaltflaechentyp
-ohne CRSF-Zieladresse verwendet. Aeltere Skriptversionen koennen Format 4 nicht lesen.
+und fuer alle Schaltflaechen den Typ `Schalter`, soweit diese Angaben noch fehlen.
+Alle alten Formate verwenden zunaechst CRSF und die Standard-WM-IDs.
+Beim Speichern wird Format 5 mit zusaetzlicher Protokollauswahl und WM-IDs
+ohne CRSF-Zieladresse verwendet. Aeltere Skriptversionen koennen Format 5 nicht lesen.
 
 Gespeichert wird abwechselnd in zwei Dateien mit Generation und Pruefsumme.
 Die zuletzt gueltige Datei bleibt beim Schreiben unangetastet;
@@ -156,7 +191,7 @@ Schaltzustaende werden nicht gespeichert: Beim Start sind manuelle Ausgaenge Aus
 zugeordnete Ausgaenge folgen vor der ersten Sendung dem aktuellen EdgeTX-Schalterzustand.
 Beim Umadressieren oder Loeschen werden betroffene bisherige Ausgaenge ausgeschaltet;
 entfallene Adressen bleiben bis zur erfolgreichen FIFO-Uebergabe ihres Nullzustands
-in der Sendeliste.
+vorgemerkt. WM erzeugt Abschaltungen nur fuer zuvor erfolgreich eingeschaltete Adressen.
 
 Die Telemetrievariante fragt Schalter ab und sendet auch bei geschlossener Anzeige
 ueber ihren `background()`-Aufruf. Die Vordergrundanzeige verwendet denselben
@@ -167,7 +202,7 @@ Loslassereignis fehlt, setzt der Hintergrundaufruf sie nach mindestens einer Sek
 ohne Vordergrundaufruf zurueck. Normale Hintergrundaufrufe zwischen sichtbaren
 Bildaufbauten unterbrechen das Halten nicht; auch Tasten ohne Wiederholereignisse
 koennen dauerhaft gehalten werden. Das Ausschalten unterliegt weiterhin der
-Verfuegbarkeit der CRSF-Sendewarteschlange.
+Verfuegbarkeit der Sendewarteschlange.
 
 ENTER lang bleibt eine Senderfunktion und wird nicht fuer Taster verwendet.
 `Aus` deaktiviert nur die Skriptaktion, nicht die Firmware-Funktionen der Taste.
@@ -178,14 +213,14 @@ Telemetrievariante vorgesehen; die konkrete Tastenbelegung am Sender pruefen.
 IMPORTANT: Ein Tools-Skript sendet nur, solange es geoeffnet ist.
 Nach dem Beenden werden keine Daten wiederholt und kein automatisches
 Alles-Aus gesendet; das Verhalten haengt dann vom Empfaenger und dessen Timeout ab.
-Vor dem Beenden bei Bedarf die Schalter ausschalten und CRSF-Fehler abwarten.
+Vor dem Beenden bei Bedarf die Schalter ausschalten und Sendefehler abwarten.
 Tools und Telemetrie sind alternative Betriebsarten, keine parallel synchronisierten
 Bedienoberflaechen. Standalone-Tools koennen die Ausfuehrung der Modellskripte
 unterbrechen bzw. deren Neuladen ausloesen. Fuer dauerhafte Schaltersteuerung
 die Telemetrievariante verwenden und ihre Einstellungen direkt dort bearbeiten.
 Das Skript nur einmal im Modell einrichten.
 Nicht gleichzeitig mit anderen Skripten dieselben Schalteradressen ansteuern:
-SET4/SET4M uebertragen immer alle acht Ausgaenge einer Adresse,
+SET4/SET4M und WM uebertragen immer alle acht Ausgaenge einer Adresse,
 auch nicht im Tool belegte Ausgaenge als Aus.
 
 Fuer niedrigen RAM-Bedarf verwendet mswNG kompakte Datenarrays statt
@@ -207,6 +242,7 @@ Aus `SCRIPTS/TOOLS`:
 ----
 lua ../LIB/mswNG/tests/run.lua
 lua ../LIB/mswNG/tests/memory.lua
+lua ../LIB/mswNG/tests/memory.lua sport
 ----
 
 Die Tests emulieren die EdgeTX-Datei- und LCD-APIs sowie die Sendewarteschlange.

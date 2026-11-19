@@ -4,6 +4,7 @@
 local M = {maxPages = 4, maxSwitches = 12, nameLength = 12, titleLength = 20, defaultTitle = "Funktionen"}
 M.menuActions = {"Aus", "Bedienung", "Naechste Seite", "Setup"}
 M.controlTypes = {"Schalter", "Taster"}
+M.protocols = {"CRSF", "S.Port WM"}
 
 -- Page: {default address, controls, title}.
 -- Control: {name, address (-1 inherits), output, state, EdgeTX switch ID, type (0: toggle, 1: momentary)}.
@@ -50,7 +51,8 @@ function M.addPage(config)
 end
 
 function M.defaults()
-    local config = {pages = {}, interval = 100, menuAction = 0}
+    local config = {pages = {}, interval = 100, menuAction = 0,
+                    protocol = 0, sportPhysicalId = 0, sportAppId = 0x51}
     M.addPage(config)
     return config
 end
@@ -66,6 +68,9 @@ end
 function M.validate(config)
     if type(config) ~= "table" or not integer(config.interval, 5, 1000)
         or not integer(config.menuAction or 0, 0, 3) or type(config.pages) ~= "table"
+        or (config.protocol ~= nil and not integer(config.protocol, 0, 1))
+        or (config.sportPhysicalId ~= nil and not integer(config.sportPhysicalId, 0, 27))
+        or (config.sportAppId ~= nil and not integer(config.sportAppId, 0, 255))
         or #config.pages < 1 or #config.pages > M.maxPages then
         return nil, "Ungueltige Einstellungen"
     end
@@ -120,17 +125,35 @@ function M.pageAddress(config, page, address)
 end
 
 function M.sender()
-    return {groups = {}, map = {}, cursor = 1, last = -1000, pending = true, payload = {}}
+    return {groups = {}, map = {}, cursor = 1, last = -1000, pending = true, payload = {},
+            off = {[0] = {}, [1] = {}}, failedCount = 0, protocol = 0}
 end
 
 function M.rebuild(sender, config)
-    for _, group in ipairs(sender.groups) do group.used, group.value = false, 0 end
+    local protocol = config.protocol or 0
+    local physicalId, appId = config.sportPhysicalId or 0, config.sportAppId or 0x51
+    if sender.protocol ~= protocol
+        or (protocol == 1 and (sender.physicalId ~= physicalId or sender.appId ~= appId)) then
+        local queue = sender.off[sender.protocol]
+        for _, group in ipairs(sender.groups) do
+            if group.active then
+                queue[#queue + 1] = {address = group.address, physicalId = sender.physicalId,
+                                     appId = sender.appId}
+            end
+        end
+        sender.groups, sender.map, sender.failedCount = {}, {}, 0
+        sender.error, sender.cursor = nil, 1
+    end
+    sender.protocol, sender.physicalId, sender.appId = protocol, physicalId, appId
+    for _, group in ipairs(sender.groups) do
+        group.used, group.previous, group.value = false, group.value, 0
+    end
     for _, page in ipairs(config.pages) do
         for _, control in ipairs(page[2]) do
             local address = M.address(page, control)
             local found = sender.map[address]
             if not found then
-                found = {address = address, value = 0}
+                found = {address = address, value = 0, dirty = true, last = -1000}
                 sender.groups[#sender.groups + 1] = found
                 sender.map[address] = found
             end
@@ -138,8 +161,26 @@ function M.rebuild(sender, config)
             found.value = found.value + (control[4] or 0) * 4 ^ (control[3] - 1)
         end
     end
+    for _, group in ipairs(sender.groups) do
+        if group.value ~= group.previous then group.dirty = true end
+    end
+    if protocol == 1 then
+        for i = #sender.groups, 1, -1 do
+            local group = sender.groups[i]
+            if not group.used then
+                if group.active then
+                    local queue = sender.off[1]
+                    queue[#queue + 1] = {address = group.address, physicalId = physicalId, appId = appId}
+                end
+                if group.failed then sender.failedCount = sender.failedCount - 1 end
+                sender.map[group.address] = nil
+                table.remove(sender.groups, i)
+            end
+        end
+    end
     -- Keep removed addresses until an all-off packet has entered the transmit FIFO.
-    sender.cursor, sender.pending = 1, true
+    sender.cursor = protocol == 1 and math.min(sender.cursor, math.max(1, #sender.groups)) or 1
+    sender.pending = true
 end
 
 function M.poll(sender, config)
@@ -161,7 +202,7 @@ function M.poll(sender, config)
     if changed then M.rebuild(sender, config) end
 end
 
-function M.tick(sender, config, now)
+local function tickCRSF(sender, config, now)
     if type(crossfireTelemetryPush) ~= "function" then
         sender.error = "CRSF API fehlt"
         return
@@ -186,6 +227,9 @@ function M.tick(sender, config, now)
         return
     end
     sender.error = nil
+    for i = sender.cursor, sender.cursor + count - 1 do
+        groups[i].active = groups[i].value ~= 0
+    end
     sender.cursor = sender.cursor + count
     if sender.cursor > #groups then
         for i = #groups, 1, -1 do
@@ -198,6 +242,72 @@ function M.tick(sender, config, now)
     else
         sender.pending = true
     end
+end
+
+local sportError = "S.Port: HF/FIFO/Sensor pruefen"
+
+local function pushSport(physicalId, appId, address, value)
+    if type(sportTelemetryPush) ~= "function" then return false end
+    return sportTelemetryPush(physicalId, 0x31, appId * 256 + address, value) == true
+end
+
+local function tickSport(sender, config, now)
+    if type(sportTelemetryPush) ~= "function" then sender.error = "S.Port API fehlt"; return end
+    sender.error = sender.failedCount > 0 and sportError or nil
+    local groups = sender.groups
+    for offset = 0, math.min(8, #groups) - 1 do
+        local index = (sender.cursor + offset - 1) % #groups + 1
+        local group = groups[index]
+        if group.dirty or now < group.last or now - group.last >= config.interval then
+            local queued = pushSport(sender.physicalId, sender.appId, group.address, group.value)
+            sender.cursor = index % #groups + 1
+            if queued then
+                group.last, group.dirty, group.active = now, false, group.value ~= 0
+                if group.failed then
+                    group.failed = nil
+                    sender.failedCount = sender.failedCount - 1
+                end
+            elseif not group.failed then
+                group.failed = true
+                sender.failedCount = sender.failedCount + 1
+            end
+            sender.error = sender.failedCount > 0 and sportError or nil
+            return
+        end
+    end
+    sender.cursor = #groups > 0 and (sender.cursor + math.min(8, #groups) - 1) % #groups + 1 or 1
+end
+
+local function tickOff(sender)
+    local protocol = sender.protocol
+    if #sender.off[protocol] == 0 then
+        if sender.offTurn then sender.offTurn = false; return end
+        protocol = 1 - protocol
+        if #sender.off[protocol] == 0 then return end
+        sender.offTurn = true
+    end
+    local queue = sender.off[protocol]
+    local item, queued = queue[1]
+    if protocol == 1 then
+        queued = pushSport(item.physicalId, item.appId, item.address, 0)
+    elseif type(crossfireTelemetryPush) == "function" then
+        local payload = sender.payload
+        for i = #payload, 1, -1 do payload[i] = nil end
+        payload[1], payload[2], payload[3], payload[4] = 0, 0xea, 0xa1, 0x07
+        payload[5], payload[6], payload[7] = item.address, 0, 0
+        queued = crossfireTelemetryPush(0x32, payload) == true
+    end
+    if queued then table.remove(queue, 1) end
+    return true
+end
+
+function M.tick(sender, config, now)
+    if not tickOff(sender) then
+        if sender.protocol == 1 then tickSport(sender, config, now)
+        else tickCRSF(sender, config, now) end
+    end
+    sender.offError = (#sender.off[0] > 0 or #sender.off[1] > 0)
+        and "Alte Abschaltung ausstehend" or nil
 end
 
 return M

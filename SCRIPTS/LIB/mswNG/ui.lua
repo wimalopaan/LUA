@@ -25,7 +25,7 @@ local function fit(text, width)
 end
 
 local function status()
-    return app.sender.inputError or app.sender.error
+    return app.sender.inputError or app.sender.offError or app.sender.error
 end
 
 local function drawControls()
