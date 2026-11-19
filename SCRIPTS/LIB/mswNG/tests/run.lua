@@ -12,6 +12,7 @@ local fs, frames, now, blocked, inactive, writeError, truncate, draws, loads, la
 local peakInstructions = 0
 local rightAligned
 local lastLeft, valueLeft
+local sportFrames
 
 local function equal(actual, expected)
     assert(actual == expected, "expected " .. tostring(expected) .. ", got " .. tostring(actual))
@@ -21,6 +22,12 @@ local function reset()
     fs, frames, now, draws, loads, handles = {}, {}, 0, {}, {}, 0
     blocked, inactive, writeError, truncate = false, false, false, false
     switchValues = {}
+    sportFrames = {}
+    sportTelemetryPush = function(physicalId, primitive, dataId, value)
+        sportFrames[#sportFrames + 1] = {physicalId, primitive, dataId, value}
+        if inactive then return nil end
+        return not blocked
+    end
     getSwitchValue = function(id) return switchValues[id] end
     getSwitchName = function(id)
         return ({[1] = "SAup", [-1] = "!SAup", [101] = "L01", [-101] = "!L01"})[id]
@@ -122,7 +129,9 @@ end
 
 local function tick(sender, config)
     now = now + 1
+    local count = #frames + #sportFrames
     core.tick(sender, config, now)
+    assert(#frames + #sportFrames <= count + 1, "More than one packet per tick")
 end
 
 local function run(tool, event)
@@ -261,6 +270,193 @@ crossfireTelemetryPush = nil
 tick(sender, config)
 equal(sender.error, "CRSF API fehlt")
 
+-- WM shares the two-bit state words, sends one address and retries only accepted data.
+reset()
+config = core.defaults()
+config.protocol, config.sportPhysicalId, config.sportAppId = 1, 27, 255
+config.pages[1][1] = 255
+config.pages[1][2][1][4], config.pages[1][2][8][4] = 1, 1
+sender = core.sender()
+core.rebuild(sender, config)
+tick(sender, config)
+equal(#frames, 0)
+for i, value in ipairs({27, 0x31, 0xffff, 0x4001}) do equal(sportFrames[1][i], value) end
+tick(sender, config)
+equal(#sportFrames, 1)
+now = now + config.interval
+tick(sender, config)
+equal(#sportFrames, 2)
+now = -10
+tick(sender, config)
+equal(#sportFrames, 3)
+config.pages[1][2][1][4] = 0
+core.rebuild(sender, config)
+blocked = true
+tick(sender, config)
+assert(sender.error and sender.map[255].dirty)
+blocked, inactive = false, true
+tick(sender, config)
+assert(sender.error and sender.map[255].dirty)
+inactive = false
+tick(sender, config)
+equal(sportFrames[#sportFrames][4], 0x4000)
+assert(not sender.error and not sender.map[255].dirty)
+sportTelemetryPush = nil
+tick(sender, config)
+equal(sender.error, "S.Port API fehlt")
+
+-- A rejected address must not starve others; rebuilds must preserve WM fairness.
+reset()
+config = core.defaults()
+config.protocol = 1
+config.pages[1][2] = {}
+for i = 1, 12 do config.pages[1][2][i] = {"S" .. i, i - 1, 1, 1, 0, 0} end
+sender = core.sender()
+core.rebuild(sender, config)
+local nativeSport = sportTelemetryPush
+sportTelemetryPush = function(...)
+    nativeSport(...)
+    local frame = sportFrames[#sportFrames]
+    return frame[3] % 256 ~= 0
+end
+for _ = 1, 12 do
+    core.rebuild(sender, config)
+    tick(sender, config)
+end
+equal(#sportFrames, 12)
+for i = 1, 12 do equal(sportFrames[i][3], 0x5100 + i - 1) end
+assert(sender.error and sender.map[0].dirty)
+sportTelemetryPush = function(...) nativeSport(...); return 1 end
+tick(sender, config)
+assert(sender.error and sender.map[0].dirty)
+sportTelemetryPush = nativeSport
+for _ = 1, 2 do tick(sender, config) end
+assert(not sender.error and not sender.map[0].dirty)
+
+-- Removed active addresses are shut down before new WM output; partial removal preserves peers.
+reset()
+config = core.defaults()
+config.protocol = 1
+config.pages[1][2][1][4], config.pages[1][2][2][4] = 1, 1
+sender = core.sender()
+core.rebuild(sender, config)
+tick(sender, config)
+table.remove(config.pages[1][2], 1)
+core.rebuild(sender, config)
+tick(sender, config)
+equal(sportFrames[#sportFrames][4], 4)
+assert(core.pageAddress(config, config.pages[1], 42))
+core.rebuild(sender, config)
+blocked = true
+tick(sender, config)
+equal(sportFrames[#sportFrames][3], 0x5100)
+equal(sportFrames[#sportFrames][4], 0)
+assert(sender.offError)
+blocked = false
+tick(sender, config)
+equal(sportFrames[#sportFrames][4], 0)
+tick(sender, config)
+equal(sportFrames[#sportFrames][3], 0x512a)
+assert(not sender.offError)
+config.pages[1][2] = {}
+core.rebuild(sender, config)
+tick(sender, config)
+equal(sportFrames[#sportFrames][3], 0x512a)
+equal(sportFrames[#sportFrames][4], 0)
+local emptyFrames = #sportFrames
+tick(sender, config)
+equal(#sportFrames, emptyFrames)
+
+-- Old transport/IDs survive multiple changes; an unavailable old protocol cannot block the new one.
+reset()
+config = core.defaults()
+config.pages[1][2][1][4] = 1
+sender = core.sender()
+core.rebuild(sender, config)
+tick(sender, config)
+config.protocol = 1
+core.rebuild(sender, config)
+crossfireTelemetryPush = nil
+tick(sender, config)
+assert(sender.offError)
+tick(sender, config)
+equal(sportFrames[#sportFrames][4], 1)
+config.sportAppId, config.sportPhysicalId = 82, 3
+core.rebuild(sender, config)
+blocked = true
+tick(sender, config)
+equal(sportFrames[#sportFrames][1], 0)
+equal(sportFrames[#sportFrames][3], 0x5100)
+equal(sportFrames[#sportFrames][4], 0)
+blocked = false
+tick(sender, config)
+tick(sender, config)
+tick(sender, config)
+equal(sportFrames[#sportFrames][1], 3)
+equal(sportFrames[#sportFrames][3], 0x5200)
+equal(sportFrames[#sportFrames][4], 1)
+assert(sender.offError)
+config.protocol = 0
+core.rebuild(sender, config)
+local restoredCRSF = 0
+crossfireTelemetryPush = function(kind, payload)
+    equal(kind, 0x32)
+    equal(payload[7], 0)
+    restoredCRSF = restoredCRSF + 1
+    return true
+end
+tick(sender, config)
+equal(restoredCRSF, 1)
+tick(sender, config)
+equal(sportFrames[#sportFrames][1], 3)
+equal(sportFrames[#sportFrames][3], 0x5200)
+equal(sportFrames[#sportFrames][4], 0)
+assert(not sender.offError)
+
+-- Never accepted or already-off WM outputs do not create stale shutdowns on ID changes.
+reset()
+config = core.defaults()
+config.protocol = 1
+sender = core.sender()
+core.rebuild(sender, config)
+tick(sender, config)
+config.sportPhysicalId = 1
+core.rebuild(sender, config)
+tick(sender, config)
+equal(sportFrames[#sportFrames][1], 1)
+equal(#sender.off[1], 0)
+config.pages[1][2][1][4] = 1
+core.rebuild(sender, config)
+blocked = true
+tick(sender, config)
+config.sportAppId = 82
+core.rebuild(sender, config)
+equal(#sender.off[1], 0)
+for key, value in pairs({protocol = 2, sportPhysicalId = 28, sportAppId = 256}) do
+    local invalidConfig = core.defaults()
+    invalidConfig[key] = value
+    assert(not core.validate(invalidConfig))
+end
+
+-- Stored WM settings drive native inputs in the telemetry background, without a foreground UI.
+reset()
+config = core.defaults()
+config.protocol, config.sportPhysicalId, config.sportAppId = 1, 4, 82
+config.pages[1][2][1][5] = 101
+assert(not finish(storage.save(storage.path(), config, 0, 0)).error)
+switchValues[101] = true
+local wmTelemetry = assert(loadfile(root .. "../../TELEMETRY/mswNG.lua"))()
+wmTelemetry.init()
+for _ = 1, 300 do background(wmTelemetry) end
+equal(loads["ui.lua"], nil)
+equal(#frames, 0)
+for i, value in ipairs({4, 0x31, 0x5200, 1}) do equal(sportFrames[#sportFrames][i], value) end
+switchValues[101] = false
+background(wmTelemetry)
+equal(sportFrames[#sportFrames][4], 0)
+run(wmTelemetry)
+see("Funktionen 1/1")
+
 -- Physical/logical/inverted assignments follow EdgeTX, with one rebuild for a batch.
 reset()
 config = core.defaults()
@@ -308,6 +504,7 @@ config.pages[1][3] = "Deck / Licht"
 config.pages[1][2][1][1] = 'Licht "A"'
 config.pages[1][2][1][5] = -101
 config.menuAction = 1
+config.protocol, config.sportPhysicalId, config.sportAppId = 1, 27, 255
 config.pages[1][2][2][6], config.pages[1][2][2][4] = 1, 1
 local saved = finish(storage.save(path, config, 0, 0))
 assert(not saved.error)
@@ -324,6 +521,9 @@ equal(loaded.result.pages[1][2][1][1], "Heck")
 equal(loaded.result.pages[1][2][1][5], -101)
 equal(loaded.result.pages[1][3], "Maschinenraum")
 equal(loaded.result.menuAction, 1)
+equal(loaded.result.protocol, 1)
+equal(loaded.result.sportPhysicalId, 27)
+equal(loaded.result.sportAppId, 255)
 equal(loaded.result.pages[1][2][2][6], 1)
 equal(loaded.result.pages[1][2][2][4], 0)
 equal(loaded.generation, 2)
@@ -411,7 +611,7 @@ tick(sender, loaded.result)
 packet(0x00, 0xea, 0xa1, 0x07, 12, 64, 0)
 saved = finish(storage.save(path, loaded.result, loaded.slot, loaded.generation))
 assert(not saved.error, saved.error)
-assert(string.find(fs[path .. ".b"], "MSNG 4 8 1 100 0\n", 1, true) == 1)
+assert(string.find(fs[path .. ".b"], "MSNG 5 8 1 100 0 0 0 81\n", 1, true) == 1)
 loaded = finish(storage.load(path))
 assert(not loaded.error, loaded.error)
 equal(loaded.generation, 8)
@@ -432,6 +632,17 @@ assert(not loaded.error, loaded.error)
 equal(loaded.result.pages[1][3], "Deck")
 equal(loaded.result.menuAction, 0)
 equal(loaded.result.pages[1][2][1][6], 0)
+legacy = "MSNG 4 11 1 100 1\nP 12 1 4465636b\nS -1 8 0 1 4c6567616379\n"
+legacySum = 0
+for i = 1, #legacy do legacySum = (legacySum * 33 + string.byte(legacy, i)) % 65521 end
+fs[path .. ".a"] = legacy .. "E " .. legacySum .. "\n"
+loaded = finish(storage.load(path))
+assert(not loaded.error, loaded.error)
+equal(loaded.result.protocol, 0)
+equal(loaded.result.sportPhysicalId, 0)
+equal(loaded.result.sportAppId, 81)
+equal(loaded.result.menuAction, 1)
+equal(loaded.result.pages[1][2][1][6], 1)
 
 for _, fields in ipairs({{4, "0"}, {1, "2"}, {1, ""}}) do
     reset()
@@ -570,6 +781,30 @@ equal(editor.run(EVT_VIRTUAL_ENTER), nil)
 equal(editor.editing, nil)
 equal(changed, changesBeforeVersion)
 editor.run(EVT_VIRTUAL_NEXT)
+equal(editor.item(editor.row), "Protokoll")
+editor.run(EVT_VIRTUAL_ENTER)
+equal(editor.displayValue(), "CRSF")
+editor.run(EVT_VIRTUAL_NEXT)
+editor.run(EVT_VIRTUAL_ENTER)
+equal(app.config.protocol, 1)
+equal(editor.count(), 10)
+for _, setting in ipairs({{8, "sportPhysicalId", 1}, {9, "sportAppId", 82}}) do
+    editor.row = setting[1]
+    editor.run(EVT_VIRTUAL_ENTER)
+    editor.run(EVT_VIRTUAL_NEXT)
+    editor.run(EVT_VIRTUAL_EXIT)
+    editor.run(EVT_VIRTUAL_ENTER)
+    editor.run(EVT_VIRTUAL_NEXT)
+    editor.run(EVT_VIRTUAL_ENTER)
+    equal(app.config[setting[2]], setting[3])
+end
+editor.row = 7
+editor.run(EVT_VIRTUAL_ENTER)
+editor.run(EVT_VIRTUAL_PREV)
+editor.run(EVT_VIRTUAL_ENTER)
+equal(app.config.protocol, 0)
+equal(editor.count(), 8)
+editor.run(EVT_VIRTUAL_NEXT)
 equal(editor.run(EVT_VIRTUAL_ENTER), "close")
 editor.run(EVT_VIRTUAL_NEXT)
 equal(editor.row, 1)
@@ -599,7 +834,7 @@ for _, size in ipairs({{128, 64}, {212, 64}, {128, 96}, {212, 96}}) do
     equal(rightAligned["1000"], LCD_W - 1)
     for _ = 1, 5 do run(t, EVT_VIRTUAL_NEXT) end
     see("Softwareversion")
-    equal(rightAligned["5"], LCD_W - 1)
+    equal(rightAligned["6"], LCD_W - 1)
     run(t, EVT_VIRTUAL_ENTER)
     see("Softwareversion")
     for _ = 1, 5 do run(t, EVT_VIRTUAL_PREV) end

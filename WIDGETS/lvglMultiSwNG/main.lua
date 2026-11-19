@@ -14,7 +14,7 @@ local function modelApp(dir)
     local filename = string.gsub(key, ".", function(c) return string.format("%02x", string.byte(c)) end)
     local app = models[dir .. filename]
     if not app then
-        app = {dir = dir, path = dir .. "model_" .. filename, phase = "boot"}
+        app = {dir = dir, path = dir .. "models/model_" .. filename, phase = "boot"}
         models[dir .. filename] = app
     end
     return app

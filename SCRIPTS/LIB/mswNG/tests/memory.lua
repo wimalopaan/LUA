@@ -8,6 +8,7 @@ local files, fileCount = {}, 0
 local core = assert(loadfile(root .. "core.lua"))()
 local storage = assert(loadfile(root .. "storage.lua"))(core)
 local config = core.defaults()
+config.protocol = arg[1] == "sport" and 1 or 0
 config.menuAction = 3
 for _ = 1, 3 do assert(core.addPage(config)) end
 for p, page in ipairs(config.pages) do
@@ -47,6 +48,7 @@ EVT_VIRTUAL_NEXT_PAGE, EVT_VIRTUAL_PREV_PAGE, EVT_VIRTUAL_MENU = 5, 6, 0x22
 local now = 0
 getTime = function() now = now + 1; return now end
 crossfireTelemetryPush = function() return true end
+sportTelemetryPush = function() return true end
 getSwitchValue = function() return true end
 getSwitchName = function(id) return "S" .. id end
 switches = function()
