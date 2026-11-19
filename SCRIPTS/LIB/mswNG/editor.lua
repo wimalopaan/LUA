@@ -15,7 +15,7 @@ local function control()
 end
 
 function M.count()
-    if M.screen == "global" then return 7 end
+    if M.screen == "global" then return app.config.protocol == 1 and 10 or 8 end
     if M.screen == "page" then return #page()[2] + 5 end
     return 7
 end
@@ -33,6 +33,11 @@ function M.item(index)
         if index == 4 then return "Menutaste", core.menuActions[(app.config.menuAction or 0) + 1] end
         if index == 5 then return "Speichern/zurueck", "" end
         if index == 6 then return "Softwareversion", app.version end
+        if index == 7 then return "Protokoll", core.protocols[(app.config.protocol or 0) + 1] end
+        if app.config.protocol == 1 then
+            if index == 8 then return "Physical-ID", app.config.sportPhysicalId or 0 end
+            if index == 9 then return "App-ID", app.config.sportAppId or 0x51 end
+        end
         return "Zurueck", ""
     elseif M.screen == "page" then
         if index == 1 then return "Seite", app.page end
@@ -119,8 +124,14 @@ local function apply()
             app.page = math.min(app.page, #config.pages)
         elseif M.row == 3 then
             config.interval = M.value / 10
-        else
+        elseif M.row == 4 then
             config.menuAction = M.value
+        elseif M.row == 7 then
+            config.protocol = M.value
+        elseif M.row == 8 then
+            config.sportPhysicalId = M.value
+        else
+            config.sportAppId = M.value
         end
     elseif M.screen == "page" then
         if M.row == 1 then
@@ -152,7 +163,10 @@ local function enter()
         elseif M.row == 3 then number(config.interval * 10, 50, 10000, 50)
         elseif M.row == 4 then choice(config.menuAction or 0, core.menuActions)
         elseif M.row == 5 then return "save"
-        elseif M.row == 7 then return "close" end
+        elseif M.row == 7 then choice(config.protocol or 0, core.protocols)
+        elseif M.row == 8 and config.protocol == 1 then number(config.sportPhysicalId or 0, 0, 27)
+        elseif M.row == 9 and config.protocol == 1 then number(config.sportAppId or 0x51, 0, 255)
+        elseif M.row == M.count() then return "close" end
     elseif M.screen == "page" then
         if M.row == 1 then number(app.page, 1, #config.pages)
         elseif M.row == 2 then text(page()[3], core.titleLength, "Titel")

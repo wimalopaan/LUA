@@ -81,8 +81,12 @@ local function readStep(job)
     if err then return failure(job, err) end
     if not text then return end
     if job.phase == "header" then
-        local version, generation, pages, interval, menuAction =
-            string.match(text, "^MSNG (4) (%d+) (%d+) (%d+) (%d+)$")
+        local version, generation, pages, interval, menuAction, protocol, physicalId, appId =
+            string.match(text, "^MSNG (5) (%d+) (%d+) (%d+) (%d+) (%d+) (%d+) (%d+)$")
+        if not version then
+            version, generation, pages, interval, menuAction =
+                string.match(text, "^MSNG (4) (%d+) (%d+) (%d+) (%d+)$")
+        end
         if not version then
             version, generation, pages, interval = string.match(text, "^MSNG ([23]) (%d+) (%d+) (%d+)$")
         end
@@ -99,7 +103,9 @@ local function readStep(job)
             return failure(job, "SD: Falsches Dateiformat")
         end
         job.generation, job.pagesLeft, job.version = generation, pages, tonumber(version) or 1
-        job.config = {pages = {}, interval = tonumber(interval), menuAction = tonumber(menuAction) or 0}
+        job.config = {pages = {}, interval = tonumber(interval), menuAction = tonumber(menuAction) or 0,
+                      protocol = tonumber(protocol) or 0, sportPhysicalId = tonumber(physicalId) or 0,
+                      sportAppId = tonumber(appId) or 0x51}
         job.phase = "page"
     elseif job.phase == "page" then
         local address, count, title
@@ -123,7 +129,7 @@ local function readStep(job)
         job.phase = count > 0 and "control" or (job.pagesLeft > 0 and "page" or "end")
     elseif job.phase == "control" then
         local address, output, id, kind, name
-        if job.version == 4 then
+        if job.version >= 4 then
             address, output, id, kind, name =
                 string.match(text, "^S (%-?%d+) (%d+) (%-?%d+) (%d+) ([%x]+)$")
         else
@@ -165,8 +171,9 @@ end
 local function writeStep(job)
     local text
     if job.page == 0 then
-        text = string.format("MSNG 4 %d %d %d %d\n", job.generation, #job.config.pages,
-                             job.config.interval, job.config.menuAction or 0)
+        text = string.format("MSNG 5 %d %d %d %d %d %d %d\n", job.generation, #job.config.pages,
+                             job.config.interval, job.config.menuAction or 0, job.config.protocol or 0,
+                             job.config.sportPhysicalId or 0, job.config.sportAppId or 0x51)
         job.page = 1
     elseif job.page > #job.config.pages then
         text = "E " .. job.sum .. "\n"
