@@ -536,12 +536,48 @@ Simulator values do not replace these hardware measurements.
 
 == Configuration files
 
-Each model uses two alternating files in the widget directory:
+Each model uses two alternating files in the widget directory's `models/` subfolder:
 `model_<model identifier as hex>.a.lua` and `.b.lua`.
+The folder is created on save if necessary.
+Move existing configuration files into `models/` manually without renaming them,
+including both files for each model.
+The widget's root directory is no longer searched for configurations;
+there is no automatic migration.
 The model identifier is `model.getInfo().filename` if available,
 otherwise the model name.
 When the model name is used, renaming it selects a different file pair.
 The previous MultiSwitch configuration is neither loaded nor overwritten.
+
+=== Copying another model's configuration
+
+Use `Global` → `Import configuration` to select another model's saved
+configuration. The list includes NG configurations in the `models/` subfolder,
+excluding the current model and duplicate entries for the two save files.
+The selection displays the actual model name from its EdgeTX file under
+`/MODELS/`, not the YML filename. If a configuration was saved without a model
+file identifier, its identifier already contains the model name.
+Unreadable names are explicitly marked with their file identifier,
+and the underlying error is also displayed.
+
+`Import` requires confirmation before replacing all widget settings, tabs and
+controls. Unsaved changes and open editor drafts are discarded.
+`Cancel` returns to the previous Global draft without importing.
+While loading and preparing the configuration, `Cancel update` stops the import.
+
+As during normal loading, the newest complete, valid save from the two source
+files is selected. Loading failures leave the current configuration unchanged.
+The source files are never written. After successful activation, the copy is
+saved under the current model's identifier even if Auto-Save is disabled;
+the target's save generation continues independently of the source model.
+Save failures remain visible and the copy stays marked as unsaved.
+
+Runtime switch states are not copied. The current model's physical inputs
+continue to operate normally. Check switch, source, address and output
+assignments before use. EdgeTX model settings such as mixers or logical
+switches are not copied. Import supports NG configurations, not the
+predecessor widget's file format.
+
+=== File format
 
 Each file is a valid Lua file containing `return {`, a list of flat records,
 and a closing `}`.

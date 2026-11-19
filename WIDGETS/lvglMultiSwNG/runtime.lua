@@ -48,7 +48,7 @@ local function append(job, record)
         state.maxControlId = math.max(state.maxControlId, id)
         local previous = job.previous
         local old = previous and previous.controls[id]
-        if old and previous.addresses[id] == address and old.output == record.output
+        if old and not job.replace and previous.addresses[id] == address and old.output == record.output
             and old.type == record.type and old.switch == record.switch
             and old.switch2 == record.switch2 and old.source == record.source
             and old.group == record.group and old.activation == record.activation
