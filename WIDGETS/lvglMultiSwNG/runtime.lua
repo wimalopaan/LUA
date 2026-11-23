@@ -13,7 +13,8 @@ function M.begin(source, previous, change)
         phase = "header", index = 1, steps = 0, builder = builder, preserve = {},
         state = {
             data = builder.config, tabs = {}, controls = {}, addresses = {},
-            tabOrder = {}, tabControls = {}, visibleControls = {},
+            tabOrder = {}, tabControls = {}, visibleControls = {}, tabInputs = {},
+            tabInputStatus = {inputErrors = {}, inputErrorCount = 0},
             values = {}, physical = {}, winners = {}, groupCounts = {}, masks = {}, usedAddresses = {},
             inputErrors = {}, inputErrorCount = 0, localTargets = {},
             maxTabId = 0, maxControlId = 0, backend = backend, sender = backend.new(),
@@ -30,7 +31,13 @@ local function append(job, record)
         if not valid then job.done, job.error = true, reason; return end
         state.backend.header(state.sender, state.data.header)
     elseif record.kind == "tab" then
+        record = state.data.tabs[#state.data.tabs]
         state.tabs[record.id] = record
+        if record.selectSwitch ~= 0 then
+            local old = job.previous and job.previous.tabInputs[record.id]
+            state.tabInputs[record.id] = not job.replace and old and old.switch == record.selectSwitch
+                and old or {switch = record.selectSwitch}
+        end
         state.tabOrder[record.id] = #state.data.tabs
         state.tabControls[record.id], state.visibleControls[record.id] = {}, {}
         state.usedAddresses[record.address] = true

@@ -48,6 +48,7 @@ local function background(widget)
         return
     end
     if app.tick then app.tick() end
+    if app.ui then app.ui.background(widget) end
 end
 
 local function refresh(widget)

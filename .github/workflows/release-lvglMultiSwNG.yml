@@ -1,0 +1,90 @@
+name: Release lvglMultiSwNG
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - WIDGETS/lvglMultiSwNG/app.lua
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      WIDGET_DIR: WIDGETS/lvglMultiSwNG
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect widget version change
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_pattern='s/^[[:space:]]*app\.softwareVersion[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p'
+          version=$(sed -nE "$version_pattern" "$WIDGET_DIR/app.lua")
+          if [[ ! "$version" =~ ^[0-9]+$ ]]; then
+            echo "::error::Cannot read a single numeric app.softwareVersion from $WIDGET_DIR/app.lua"
+            exit 1
+          fi
+
+          previous=""
+          if [[ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$BEFORE_SHA"
+            fi
+            if git cat-file -e "$BEFORE_SHA:$WIDGET_DIR/app.lua" 2>/dev/null; then
+              previous=$(git show "$BEFORE_SHA:$WIDGET_DIR/app.lua" | sed -nE "$version_pattern")
+              if [[ ! "$previous" =~ ^[0-9]+$ ]]; then
+                echo "::error::Cannot read the previous widget version"
+                exit 1
+              fi
+            fi
+          fi
+
+          if [[ "$version" == "$previous" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          name="${WIDGET_DIR##*/}"
+          {
+            echo "changed=true"
+            echo "name=$name"
+            echo "version=$version"
+            echo "tag=$name-v$version"
+            echo "archive=${name}_${version}.zip"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Package widget
+        if: steps.version.outputs.changed == 'true'
+        env:
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip --output="$RUNNER_TEMP/$ARCHIVE" HEAD \
+            "$WIDGET_DIR" ":!$WIDGET_DIR/tests" ":!$WIDGET_DIR/models"
+
+      - name: Publish widget release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          WIDGET_NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "$RUNNER_TEMP/$ARCHIVE" \
+            --target "$GITHUB_SHA" \
+            --title "$WIDGET_NAME $VERSION" \
+            --notes "Only $WIDGET_NAME, version $VERSION. Extract the ZIP into the root of the EdgeTX SD card. Existing model configurations are not included." \
+            --latest=false

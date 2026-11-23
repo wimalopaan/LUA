@@ -44,6 +44,15 @@ geänderten Widget-Module sowie `Logo_small_64_t.png`, `Logo_30_inv.png`,
 `tests/` wird auf dem Sender nicht benötigt. Das Widget heißt `MultiSw NG`.
 Es gibt keine funktionalen Widget-Options.
 
+Bei einer Änderung von `app.softwareVersion` in `app.lua` auf `main`
+erstellt GitHub Actions automatisch ein widgeteigenes Release mit dem Tag
+`lvglMultiSwNG-v<version>` und dem Anhang `lvglMultiSwNG_<version>.zip`.
+Das ZIP enthält ausschließlich die versionierten Dateien dieses Widgets
+unter `WIDGETS/lvglMultiSwNG/`, ohne Tests und Modellkonfigurationen.
+Zum Installieren in das Hauptverzeichnis der SD-Karte entpacken.
+Änderungen ohne neue Softwareversion erzeugen kein Release; bereits
+veröffentlichte Versionen werden nicht überschrieben.
+
 Die erste Konfiguration enthält einen Tab mit acht rastenden Buttons,
 Standardadresse 0 und Ausgängen 1 bis 8. Im normalen Widget-Fenster erscheinen
 das farbige wimalopaan-Logo, der konfigurierte Widget-Name und bis zu zwei
@@ -78,6 +87,20 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   Auf der Bedienseite steht es unter der Navigationszeile neben dem Status.
 * `Neuer Tab` öffnet den Editor für einen neuen, zunächst leeren Tab.
   Als Standardadresse wird eine noch unbenutzte Adresse vorgeschlagen.
+* Im Tab-Editor kann ein `Anwahlschalter` zugeordnet werden, etwa eine
+  Position von SA oder einem 6-Positions-Schalter. Nur die Flanke von inaktiv
+  nach aktiv wählt den Tab an. Die manuellen Tab-Buttons bleiben nutzbar;
+  eine gehaltene Position erzwingt keinen Tabwechsel. Beim Start und nach
+  einer neuen Zuordnung wird der aktuelle Zustand nur als Ausgangszustand
+  eingelesen. In Einstellungsdialogen und außerhalb des Vollbilds werden
+  Flanken nicht zur Navigation verwendet und später nicht nachgeholt.
+  Die Position erscheint im Tab-Titel, ohne den gespeicherten Namen zu ändern.
+  Dieselbe Position einschließlich ihrer Negation darf weder einem weiteren
+  Tab noch einem Element als Schalter, Schalter 2 oder Aktivierung zugeordnet
+  sein. Das gilt auch für unsichtbare Elemente; andere Positionen desselben
+  Schalters bleiben frei. Die Auswahl blendet reservierte Positionen aus;
+  Anwenden, Laden und Importieren prüfen die Zuordnungen ebenfalls.
+  Bestehende Tabs ohne Anwahlschalter bleiben unverändert bedienbar.
 * `Tab Einstellungen` zeigt eine kompakte Elementliste mit Name,
   Adresse/Ausgang und `Bearbeiten`-Button nebeneinander in einer Zeile.
   Weicht die effektive Elementadresse von der Standardadresse des Tabs ab,
@@ -96,7 +119,10 @@ image::.images/w2.png[Bedienseite mit verschiedenen Elementarten und Exklusivgru
   auch seine Elemente entfernt.
 * Ein Element besitzt Name, Art, Adresse, Ausgang, Sichtbarkeit,
   Exklusivgruppe, Farben, Schrift, optionales Button-Bild und
-  physische Schalter-/Quellenzuordnung. `Verschieben` im Elementeditor öffnet
+  physische Schalter-/Quellenzuordnung. Zugeordnete Bedienschalter erscheinen
+  als Namenszusatz, bei 3Pos gegebenenfalls beide Positionen mit `/` getrennt.
+  Der gespeicherte Name bleibt unverändert; Aktivierungsschalter werden nicht
+  im Namen angezeigt. `Verschieben` im Elementeditor öffnet
   eine separate Verschiebeansicht mit Ziel-Tab, Adressvorschau und
   Bestätigung bzw. Abbruch. Der Item-Editor enthält keine Tab-Auswahl.
   Mit nur einem Tab ist `Verschieben` deaktiviert; bei neuen, noch nicht angewendeten
@@ -252,7 +278,8 @@ Im Elementeditor unter `Allgemein` legen `Text links` und `Text rechts` die beid
 äußeren Beschriftungen fest (je höchstens 32 Bytes). Diese Benutzertexte
 werden unverändert gespeichert und nicht übersetzt oder durch `L`/`R` ersetzt.
 Die mittlere Taste zeigt übersetzt `Aus`. Eine Überschrift über
-der Gruppe entfällt; der Elementname bleibt für die Verwaltung erhalten.
+der Gruppe entfällt bei reiner Touch-Bedienung. Bei zugeordneten
+Bedienschaltern erscheint dort der Elementname mit den Schalterpositionen.
 Bei wenig Platz wird zunächst eine kleinere Schrift verwendet.
 Alte Konfigurationen ohne die neuen Felder erhalten beim Laden passende
 Standardtexte; nach dem Speichern bleiben auch diese sprachunabhängig erhalten.
@@ -309,8 +336,12 @@ und Realm `0xa1`. CRCs fügt EdgeTX hinzu.
   Aktivierung unter `Global`. Farben werden nach Konfigurationsänderungen
   und bei Wiederkehr von `RQly` erneut übertragen.
 
-CRSF-Zieladresse und Wiederholintervall werden unter `Global` konfiguriert,
-nicht über Widget-Options. Das Intervall hat die Einheit 10 ms;
+ELRS-Version und Wiederholintervall werden unter `Global` konfiguriert,
+nicht über Widget-Options. Vorgabe ist `ELRS V4` mit fester CRSF-Zieladresse `0x00`.
+Bei `ELRS V3` erscheint das bisherige Zieladressfeld; sein Wert bleibt beim
+Versionswechsel erhalten. Bestehende Konfigurationen ohne Versionsauswahl werden
+bei einer Zieladresse ungleich `0x00` als V3, sonst als V4 übernommen.
+Das Intervall hat die Einheit 10 ms;
 Vorgabe 100 = 1 Sekunde. Änderungen werden unabhängig davon zeitnah gesendet.
 Je Hintergrundschritt wird höchstens ein Paket an EdgeTX übergeben.
 Schaltzustände, proportionale Werte und Farben werden fair abgearbeitet.
