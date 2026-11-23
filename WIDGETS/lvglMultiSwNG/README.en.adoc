@@ -37,7 +37,7 @@ This documentation uses the English UI labels; the screenshots show the German U
 == Installation and operation
 
 Copy the directory to `/WIDGETS/lvglMultiSwNG/` on the SD card.
-When updating, also copy `i18n.lua`, the entire `lang/` directory,
+When updating, also copy `i18n.lua`, `localout.lua`, the entire `lang/` directory,
 all modified widget modules, and `Logo_small_64_t.png`, `Logo_30_inv.png`,
 `Logo_40_inv.png`, `Logo_56_inv.png` and `website-qr.png`.
 The `tests/` directory is not required on the radio. The widget is named `MultiSw NG`.
@@ -198,7 +198,7 @@ Global settings are divided into `General` and a protocol-specific section
 Tab settings have `General`, `Layout` and `Management` sections.
 The control editor has three subpages:
 `Basic` for name, type, address, output and management actions;
-`Inputs` for physical assignments, activation and exclusive group;
+`Inputs/outputs` for physical assignments, activation, exclusive group and local switch output;
 and `Appearance` for visibility, colors, font and images.
 Switching subpages preserves the entire draft.
 
@@ -225,8 +225,8 @@ the radio theme's colors. `Text color` remains available for its caption.
 .Control editor: Basic settings such as name, type and address.
 image::.images/w5.png[Control editor on the Basic subpage]
 
-.Control editor: Physical inputs, activation and exclusive group.
-image::.images/w6.png[Control editor on the Inputs subpage]
+.Control editor: Inputs/outputs with physical assignments, activation and exclusive group.
+image::.images/w6.png[Control editor on the Inputs/outputs subpage]
 
 .Control editor: Visibility, control color and text color.
 image::.images/w7.png[Control editor on the Appearance subpage]
@@ -476,8 +476,75 @@ and shutdowns incrementally.
 Applied runtime values are retained for unchanged mappings;
 PWM changes use the new on value.
 
-SHM, telemetry actions, setting virtual inputs/switches,
+SHM, telemetry actions, setting virtual inputs,
 and migration of the old widget's configuration are not yet included.
+
+== Setting local switches
+
+In the control editor's `Inputs/outputs` section, `Set switch` assigns a local switch
+in addition to the CRSF/S.Port output. The default is `None`.
+`L01` through `L64` must already be configured as `Sticky` in the EdgeTX model;
+the widget does not change their configuration. Other logical functions
+are excluded from the picker and rejected with an explicit error when applying.
+If an assigned switch is subsequently reconfigured, the editor shows
+`Invalid assignment` until a valid target or `None` is selected.
+
+If the firmware provides the virtual switch APIs, already activated switches
+from `VS01` through `VS64` are also available.
+Widget labels `VS01` through `VS09` correspond to EdgeTX names `VS1` through
+`VS9`; name resolution uses the firmware's spelling.
+Activated means available in the model, not switched on: an activated switch
+can be selected even when its state is off.
+Availability is checked again when opening the dropdown.
+The filtered dropdown does not have native category buttons.
+
+Under `Global`, `Virtual switches` opens a separate settings page
+with an activation toggle for each of `VS01` through `VS64`.
+The selection is saved per model in the widget configuration.
+Only `Apply` takes effect; `Cancel` discards the draft without activating anything.
+`Global` on this page returns to the other global settings without losing
+the shared draft. `Apply` also applies any other changes in that global draft.
+Saving follows the `Auto-Save` setting as usual.
+Without the required firmware API, the entry is disabled and a hint is shown.
+
+Selected switches are activated in the background and restored after restarting.
+They then appear under `Inputs/outputs` → `Set switch`.
+Activation changes availability only, not the on/off state.
+While selected, the widget also restores availability after external deactivation.
+Before deactivating a managed switch, clear its assigned control's local
+switch output with `None`. Until then, its activation toggle is disabled;
+manual configuration changes are also validated.
+Deselecting a managed switch switches it off and deactivates it.
+External activations of other, unselected switches remain unchanged.
+Removing a control assignment alone switches the output off but retains
+its saved activation.
+Externally activated switches can still be used without selecting their
+activation in the widget. If deactivated externally, these assignments
+are reported as invalid rather than automatically reactivated.
+
+Buttons and toggles mirror their on/off state; momentary controls set the target
+while pressed. For three-position controls, both outer positions mean on
+and the center means off. Sliders cannot set local switches.
+When changing to a slider, first clear an existing assignment with `None`.
+Physical inputs, activation conditions and exclusive groups also affect
+the local switch. Each target may belong to only one control and must not also
+be that control's own input or activation switch, including inverted assignments.
+Targets should be exclusively controlled by the widget: other scripts or
+Sticky set/reset conditions can otherwise change their state independently.
+Indirect feedback through other model functions is not checked.
+
+State changes are submitted to EdgeTX immediately. A full Sticky message buffer
+is reported explicitly; the latest requested state is retried in the background.
+Very short presses are therefore not guaranteed pulses.
+Each tick checks at most eight targets for new assignments, pending changes
+and shutdowns; without buffer congestion, a full pass takes 16 ticks (160 ms) while the widget is called
+regularly. Deleted or reassigned targets are switched off during reconciliation.
+Unchanged targets are not written again. Cancelled or invalid drafts have no effect.
+The feature also runs outside full screen and independently of RF transmission.
+Touch controls and their assigned local switches start off after restarting.
+Loading a saved assignment without the required APIs produces an explicit
+load error rather than silently ignoring it.
+Test on the radio/simulator before using it with a model.
 
 == On-radio memory diagnostics
 
@@ -536,12 +603,48 @@ Simulator values do not replace these hardware measurements.
 
 == Configuration files
 
-Each model uses two alternating files in the widget directory:
+Each model uses two alternating files in the widget directory's `models/` subfolder:
 `model_<model identifier as hex>.a.lua` and `.b.lua`.
+The folder is created on save if necessary.
+Move existing configuration files into `models/` manually without renaming them,
+including both files for each model.
+The widget's root directory is no longer searched for configurations;
+there is no automatic migration.
 The model identifier is `model.getInfo().filename` if available,
 otherwise the model name.
 When the model name is used, renaming it selects a different file pair.
 The previous MultiSwitch configuration is neither loaded nor overwritten.
+
+=== Copying another model's configuration
+
+Use `Global` → `Import configuration` to select another model's saved
+configuration. The list includes NG configurations in the `models/` subfolder,
+excluding the current model and duplicate entries for the two save files.
+The selection displays the actual model name from its EdgeTX file under
+`/MODELS/`, not the YML filename. If a configuration was saved without a model
+file identifier, its identifier already contains the model name.
+Unreadable names are explicitly marked with their file identifier,
+and the underlying error is also displayed.
+
+`Import` requires confirmation before replacing all widget settings, tabs and
+controls. Unsaved changes and open editor drafts are discarded.
+`Cancel` returns to the previous Global draft without importing.
+While loading and preparing the configuration, `Cancel update` stops the import.
+
+As during normal loading, the newest complete, valid save from the two source
+files is selected. Loading failures leave the current configuration unchanged.
+The source files are never written. After successful activation, the copy is
+saved under the current model's identifier even if Auto-Save is disabled;
+the target's save generation continues independently of the source model.
+Save failures remain visible and the copy stays marked as unsaved.
+
+Runtime switch states are not copied. The current model's physical inputs
+continue to operate normally. Check switch, source, address and output
+assignments before use. EdgeTX model settings such as mixers or logical
+switches are not copied. Import supports NG configurations, not the
+predecessor widget's file format.
+
+=== File format
 
 Each file is a valid Lua file containing `return {`, a list of flat records,
 and a closing `}`.
@@ -556,6 +659,12 @@ default to 0 (CRSF), 0 and 81.
 Missing control fields `sportType`, `sportOptions` and `sportPwmOn`
 default to 1, 0 and 255.
 These fields remain saved under CRSF and WM but affect only ACW.
+`localSwitch` is 0 for no local switch output, 1 through 64 for `L01` through
+`L64`, and 65 through 128 for `VS01` through `VS64`. A missing field defaults to 0.
+The `virtualSwitches` header field contains exactly 64 `0` or `1` characters,
+ordered VS01 through VS64. `1` means activate and keep available through the widget.
+`0` means do not activate through the widget; external activations are left unchanged.
+A missing field defaults to 64 zeros.
 `version` describes the format; `generation` identifies the saved revision.
 Files contain configuration only, not runtime states.
 

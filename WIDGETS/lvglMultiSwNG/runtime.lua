@@ -15,7 +15,7 @@ function M.begin(source, previous, change)
             data = builder.config, tabs = {}, controls = {}, addresses = {},
             tabOrder = {}, tabControls = {}, visibleControls = {},
             values = {}, physical = {}, winners = {}, groupCounts = {}, masks = {}, usedAddresses = {},
-            inputErrors = {}, inputErrorCount = 0,
+            inputErrors = {}, inputErrorCount = 0, localTargets = {},
             maxTabId = 0, maxControlId = 0, backend = backend, sender = backend.new(),
         },
     }
@@ -26,6 +26,8 @@ local function append(job, record)
     if not ok then job.done, job.error = true, err; return end
     local state = job.state
     if record.kind == "config" then
+        local valid, reason = app.localout.validateHeader(state.data.header)
+        if not valid then job.done, job.error = true, reason; return end
         state.backend.header(state.sender, state.data.header)
     elseif record.kind == "tab" then
         state.tabs[record.id] = record
@@ -34,7 +36,12 @@ local function append(job, record)
         state.usedAddresses[record.address] = true
         state.maxTabId = math.max(state.maxTabId, record.id)
     else
+        record = state.data.controls[#state.data.controls]
+        local valid, reason = app.localout.validate(record, state.data.header,
+            job.previous and job.previous.data.header)
+        if not valid then job.done, job.error = true, reason; return end
         local id = record.id
+        if record.localSwitch > 0 then state.localTargets[record.localSwitch] = id end
         local address = app.config.address(record, state.tabs[record.tab])
         state.controls[id], state.addresses[id] = record, address
         local list = state.tabControls[record.tab]
@@ -48,7 +55,7 @@ local function append(job, record)
         state.maxControlId = math.max(state.maxControlId, id)
         local previous = job.previous
         local old = previous and previous.controls[id]
-        if old and previous.addresses[id] == address and old.output == record.output
+        if old and not job.replace and previous.addresses[id] == address and old.output == record.output
             and old.type == record.type and old.switch == record.switch
             and old.switch2 == record.switch2 and old.source == record.source
             and old.group == record.group and old.activation == record.activation

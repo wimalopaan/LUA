@@ -3,6 +3,7 @@
 
 -- Run from lvglMultiSwNG: lua tests/run.lua
 local root = (string.match(arg[0], "^(.*)tests/") or "")
+local modelsDir = root .. "models/"
 local hostIO = io
 local stringMetatable = debug.getmetatable("")
 -- Reproduce the simulator's lack of string method lookup.
@@ -105,11 +106,17 @@ local function reset()
     getVersion = function() return "3.0.0", "tx16s" end
     getGeneralSettings = function() return {language = "EN", voice = "de"} end
     serialWrite = nil
+    dir = nil
     getSwitchValue = function(id) return switches[id] or false end
     getSourceValue = function(id) return sources[id] end
+    getSwitchIndex, getSwitchName, setStickySwitch, LS_FUNC_STICKY = nil, nil, nil, nil
+    setVirtualSwitch, activateVirtualSwitch = nil, nil
     getValue = function() return quality end
     model = {getInfo = function() return {name = "Model/1"} end}
+    local directories = {}
+    mkdir = function(path) directories[path] = true; return 0 end
     fstat = function(path)
+        if directories[path] then return {attrib = 0x10} end
         if fs[path] ~= nil then return {size = #fs[path]} end
     end
     lcd = {
@@ -282,6 +289,760 @@ end
 
 local tests = {}
 local function test(name, body) tests[#tests + 1] = {name, body} end
+
+local function localRadio(virtual)
+    local radio = {values = {}, calls = {}, blocked = {}, functions = {}, active = {}, activations = {}}
+    LS_FUNC_STICKY = 18
+    model.getLogicalSwitch = function(id)
+        assert(id >= 0 and id < 64)
+        return {func = radio.functions[id + 1] or LS_FUNC_STICKY}
+    end
+    getSwitchIndex = function(name)
+        local number = tonumber(string.match(name, "^L(%d+)$"))
+        if number and name == string.format("L%02d", number) then return 100 + number end
+        number = tonumber(string.match(name, "^VS(%d+)$"))
+        if virtual and number and name == string.format("VS%d", number) then return 200 + number end
+    end
+    getSwitchName = function(index)
+        if index >= 101 and index <= 164 then return string.format("L%02d", index - 100) end
+        if virtual and index >= 201 and index <= 264 and radio.active[index - 200] then
+            return string.format("VS%d", index - 200)
+        end
+    end
+    setStickySwitch = function(id, value)
+        assert(id >= 0 and id < 64)
+        equal(type(value), "boolean")
+        local full = radio.blocked[id + 1] == true
+        radio.calls[#radio.calls + 1] = {target = id + 1, value = value, full = full}
+        if not full then radio.values[id + 1] = value end
+        return full
+    end
+    if virtual then
+        activateVirtualSwitch = function(id, on)
+            assert(id >= 1 and id <= 64)
+            radio.active[id] = on
+            radio.activations[#radio.activations + 1] = {id, on}
+        end
+        setVirtualSwitch = function(id, value)
+            assert(id >= 1 and id <= 64)
+            assert(radio.active[id] or not value, "Virtual switch enabled before activation")
+            equal(type(value), "boolean")
+            radio.values[id + 64] = value
+            radio.calls[#radio.calls + 1] = {target = id + 64, value = value}
+        end
+    end
+    return radio
+end
+
+test("Local switch assignments migrate, roundtrip and reject duplicate targets and sliders", function()
+    local data = config.defaults()
+    for _, control in ipairs(data.controls) do control.localSwitch = nil end
+    finish(storage.save("legacy-local", data, 1), storage.stepSave)
+    local loaded = finish(storage.load("legacy-local"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.controls[1].localSwitch, 0)
+    equal(data.controls[1].localSwitch, nil, "Loading mutated the original configuration")
+    data = loaded.result
+    data.controls[1].localSwitch, data.controls[2].localSwitch = 64, 128
+    finish(storage.save("local-targets", data, 2), storage.stepSave)
+    loaded = finish(storage.load("local-targets"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.controls[1].localSwitch, 64)
+    equal(loaded.result.controls[2].localSwitch, 128)
+    data.controls[2].localSwitch = 64
+    local _, err = config.validate(data)
+    contains(err, "Local switch already assigned")
+    data.controls[2].localSwitch, data.controls[1].type = 0, 5
+    _, err = config.validate(data)
+    contains(err, "Slider cannot set")
+    data.controls[1].type, data.controls[1].localSwitch = 1, 129
+    _, err = config.validate(data)
+    contains(err, "control.localSwitch")
+end)
+
+test("Local switch validation rejects unsupported APIs, non-Sticky targets and direct feedback", function()
+    local radio = localRadio(true)
+    radio.active[1] = true
+    local app = appInstance()
+    ready(app)
+    local control = config.copy(app.controls[1])
+    control.localSwitch = 1
+    radio.functions[1] = 0
+    local ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "Configure L01 as Sticky")
+    equal(#radio.calls, 0)
+    radio.functions[1] = LS_FUNC_STICKY
+    for _, field in ipairs({"switch", "switch2", "activation"}) do
+        for _, sign in ipairs({1, -1}) do
+            control.type, control[field] = 3, 101 * sign
+            ok, err = commit(app, "control", control)
+            assert(not ok)
+            contains(err, "feeds its own input")
+            control[field] = 0
+        end
+    end
+    control.localSwitch, control.activation = 65, -201
+    ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "feeds its own input")
+    control.activation = 0
+    setVirtualSwitch = nil
+    ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "Virtual switch API unavailable")
+    control.localSwitch, setStickySwitch = 1, nil
+    ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "Sticky switch API unavailable")
+    equal(app.controls[1].localSwitch, 0)
+    equal(#radio.calls, 0)
+end)
+
+test("Local outputs follow touch, momentary, physical inputs, activation and mutex under every protocol", function()
+    for protocol = 0, 3 do
+        local radio = localRadio()
+        local app = appInstance("local-protocol-" .. protocol)
+        ready(app)
+        local header = config.copy(app.data.header)
+        header.protocol = protocol
+        assert(commit(app, "config", header))
+        for id = 1, 4 do
+            local control = config.copy(app.controls[id])
+            control.localSwitch = id
+            control.type = id == 3 and protocol >= 2 and 1 or id
+            if id <= 2 then control.group = 1 end
+            assert(commit(app, "control", control))
+        end
+        advance(app, 16)
+        for id = 1, 4 do equal(radio.values[id], false) end
+        blocked, sportBlocked = true, true
+        app.set(1, 1)
+        equal(radio.values[1], true)
+        app.set(2, 1)
+        equal(radio.values[1], false)
+        equal(radio.values[2], true)
+        app.set(4, 1)
+        equal(radio.values[4], true)
+        app.set(4, 0)
+        equal(radio.values[4], false)
+        local control = config.copy(app.controls[3])
+        control.switch, control.activation = 41, 43
+        if protocol < 2 then control.switch2 = 42 end
+        switches[43], switches[41] = true, true
+        assert(commit(app, "control", control))
+        advance(app, 16)
+        equal(radio.values[3], true)
+        if protocol < 2 then
+            switches[41], switches[42] = false, true
+            advance(app)
+            equal(app.values[3], 2)
+            equal(radio.values[3], true)
+        end
+        switches[43] = false
+        advance(app)
+        equal(radio.values[3], false)
+        local calls = #radio.calls
+        advance(app, 32)
+        equal(#radio.calls, calls, "Unchanged local outputs were written repeatedly")
+        blocked, sportBlocked = false, false
+    end
+end)
+
+test("Virtual outputs require prior activation, never change activation and shut down on tab deletion", function()
+    local radio = localRadio(true)
+    local app = appInstance()
+    ready(app)
+    local tab = app.newTab()
+    assert(commit(app, "tab", tab))
+    local control = config.copy(app.controls[1])
+    control.tab, control.localSwitch = tab.id, 128
+    local ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "Virtual switch is not activated: VS64")
+    equal(#radio.activations, 0)
+    equal(#radio.calls, 0)
+    radio.active[64] = true
+    local job = app.commit("control", control)
+    while job.phase ~= "retire-sliders" do advance(app) end
+    equal(#radio.activations, 0)
+    finish(job, function() advance(app) end)
+    assert(job.success)
+    advance(app, 16)
+    equal(radio.values[128], false)
+    equal(#radio.activations, 0)
+    app.set(1, 1)
+    equal(radio.values[128], true)
+    assert(commit(app, "tab", app.tabs[tab.id], true))
+    advance(app, 16)
+    equal(radio.values[128], false)
+    assert(not app.controls[1])
+    equal(radio.active[64], true)
+    equal(#radio.activations, 0)
+    equal(next(radio.active), 64, "Unassigned virtual switches were activated")
+end)
+
+test("Blocked local switch changes retry fairly, retain retirements and report errors independently", function()
+    local radio = localRadio(true)
+    radio.active[1] = true
+    local app = appInstance()
+    ready(app)
+    for id = 1, 2 do
+        local control = config.copy(app.controls[id])
+        control.localSwitch = id == 1 and 64 or 1
+        assert(commit(app, "control", control))
+    end
+    advance(app, 16)
+    radio.blocked[64] = true
+    app.set(1, 1)
+    equal(radio.values[64], false)
+    contains(app.operationStatus(), "L64: Sticky switch queue busy")
+    app.set(2, 1)
+    equal(radio.values[1], false)
+    contains(app.operationStatus(), "L64: Sticky switch queue busy")
+    local virtual = config.copy(app.controls[3])
+    virtual.localSwitch = 65
+    assert(commit(app, "control", virtual))
+    app.set(3, 1)
+    equal(radio.values[65], true, "Blocked Sticky writes prevented a virtual switch update")
+    radio.blocked[64] = false
+    advance(app, 16)
+    equal(radio.values[64], true)
+    equal(radio.values[1], true)
+    assert(not app.localout.status())
+    radio.blocked[64] = true
+    local control = config.copy(app.controls[1])
+    control.localSwitch = 63
+    assert(commit(app, "control", control))
+    advance(app, 16)
+    equal(radio.values[64], true)
+    equal(radio.values[63], true)
+    contains(app.operationStatus(), "L64")
+    local header = config.copy(app.data.header)
+    header.name = "Keep pending shutdown"
+    assert(commit(app, "config", header))
+    radio.blocked[64] = false
+    app.saveError = "SD full"
+    advance(app, 16)
+    equal(radio.values[64], false)
+    equal(radio.values[63], true)
+    assert(not app.localout.status())
+    equal(app.saveError, "SD full")
+    assert(commit(app, "control", app.controls[1], true))
+    advance(app, 16)
+    equal(radio.values[63], false)
+end)
+
+test("Continuous physical traffic cannot starve pending local shutdowns in the shared eight-slot buffer", function()
+    local radio = localRadio()
+    local app = appInstance()
+    ready(app)
+    local extra = app.newControl(app.tabs[1])
+    assert(commit(app, "control", extra))
+    for id = 1, 9 do
+        local control = config.copy(app.controls[id])
+        control.localSwitch = id == 8 and 64 or id == 9 and 8 or id
+        if id ~= 8 then control.switch = id end
+        assert(commit(app, "control", control))
+    end
+    advance(app, 16)
+    app.set(8, 1)
+    equal(radio.values[64], true)
+    local write = setStickySwitch
+    local remaining = 0
+    setStickySwitch = function(id, value)
+        if remaining == 0 then return true end
+        remaining = remaining - 1
+        return write(id, value)
+    end
+    assert(commit(app, "control", app.controls[8], true))
+    advance(app, 16)
+    equal(radio.values[64], true)
+    contains(app.operationStatus(), "Sticky switch queue busy")
+    for tick = 1, 80 do
+        if tick % 10 == 1 then remaining = 8 end
+        for id = 1, 9 do switches[id] = tick % 2 == 1 end
+        advance(app)
+    end
+    equal(radio.values[64], false, "Physical inputs consumed every newly freed message slot")
+    assert(#radio.calls > 20, "The competing physical controls did not produce traffic")
+end)
+
+test("Preparing or cancelling local assignments has no side effects and activation retains live state", function()
+    local radio = localRadio()
+    local app = appInstance()
+    ready(app)
+    local control = config.copy(app.controls[1])
+    control.localSwitch = 1
+    assert(commit(app, "control", control))
+    advance(app, 16)
+    control.localSwitch = 2
+    local job = app.commit("control", control)
+    while not job.preserve[1] do advance(app) end
+    app.set(1, 1)
+    equal(radio.values[1], true)
+    equal(radio.values[2], nil, "Candidate assignment was written during preparation")
+    equal(job.state.values[1], 1)
+    app.cancelUpdate(job)
+    advance(app, 16)
+    equal(radio.values[1], true)
+    equal(radio.values[2], nil)
+    local calls = #radio.calls
+    local header = config.copy(app.data.header)
+    header.name = "Preserve assignment"
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    equal(#radio.calls, calls)
+    assert(commit(app, "control", control))
+    advance(app, 16)
+    equal(radio.values[1], false)
+    equal(radio.values[2], true)
+    save(app)
+    local fresh = appInstance()
+    ready(fresh)
+    advance(fresh, 16)
+    equal(fresh.controls[1].localSwitch, 2)
+    equal(fresh.values[1], 0)
+    equal(radio.values[2], false, "Saved touch state was restored instead of starting off")
+end)
+
+test("Local switch editor keeps drafts, gates virtual support and permits clearing stale slider targets", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        local radio = localRadio(true)
+        radio.active[64] = true
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("local-editor-" .. language)
+        ready(app)
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "editor",
+            edit = config.copy(app.controls[1]), editKind = "control",
+            editSection = "Inputs", editRevision = app.revision}
+        render(app, view)
+        local caption = language == "DE" and "Schalter setzen:" or "Set switch:"
+        local picker = form(caption)
+        equal(picker.values[1], language == "DE" and "Keiner" or "None")
+        equal(#picker.values, 66)
+        equal(picker.values[66], "VS64")
+        picker.set(66)
+        equal(view.edit.localSwitch, 128)
+        equal(app.controls[1].localSwitch, 0)
+        equal(#radio.calls, 0)
+        press(language == "DE" and "Anwenden" or "Apply")
+        render(app, view)
+        equal(app.controls[1].localSwitch, 128)
+        local target = config.copy(app.controls[1])
+        target.type = 5
+        view.page, view.edit, view.editKind, view.editSection = "editor", target, "control", "Inputs"
+        view.editRevision, view.renderRevision = app.revision, nil
+        activateVirtualSwitch, setVirtualSwitch = nil, nil
+        render(app, view)
+        picker = form(caption)
+        equal(#picker.values, 66, "Unsupported virtual targets were offered for new assignments")
+        equal(picker.values[picker.get()], language == "DE" and "Ungültige Zuordnung" or "Invalid assignment")
+        picker.set(1)
+        equal(view.edit.localSwitch, 0)
+        assert(commit(app, "control", view.edit))
+        advance(app, 16)
+        equal(app.controls[1].type, 5)
+        assert(not app.localout.status())
+    end
+end)
+
+test("Local switch picker offers only configured Sticky switches and preserves their real target numbers", function()
+    local radio = localRadio(true)
+    radio.active[1], radio.active[64] = true, true
+    for target = 1, 64 do radio.functions[target] = 0 end
+    radio.functions[7], radio.functions[64] = LS_FUNC_STICKY, LS_FUNC_STICKY
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "editor",
+        edit = config.copy(app.controls[1]), editKind = "control",
+        editSection = "Inputs", editRevision = app.revision}
+    render(app, view)
+    local picker = form("Set switch:")
+    equal(#picker.values, 5)
+    equal(picker.values[1], "None")
+    equal(picker.values[2], "L07")
+    equal(picker.values[3], "L64")
+    equal(picker.values[4], "VS01")
+    equal(picker.values[5], "VS64")
+    picker.set(2)
+    equal(view.edit.localSwitch, 7)
+    assert(commit(app, "control", view.edit))
+    app.set(1, 1)
+    equal(radio.values[7], true)
+    equal(radio.values[2], nil)
+    radio.functions[7] = 0
+    view.editRevision, view.renderRevision = app.revision, nil
+    render(app, view)
+    picker = form("Set switch:")
+    equal(picker.values[2], "L64")
+    equal(picker.values[picker.get()], "Invalid assignment")
+    equal(view.edit.localSwitch, 7, "Rendering silently cleared the invalid assignment")
+    assert(find(function(item) return item.text == "Configure L07 as Sticky" end))
+    for _, name in ipairs(picker.values) do
+        assert(name ~= "L07" and name ~= "L01", "Non-Sticky switch offered as a target")
+    end
+    picker.set(1)
+    equal(view.edit.localSwitch, 0)
+    assert(commit(app, "control", view.edit))
+    radio.functions[64], setVirtualSwitch = 0, nil
+    view.editRevision, view.renderRevision = app.revision, nil
+    render(app, view)
+    picker = form("Set switch:")
+    equal(#picker.values, 1)
+    equal(picker.values[1], "None")
+end)
+
+test("Virtual target filtering follows activation rather than on/off and never reactivates a disabled target", function()
+    local radio = localRadio(true)
+    for target = 1, 64 do radio.functions[target] = 0 end
+    radio.active[2], radio.active[3] = true, true
+    radio.values[65], radio.values[66], radio.values[67] = true, false, true
+    local app = appInstance()
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "editor",
+        edit = config.copy(app.controls[1]), editKind = "control",
+        editSection = "Inputs", editRevision = app.revision}
+    render(app, view)
+    local picker = form("Set switch:")
+    equal(table.concat(picker.values, ","), "None,VS02,VS03")
+    assert(picker.filter(1) and picker.filter(2) and picker.filter(3))
+    equal(radio.values[66], false)
+    picker.set(2)
+    equal(view.edit.localSwitch, 66)
+    assert(commit(app, "control", view.edit))
+    app.set(1, 1)
+    equal(radio.values[66], true)
+    radio.active[2] = false
+    assert(not picker.filter(2), "Popup did not recheck activation after the editor was built")
+    assert(picker.filter(3))
+    advance(app, 16)
+    contains(app.operationStatus(), "Virtual switch is not activated: VS02")
+    app.set(1, 0)
+    equal(radio.values[66], true, "Disabled virtual switch was written")
+    equal(radio.active[2], false)
+    equal(#radio.activations, 0)
+    view.editRevision, view.renderRevision = app.revision, nil
+    render(app, view)
+    picker = form("Set switch:")
+    equal(table.concat(picker.values, ","), "None,VS03,Invalid assignment")
+    assert(not picker.filter(picker.get()))
+    local ok, err = commit(app, "control", view.edit)
+    assert(not ok)
+    contains(err, "Virtual switch is not activated: VS02")
+    radio.active[2] = true
+    advance(app, 16)
+    equal(radio.values[66], false)
+    assert(not app.localout.status())
+    equal(#radio.activations, 0)
+end)
+
+test("Saved unsupported local assignments fail explicitly without writes or automatic replacement", function()
+    local data = config.defaults()
+    data.controls[1].localSwitch = 65
+    finish(storage.save("unsupported-local.a.lua", data, 1), storage.stepSave)
+    local writes = writeCount
+    local app = appInstance("unsupported-local")
+    ready(app)
+    equal(app.phase, "error")
+    contains(app.error, "Virtual switch API unavailable")
+    advance(app, 32)
+    equal(writeCount, writes)
+    assert(not app.data)
+end)
+
+test("Virtual activation selection migrates and roundtrips without accepting malformed masks", function()
+    local data = config.defaults()
+    data.header.virtualSwitches = nil
+    finish(storage.save("legacy-virtuals", data, 1), storage.stepSave)
+    local loaded = finish(storage.load("legacy-virtuals"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.header.virtualSwitches, string.rep("0", 64))
+    equal(data.header.virtualSwitches, nil)
+    data = loaded.result
+    config.setVirtualEnabled(data.header, 1, 1)
+    config.setVirtualEnabled(data.header, 32, true)
+    config.setVirtualEnabled(data.header, 64, 1)
+    finish(storage.save("virtuals-mask", data, 2), storage.stepSave)
+    loaded = finish(storage.load("virtuals-mask"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.header.virtualSwitches, "1" .. string.rep("0", 30) .. "1"
+        .. string.rep("0", 31) .. "1")
+    for _, invalid in ipairs({"", string.rep("0", 63), string.rep("0", 63) .. "x", string.rep("1", 65)}) do
+        data.header.virtualSwitches = invalid
+        local _, err = config.validate(data)
+        contains(err, "config.virtualSwitches")
+    end
+end)
+
+test("Firmware virtual names resolve single- and double-digit targets for assignment and cold restart", function()
+    local radio = localRadio(true)
+    local app = appInstance("virtual-firmware-names")
+    ready(app)
+    local numbers = {1, 9, 10, 64}
+    local header = config.copy(app.data.header)
+    for _, number in ipairs(numbers) do config.setVirtualEnabled(header, number, true) end
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    assert(not app.localout.status(), app.localout.status())
+    for id, number in ipairs(numbers) do
+        equal(radio.active[number], true)
+        local control = config.copy(app.controls[id])
+        control.localSwitch = 64 + number
+        assert(commit(app, "control", control))
+        app.set(id, 1)
+        equal(radio.values[64 + number], true)
+    end
+    local control = config.copy(app.controls[1])
+    control.activation = -201
+    local ok, err = commit(app, "control", control)
+    assert(not ok)
+    contains(err, "feeds its own input")
+    settleAutosave(app)
+    radio.active, radio.values = {}, {}
+    local fresh = appInstance("virtual-firmware-names")
+    ready(fresh)
+    equal(fresh.phase, "ready", fresh.error)
+    advance(fresh, 16)
+    for id, number in ipairs(numbers) do
+        equal(radio.active[number], true)
+        equal(fresh.controls[id].localSwitch, 64 + number)
+        equal(radio.values[64 + number], false)
+    end
+    assert(not fresh.localout.status(), fresh.localout.status())
+    local view = {zone = {w = 480, h = 272}, app = fresh, tab = 1, page = "editor",
+        edit = config.copy(fresh.controls[1]), editKind = "control",
+        editSection = "Inputs", editRevision = fresh.revision}
+    render(fresh, view)
+    local picker = form("Set switch:")
+    equal(picker.values[picker.get()], "VS01")
+    equal(table.concat(picker.values, ",", #picker.values - 3), "VS01,VS09,VS10,VS64")
+end)
+
+test("Global settings hide virtual activation when a required firmware API is missing", function()
+    for _, missing in ipairs({"activateVirtualSwitch", "setVirtualSwitch", "getSwitchIndex", "getSwitchName"}) do
+        localRadio(true)
+        _G[missing] = nil
+        local app = appInstance("virtual-unavailable-" .. missing)
+        ready(app)
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+        render(app, view)
+        press("Global")
+        render(app, view)
+        assert(not find(function(item)
+            return item.type == "button" and item.text == "Virtual switches"
+        end), "Virtual activation entry shown without " .. missing)
+        assert(not find(function(item)
+            return item.type == "label" and item.text == "Virtual switch activation API unavailable"
+        end), "Unavailable virtual activation hint shown without " .. missing)
+        equal(form("Name:").value, app.data.header.name)
+    end
+end)
+
+test("Virtual activation settings preserve drafts, apply explicitly and feed the element target picker", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        local radio = localRadio(true)
+        radio.active[2] = true
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("activate-ui-" .. language)
+        ready(app)
+        local virtuals = language == "DE" and "Virtuelle Schalter" or "Virtual switches"
+        local global = "Global"
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+        render(app, view)
+        press(global)
+        render(app, view)
+        form("Name:").set("Unapplied global draft")
+        press(virtuals)
+        render(app, view)
+        equal(view.uiJob.page.params.title, virtuals)
+        form("VS01:").set(1)
+        form("VS64:").set(1)
+        equal(#radio.activations, 0)
+        assert(not config.virtualEnabled(app.data.header, 1))
+        press(global)
+        render(app, view)
+        equal(form("Name:").value, "Unapplied global draft")
+        press(virtuals)
+        render(app, view)
+        equal(form("VS01:").get(), 1)
+        equal(form("VS64:").get(), 1)
+        press(language == "DE" and "Abbrechen" or "Cancel")
+        render(app, view)
+        equal(#radio.activations, 0)
+        equal(app.data.header.name, "MultiSwitch NG")
+        press(global)
+        render(app, view)
+        press(virtuals)
+        render(app, view)
+        equal(form("VS01:").get(), 0)
+        form("VS01:").set(1)
+        form("VS64:").set(1)
+        press(language == "DE" and "Anwenden" or "Apply")
+        render(app, view)
+        advance(app, 16)
+        assert(config.virtualEnabled(app.data.header, 1) and config.virtualEnabled(app.data.header, 64))
+        equal(radio.active[1], true)
+        equal(radio.active[64], true)
+        equal(radio.active[2], true, "External activation was modified")
+        equal(#radio.activations, 2)
+        view.page, view.editKind, view.editSection = "editor", "control", "Inputs"
+        view.edit, view.editRevision, view.renderRevision = config.copy(app.controls[1]), app.revision, nil
+        render(app, view)
+        local picker = form(language == "DE" and "Schalter setzen:" or "Set switch:")
+        equal(picker.values[#picker.values - 2], "VS01")
+        equal(picker.values[#picker.values - 1], "VS02")
+        equal(picker.values[#picker.values], "VS64")
+        picker.set(#picker.values)
+        assert(commit(app, "control", view.edit))
+        app.set(1, 1)
+        equal(radio.values[128], true)
+        settleAutosave(app)
+        radio.active, radio.values, radio.activations = {}, {}, {}
+        local fresh = appInstance("activate-ui-" .. language)
+        ready(fresh)
+        equal(fresh.phase, "ready", fresh.error)
+        equal(fresh.controls[1].localSwitch, 128)
+        advance(fresh, 16)
+        equal(radio.active[1], true)
+        equal(radio.active[64], true)
+        equal(radio.active[2], nil, "An external activation was restored by the widget")
+        equal(radio.values[128], false)
+        assert(not fresh.localout.status())
+    end
+end)
+
+test("Virtual activations are bounded and cancelled or rejected preparation never activates candidates", function()
+    local radio = localRadio(true)
+    local app = appInstance()
+    ready(app)
+    local header = config.copy(app.data.header)
+    header.virtualSwitches = string.rep("1", 64)
+    local job = app.commit("config", header)
+    while job.phase ~= "retire-sliders" do advance(app) end
+    equal(#radio.activations, 0)
+    app.cancelUpdate(job)
+    advance(app, 16)
+    equal(#radio.activations, 0)
+    header.protocol = 1
+    local control = config.copy(app.controls[1])
+    control.type = 5
+    assert(commit(app, "control", control))
+    local ok, err = commit(app, "config", header)
+    assert(not ok)
+    contains(err, "Slider is not supported")
+    equal(#radio.activations, 0)
+    header.protocol = 0
+    assert(commit(app, "config", header))
+    for _ = 1, 16 do
+        local before = #radio.activations
+        advance(app)
+        assert(#radio.activations - before <= 8, "Unbounded virtual activation batch")
+    end
+    equal(#radio.activations, 64)
+    for number = 1, 64 do equal(radio.active[number], true) end
+    advance(app, 16)
+    equal(#radio.activations, 64, "Unchanged activations were repeated")
+end)
+
+test("Assigned virtual targets cannot be deactivated until unassigned and external activations remain untouched", function()
+    local radio = localRadio(true)
+    radio.active[2] = true
+    local app = appInstance()
+    ready(app)
+    local header = config.copy(app.data.header)
+    config.setVirtualEnabled(header, 1, true)
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    local control = config.copy(app.controls[1])
+    control.localSwitch = 65
+    assert(commit(app, "control", control))
+    app.set(1, 1)
+    equal(radio.values[65], true)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "editor",
+        edit = config.copy(app.data.header), editKind = "config",
+        editSection = "Virtuals", editRevision = app.revision}
+    render(app, view)
+    assert(not form("VS01:").active())
+    header = config.copy(app.data.header)
+    config.setVirtualEnabled(header, 1, false)
+    local calls = #radio.activations
+    local ok, err = commit(app, "config", header)
+    assert(not ok)
+    contains(err, "Remove the assignment before deactivating VS01")
+    equal(#radio.activations, calls)
+    equal(radio.active[1], true)
+    equal(radio.values[65], true)
+    control.localSwitch = 0
+    assert(commit(app, "control", control))
+    local activate = activateVirtualSwitch
+    activateVirtualSwitch = function(number, on)
+        if on then activate(number, on) end
+    end
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    equal(radio.values[65], false)
+    equal(radio.active[1], true)
+    contains(app.operationStatus(), "Cannot deactivate VS01")
+    activateVirtualSwitch = activate
+    advance(app, 16)
+    equal(radio.active[1], false)
+    equal(radio.active[2], true)
+    assert(not app.localout.status())
+end)
+
+test("Virtual activation API failures remain explicit and never cause saved configuration replacement", function()
+    local radio = localRadio(true)
+    local app = appInstance()
+    ready(app)
+    local header = config.copy(app.data.header)
+    config.setVirtualEnabled(header, 1, true)
+    local activate = activateVirtualSwitch
+    activateVirtualSwitch = nil
+    local ok, err = commit(app, "config", header)
+    assert(not ok)
+    contains(err, "Virtual switch activation API unavailable")
+    equal(#radio.activations, 0)
+    activateVirtualSwitch = function() end
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    contains(app.operationStatus(), "Cannot activate VS01")
+    assert(not radio.active[1])
+    app.set(1, 1)
+    advance(app)
+    contains(app.operationStatus(), "Cannot activate VS01")
+    activateVirtualSwitch = activate
+    advance(app, 16)
+    equal(radio.active[1], true)
+    assert(not app.localout.status())
+    header = config.copy(app.data.header)
+    config.setVirtualEnabled(header, 64, true)
+    local resolve = getSwitchIndex
+    getSwitchIndex = function(name)
+        if name ~= "VS64" then return resolve(name) end
+    end
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    contains(app.operationStatus(), "Cannot activate VS64")
+    config.setVirtualEnabled(header, 64, false)
+    assert(commit(app, "config", header))
+    advance(app, 16)
+    contains(app.operationStatus(), "Cannot resolve local switch: VS64")
+    getSwitchIndex = resolve
+    advance(app, 16)
+    equal(radio.active[64], false)
+    assert(not app.localout.status())
+    settleAutosave(app)
+    local writes = writeCount
+    activateVirtualSwitch = nil
+    local fresh = appInstance()
+    ready(fresh)
+    equal(fresh.phase, "error")
+    contains(fresh.error, "Virtual switch activation API unavailable")
+    advance(fresh, 32)
+    equal(writeCount, writes)
+    assert(not fresh.data)
+end)
 
 test("Incremental Lua roundtrip, escaped strings and signed colors", function()
     local data = config.defaults()
@@ -1573,14 +2334,86 @@ test("Missing simulator model identity waits and retries without loading or writ
     for _ = 1, 200 do now = now + 1; main.background(a); main.background(b) end
     equal(a.app, b.app)
     equal(a.app.phase, "ready")
-    equal(a.app.path, root .. "model_6d6f64656c312e796d6c")
+    equal(a.app.path, modelsDir .. "model_6d6f64656c312e796d6c")
 end)
 
 test("Empty model filename falls back to the model name", function()
     local main = assert(loadfile(root .. "main.lua"))()
     model.getInfo = function() return {filename = "", name = "Model/1"} end
     local view = main.create({w = 480, h = 272}, {}, root)
-    equal(view.app.path, root .. "model_4d6f64656c2f31")
+    equal(view.app.path, modelsDir .. "model_4d6f64656c2f31")
+end)
+
+test("Model loading and saving use only models even when newer root configurations exist", function()
+    local source = "model_6d6f64656c312e796d6c"
+    local data = config.defaults()
+    data.header.autoSave, data.header.name = 0, "Ignored root configuration"
+    finish(storage.save(root .. source .. ".a.lua", data, 100), storage.stepSave)
+    local legacy = fs[root .. source .. ".a.lua"]
+    data.header.name = "Models configuration"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 3), storage.stepSave)
+    model.getInfo = function() return {filename = "model1.yml"} end
+    local main = assert(loadfile(root .. "main.lua"))()
+    local view = main.create({w = 480, h = 272}, {}, root)
+    for _ = 1, 200 do now = now + 1; main.background(view) end
+    equal(view.app.phase, "ready", view.app.error)
+    equal(view.app.modelsDir, modelsDir)
+    equal(view.app.data.header.name, "Models configuration")
+    equal(view.app.generation, 3)
+    local header = config.copy(view.app.data.header)
+    header.name = "Saved in models"
+    assert(commit(view.app, "config", header))
+    save(view.app)
+    local saved = finish(storage.load(modelsDir .. source .. ".b.lua"), storage.stepLoad)
+    equal(saved.result.header.name, "Saved in models")
+    equal(saved.result.header.generation, 4)
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    equal(fs[root .. source .. ".b.lua"], nil)
+end)
+
+test("Missing models directories are created on save and creation errors never fall back to the root", function()
+    local source = "model_6d6f64656c312e796d6c"
+    local data = config.defaults()
+    data.header.name = "Must not be migrated"
+    finish(storage.save(root .. source .. ".a.lua", data, 20), storage.stepSave)
+    local legacy, writes = fs[root .. source .. ".a.lua"], writeCount
+    local create, calls = mkdir, 0
+    mkdir = function(path)
+        equal(path, modelsDir)
+        calls = calls + 1
+        return 7
+    end
+    model.getInfo = function() return {filename = "model1.yml"} end
+    local main = assert(loadfile(root .. "main.lua"))()
+    local view = main.create({w = 480, h = 272}, {}, root)
+    for _ = 1, 200 do now = now + 1; main.background(view) end
+    equal(view.app.phase, "ready")
+    equal(view.app.data.header.name, "MultiSwitch NG")
+    contains(view.app.saveError, "Cannot create directory")
+    equal(view.app.dirty, true)
+    equal(calls, 1)
+    equal(writeCount, writes)
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    equal(fs[modelsDir .. source .. ".a.lua"], nil)
+    mkdir = create
+    local open = io.open
+    io.open = function(path, mode)
+        if mode == "w" then assert(fstat(modelsDir), "Save started before creating models") end
+        return open(path, mode)
+    end
+    save(view.app)
+    equal(view.app.dirty, false)
+    assert(fs[modelsDir .. source .. ".a.lua"])
+    equal(fs[root .. source .. ".a.lua"], legacy)
+    mkdir = nil
+    assert(storage.ensureDirectory(modelsDir))
+    local ok, err = storage.ensureDirectory(modelsDir .. "missing/")
+    assert(not ok)
+    contains(err, "Directory creation API unavailable")
+    fs[modelsDir .. "file"] = "not a directory"
+    ok, err = storage.ensureDirectory(modelsDir .. "file")
+    assert(not ok)
+    contains(err, "Not a directory")
 end)
 
 test("Shared instances run one scheduler per tick and detect stale editors", function()
@@ -2194,7 +3027,7 @@ test("Editors keep bottom actions at the viewport edge with scrollable status", 
             equal(status.text, app.footerStatus)
             if case[1] == "control" then
                 local y = actions.y
-                for _, section in ipairs({"Eingänge", "Aussehen", "Allgemein"}) do
+                for _, section in ipairs({"Ein-/Ausgänge", "Aussehen", "Allgemein"}) do
                     press(section)
                     render(app, view)
                     equal(view.refs.actions.definition.y, y)
@@ -2330,7 +3163,7 @@ test("Element editor sections preserve drafts and show only relevant input and i
     form("Name:").set("Draft light")
     form("Type:").set(3)
     render(app, view)
-    press("Inputs")
+    press("Inputs/outputs")
     render(app, view)
     equal(view.refs.actions.definition.y, footerY)
     form("Switch:").set(16)
@@ -2347,7 +3180,7 @@ test("Element editor sections preserve drafts and show only relevant input and i
     equal(form("Name:").value, "Draft light")
     form("Type:").set(5)
     render(app, view)
-    press("Inputs")
+    press("Inputs/outputs")
     render(app, view)
     form("Source:").set(9)
     assert(not find(function(item)
@@ -2359,7 +3192,7 @@ test("Element editor sections preserve drafts and show only relevant input and i
     render(app, view)
     form("Type:").set(1)
     render(app, view)
-    press("Inputs")
+    press("Inputs/outputs")
     render(app, view)
     assert(not find(function(item) return item.text == "Switch 2:" or item.text == "Source:" end))
     equal(view.edit.source, 9)
@@ -2719,6 +3552,360 @@ test("Startup Auto-Save failures remain visible without endless retries", functi
     equal(app.dirty, false)
     equal(app.generation, 1)
     contains(app.status(), "Configuration saved")
+end)
+
+test("Model discovery is incremental, decodes model identifiers and deduplicates save slots", function()
+    local entries = {"model_43757272656e74.a.lua", "model_43757272656E74.b.lua", "app.lua",
+        "model_4f74686572.b.lua", "model_4F74686572.a.lua", "model_53c3bc64.a.lua",
+        "model_123.a.lua", "model_00.a.lua", "model_zz.a.lua", "model_41.lua"}
+    local count = 0
+    dir = function(directory)
+        equal(directory, modelsDir)
+        return function() count = count + 1; return entries[count] end
+    end
+    local scan = storage.scan(modelsDir, modelsDir .. "model_43757272656e74")
+    while not scan.done do
+        local before = count
+        storage.stepScan(scan)
+        equal(count, before + 1, "Unbounded directory scan")
+    end
+    equal(#scan.sources, 2)
+    equal(scan.sources[1], "model_4f74686572")
+    equal(scan.names[1], "Other")
+    equal(scan.names[2], "S" .. string.char(195, 188) .. "d")
+    equal(scan.iterator, nil)
+    dir = nil
+    contains(storage.scan(modelsDir).error, "Directory listing API unavailable")
+    dir = function() end
+    contains(storage.scan(modelsDir).error, "Cannot list")
+end)
+
+test("Model import selects the newest valid slot and saves a full independent copy with target generations", function()
+    local target = config.defaults()
+    target.header.autoSave = 0
+    local path, source = modelsDir .. "model_43757272656e74", "model_4f74686572"
+    finish(storage.save(path .. ".a.lua", target, 7), storage.stepSave)
+    local data = config.defaults()
+    data.header.autoSave, data.header.name = 0, "Other widget"
+    data.header.protocol, data.header.sportPhysicalId, data.header.sportAppId = 1, 13, 82
+    data.tabs[1].name, data.tabs[1].address, data.tabs[1].columns = "Other tab", 11, 3
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address = 2, 19
+    data.controls[1].name, data.controls[1].tab = "Imported light", 2
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 90), storage.stepSave)
+    data.controls[1].color = 0x12348000
+    finish(storage.save(modelsDir .. source .. ".b.lua", data, 2147483647), storage.stepSave)
+    local a, b = fs[modelsDir .. source .. ".a.lua"], fs[modelsDir .. source .. ".b.lua"]
+    local app = appInstance(path)
+    ready(app)
+    app.set(1, 1)
+    advance(app, 16)
+    local original = app.data
+    local job = assert(app.import(source))
+    advance(app)
+    equal(app.data, original)
+    assert(not app.commit("config", config.copy(app.data.header)))
+    contains(app.error, "already in progress")
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    equal(app.data.header.name, "Other widget")
+    equal(app.data.header.autoSave, 0)
+    equal(#app.data.tabs, 2)
+    equal(app.tabs[1].columns, 3)
+    equal(app.controls[1].name, "Imported light")
+    equal(app.controls[1].color, 0x12348000)
+    equal(app.addresses[1], 19)
+    equal(app.values[1], 0)
+    equal(app.sender.protocol, 1)
+    equal(app.path, path)
+    equal(app.generation, 7)
+    assert(#app.sender.off[0] > 0, "Previous outputs were not retired")
+    settleAutosave(app)
+    equal(app.generation, 8)
+    equal(app.dirty, false)
+    equal(fs[modelsDir .. source .. ".a.lua"], a)
+    equal(fs[modelsDir .. source .. ".b.lua"], b)
+    local saved = finish(storage.load(path .. ".b.lua"), storage.stepLoad)
+    equal(saved.result.header.generation, 8)
+    equal(saved.result.controls[1].name, "Imported light")
+    local fresh = appInstance(path)
+    ready(fresh)
+    equal(fresh.controls[1].name, "Imported light")
+    equal(fresh.values[1], 0)
+    equal(fresh.data.header.autoSave, 0)
+    equal(fresh.sender.protocol, 1)
+end)
+
+test("Model selection reads real EdgeTX header names and decodes quoted and hex-escaped strings", function()
+    local cases = {
+        {'"Bagger"', "Bagger"},
+        {'"Truck: \\x22Front\\x22 #1"', 'Truck: "Front" #1'},
+        {'"S\\xC3\\xBCd\\x5C1"', "S" .. string.char(195, 188) .. "d\\1"},
+        {"'Pilot''s model'", "Pilot's model"},
+        {"Plain model # trailing comment", "Plain model"},
+    }
+    local entries = {}
+    for index, case in ipairs(cases) do
+        local filename = "model" .. index .. ".yml"
+        local hex = {}
+        for byte = 1, #filename do hex[byte] = string.format("%02x", string.byte(filename, byte)) end
+        entries[index] = "model_" .. table.concat(hex) .. ".a.lua"
+        fs["/MODELS/" .. filename] = 'semver: 2.11.0\r\nheader:\r\n  bitmap: "test"\r\n  name: '
+            .. case[1] .. '\r\ntimers:\r\n  name: "Not the model name"\r\n' .. string.rep("# padding\n", 200)
+    end
+    dir = function(directory)
+        equal(directory, modelsDir)
+        local index = 0
+        return function() index = index + 1; return entries[index] end
+    end
+    local scan = storage.scan(modelsDir)
+    while not scan.done do
+        local before = readCount
+        storage.stepScan(scan)
+        assert(readCount - before <= 1, "More than one bounded model header read per scan step")
+    end
+    equal(#scan.names, #cases)
+    for index, case in ipairs(cases) do
+        equal(scan.names[index], case[2])
+        equal(scan.errors[index], nil)
+    end
+end)
+
+test("Unreadable model names have explicit placeholders and errors instead of pretending filenames are names", function()
+    local entries = {"model_6d6f64656c312e796d6c.a.lua", "model_6d6f64656c322e796d6c.a.lua",
+        "model_6d6f64656c332e796d6c.a.lua"}
+    fs["/MODELS/model2.yml"] = 'semver: 2.11.0\ntimers:\n  name: "Wrong name"\n'
+    fs["/MODELS/model3.yml"] = 'header:\n  name: "Broken\\xZZ"\n'
+    dir = function()
+        local index = 0
+        return function() index = index + 1; return entries[index] end
+    end
+    local scan = finish(storage.scan(modelsDir), storage.stepScan)
+    equal(#scan.sources, 3)
+    for index = 1, 3 do
+        contains(scan.names[index], "Model name unavailable")
+        contains(scan.errors[index], "/MODELS/model" .. index .. ".yml")
+    end
+    fs["/MODELS/model1.yml"] = 'header:\n  name: "Actual name"\n'
+    io.close = function(file) file.closed = true; return nil, "SD close failed" end
+    scan = finish(storage.scan(modelsDir), storage.stepScan)
+    contains(scan.names[1], "Model name unavailable")
+    contains(scan.errors[1], "SD close failed")
+end)
+
+test("Model import falls back from corrupt slots but never replaces the target with missing or invalid data", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 4), storage.stepSave)
+    data.header.name = "Recovered source"
+    local source = "model_4f74686572"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 8), storage.stepSave)
+    fs[modelsDir .. source .. ".b.lua"] = "broken source"
+    local app = appInstance()
+    ready(app)
+    local job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    contains(app.warning, "Recovered configuration")
+    settleAutosave(app)
+    local original, writes, slot, generation = app.data, writeCount, app.slot, app.generation
+    fs[modelsDir .. source .. ".a.lua"] = "invalid source"
+    app.set(1, 1)
+    job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    equal(job.success, false)
+    contains(job.error, "Cannot load configuration")
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    equal(app.slot, slot)
+    equal(app.generation, generation)
+    equal(writeCount, writes)
+    job = assert(app.import("model_4d697373696e67"))
+    finish(job, function() advance(app) end)
+    equal(job.success, false)
+    equal(app.data, original)
+    equal(writeCount, writes)
+    for _, invalid in ipairs({"../model_41", "model_4", "model_zz", "./" .. source, ""}) do
+        assert(not app.import(invalid))
+        contains(app.error, "Select another model")
+    end
+end)
+
+test("Cancelling model import closes both files and preserves live configuration and values", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save("model.a.lua", data, 2), storage.stepSave)
+    local source = "model_4f74686572"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 3), storage.stepSave)
+    finish(storage.save(modelsDir .. source .. ".b.lua", data, 4), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    local original, writes = app.data, writeCount
+    local job = assert(app.import(source))
+    local a, b = job.loads.a.file, job.loads.b.file
+    app.set(1, 1)
+    app.cancelUpdate(job)
+    assert(a.closed and b.closed)
+    equal(job.success, false)
+    equal(app.prepare, nil)
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    job = assert(app.import(source))
+    for _ = 1, 2000 do
+        if job.phase == "retire-sliders" then break end
+        advance(app)
+    end
+    equal(job.phase, "retire-sliders")
+    app.cancelUpdate(job)
+    equal(app.prepare, nil)
+    equal(app.data, original)
+    equal(app.values[1], 1)
+    equal(writeCount, writes)
+    job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    equal(app.values[1], 0, "Imported mappings inherited a latched runtime state")
+    settleAutosave(app)
+end)
+
+test("Model import rejects its own configuration and busy saves and reports target save failures", function()
+    local path, source = modelsDir .. "model_43757272656e74", "model_4f74686572"
+    local data = config.defaults()
+    data.header.autoSave = 0
+    finish(storage.save(path .. ".a.lua", data, 6), storage.stepSave)
+    data.header.name = "Imported despite full SD"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 100), storage.stepSave)
+    local originalSource = fs[modelsDir .. source .. ".a.lua"]
+    local app = appInstance(path)
+    ready(app)
+    assert(not app.import("model_43757272656e74"))
+    contains(app.error, "Select another model")
+    assert(not app.import("model_43757272656E74"))
+    contains(app.error, "Select another model")
+    app.save()
+    assert(not app.import(source))
+    contains(app.error, "Wait for configuration operations")
+    save(app)
+    writeFailure = true
+    local job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(job.success, job.error)
+    settleAutosave(app)
+    equal(app.data.header.name, "Imported despite full SD")
+    equal(app.dirty, true)
+    contains(app.saveError, "SD full")
+    equal(fs[modelsDir .. source .. ".a.lua"], originalSource)
+    writeFailure = false
+    save(app)
+    equal(app.dirty, false)
+    equal(fs[modelsDir .. source .. ".a.lua"], originalSource)
+end)
+
+test("Localized model import keeps drafts on cancel and confirms before replacing and persisting the target", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local path, source = modelsDir .. "model_43757272656e74", "model_6d6f64656c322e796d6c"
+        fs["/MODELS/model2.yml"] = 'semver: 2.11.0\nheader:\n  name: "Other"\n'
+        local data = config.defaults()
+        data.header.autoSave = 0
+        finish(storage.save(path .. ".a.lua", data, 1), storage.stepSave)
+        data.header.name = "Imported " .. language
+        finish(storage.save(modelsDir .. source .. ".a.lua", data, 30), storage.stepSave)
+        local sourceBytes = fs[modelsDir .. source .. ".a.lua"]
+        dir = function(directory)
+            equal(directory, modelsDir)
+            local entries = {"model_43757272656e74.a.lua", source .. ".a.lua", source .. ".b.lua"}
+            local index = 0
+            return function() index = index + 1; return entries[index] end
+        end
+        local app = appInstance(path)
+        ready(app)
+        local label = language == "DE" and "Konfiguration importieren" or "Import configuration"
+        local action = language == "DE" and "Importieren" or "Import"
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+        render(app, view)
+        press("Global")
+        render(app, view)
+        form("Name:").set("Keep this draft")
+        press(label)
+        render(app, view)
+        equal(view.uiJob.page.params.title, label)
+        local picker = form(language == "DE" and "Quellmodell:" or "Source model:")
+        equal(#picker.values, 1)
+        equal(picker.values[1], "Other")
+        press(language == "DE" and "Abbrechen" or "Cancel")
+        render(app, view)
+        equal(form("Name:").value, "Keep this draft")
+        press(label)
+        render(app, view)
+        local original, writes = app.data, writeCount
+        press(action)
+        equal(app.data, original)
+        equal(writeCount, writes)
+        equal(app.prepare, nil)
+        local dialog = dialogs[#dialogs]
+        equal(dialog.title, label)
+        contains(dialog.message, "Other")
+        dialog.confirm()
+        for _ = 1, 30 do app.ui.refresh(view) end
+        assert(view.uiReady and view.pending)
+        press(language == "DE" and "Änderung abbrechen" or "Cancel update")
+        render(app, view)
+        equal(view.page, "import")
+        equal(app.data, original)
+        equal(writeCount, writes)
+        press(action)
+        dialogs[#dialogs].confirm()
+        render(app, view)
+        equal(view.page, "control")
+        equal(app.data.header.name, "Imported " .. language)
+        settleAutosave(app)
+        equal(app.dirty, false)
+        equal(fs[modelsDir .. source .. ".a.lua"], sourceBytes)
+    end
+end)
+
+test("Model import displays unavailable or empty source lists and guards stale confirmations", function()
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    press("Global")
+    render(app, view)
+    press("Import configuration")
+    render(app, view)
+    assert(find(function(item) return item.text == "Directory listing API unavailable" end))
+    local action = find(function(item) return item.type == "button" and item.text == "Import" end)
+    assert(not action.active())
+    press("Cancel")
+    render(app, view)
+    dir = function() return function() end end
+    press("Import configuration")
+    render(app, view)
+    assert(find(function(item) return item.text == "No other model configuration found" end))
+    action = find(function(item) return item.type == "button" and item.text == "Import" end)
+    assert(not action.active())
+    press("Cancel")
+    render(app, view)
+    dir = function()
+        local found = false
+        return function()
+            if not found then found = true; return "model_4f74686572.a.lua" end
+        end
+    end
+    press("Import configuration")
+    render(app, view)
+    press("Import")
+    local dialog = dialogs[#dialogs]
+    local control = config.copy(app.controls[1])
+    control.name = "Changed in another view"
+    assert(commit(app, "control", control))
+    settleAutosave(app)
+    dialog.confirm()
+    equal(app.prepare, nil)
+    equal(app.controls[1].name, "Changed in another view")
+    contains(app.error, "Configuration changed in another view")
 end)
 
 test("Unreadable existing slots are not overwritten by startup Auto-Save", function()
@@ -3602,7 +4789,7 @@ test("ACW editors map Momentary correctly and retain driver settings across sect
     form("ACW type:").set(7)
     form("ACW options:").set(19)
     form("On PWM:").set(123)
-    press("Inputs")
+    press("Inputs/outputs")
     render(app, view)
     press("Basic")
     render(app, view)
@@ -4092,7 +5279,7 @@ test("German editors keep section and type identifiers stable and serialize only
     form("Art:").set(4)
     render(app, view)
     equal(view.edit.type, 4)
-    press("Eingänge")
+    press("Ein-/Ausgänge")
     render(app, view)
     equal(view.editSection, "Inputs")
     form("Schalter:").set(23)

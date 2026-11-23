@@ -31,6 +31,138 @@ local function fail(job, err)
     job.done = true
 end
 
+function M.ensureDirectory(path)
+    local info = type(fstat) == "function" and fstat(path)
+    if info then
+        if type(info.attrib) == "number" and info.attrib & 0x10 ~= 0 then return true end
+        return nil, t("Not a directory: %s", path)
+    end
+    if type(mkdir) ~= "function" then return nil, t("Directory creation API unavailable") end
+    local result = mkdir(path)
+    if result ~= 0 and result ~= 8 then
+        return nil, t("Cannot create directory %s: %s", path, tostring(result))
+    end
+    return true
+end
+
+function M.sourceName(source)
+    if type(source) ~= "string" then return end
+    local hex = string.match(source, "^model_([%x]+)$")
+    if not hex or #hex % 2 ~= 0 then return end
+    local name = {}
+    for index = 1, #hex, 2 do
+        local byte = tonumber(string.sub(hex, index, index + 1), 16)
+        if byte < 32 or byte == 127 then return end
+        name[#name + 1] = string.char(byte)
+    end
+    return table.concat(name)
+end
+
+local function yamlName(value)
+    local quote = string.sub(value, 1, 1)
+    if quote ~= '"' and quote ~= "'" then
+        return string.match(string.gsub(value, "%s+#.*$", ""), "^(.-)%s*$")
+    end
+    local parts, index = {}, 2
+    while index <= #value do
+        local char = string.sub(value, index, index)
+        local nextChar = string.sub(value, index + 1, index + 1)
+        if char == quote then
+            if quote == "'" and nextChar == "'" then
+                parts[#parts + 1], index = "'", index + 2
+            else
+                local tail = string.sub(value, index + 1)
+                if string.match(tail, "^%s*$") or string.match(tail, "^%s+#") then
+                    return table.concat(parts)
+                end
+                return
+            end
+        elseif char == "\\" and quote == '"' then
+            if nextChar == "x" then
+                local hex = string.sub(value, index + 2, index + 3)
+                if not string.match(hex, "^%x%x$") then return end
+                parts[#parts + 1], index = string.char(tonumber(hex, 16)), index + 4
+            elseif nextChar == '"' or nextChar == "\\" or nextChar == "/" then
+                parts[#parts + 1], index = nextChar, index + 2
+            else return end
+        else
+            parts[#parts + 1], index = char, index + 1
+        end
+    end
+end
+
+local function modelName(identifier)
+    if not string.match(string.lower(identifier), "%.ya?ml$") then return identifier end
+    local path = "/MODELS/" .. identifier
+    if string.find(identifier, "[/\\]") then return nil, t("Cannot read model name from %s", path) end
+    local file, err = io.open(path, "r")
+    if not file then return nil, err or t("Cannot open %s", path) end
+    -- EdgeTX writes header.name immediately after semver, within this bounded read.
+    local data, readError = io.read(file, 512)
+    local ok, closeError = close({file = file})
+    if readError or not ok then
+        return nil, (readError or "") .. (closeError and ("; " .. closeError) or "")
+    end
+    local header = false
+    for line in string.gmatch(data or "", "[^\r\n]+") do
+        if string.match(line, "^header:%s*$") then header = true
+        elseif header then
+            if string.match(line, "^[^%s#]") then break end
+            local value = string.match(line, "^%s+name:%s*(.-)%s*$")
+            if value then
+                local name = yamlName(value)
+                if name and string.find(name, "%S") and not string.find(name, "[%z\1-\31\127]") then
+                    return name
+                end
+                break
+            end
+        end
+    end
+    return nil, t("Cannot read model name from %s", path)
+end
+
+function M.scan(directory, current)
+    local job = {directory = directory, current = current and string.lower(current),
+        names = {}, sources = {}, errors = {}, seen = {}}
+    if type(dir) ~= "function" then
+        job.done, job.error = true, t("Directory listing API unavailable")
+    else
+        job.iterator = dir(directory)
+        if not job.iterator then job.done, job.error = true, t("Cannot list %s", directory) end
+    end
+    return job
+end
+
+function M.stepScan(job)
+    if job.done then return end
+    local entry = job.iterator()
+    if not entry then
+        job.done, job.iterator, job.seen = true, nil, nil
+        return
+    end
+    local source = string.match(entry, "^(model_[%x]+)%.[ab]%.lua$")
+    local name = M.sourceName(source)
+    local key = source and string.lower(source)
+    if name and string.lower(job.directory .. source) ~= job.current and not job.seen[key] then
+        job.seen[key] = true
+        local resolved, err = modelName(name)
+        local index = #job.sources + 1
+        job.names[index] = resolved or t("Model name unavailable: %s", name)
+        job.sources[index], job.errors[index] = source, err
+    end
+end
+
+function M.cancelLoad(job)
+    if job.done then return true end
+    local ok, err = close(job)
+    job.done, job.error = true, t("Configuration update cancelled")
+    if not ok then
+        job.error = job.error .. "; " .. err
+        return nil, err
+    end
+    return true
+end
+
 -- A complete file is an ordinary Lua table. Each line is a separate, bounded record.
 function M.load(path, expected, generation)
     local file, err, code = io.open(path, "r")

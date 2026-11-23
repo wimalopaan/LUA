@@ -388,6 +388,29 @@ local function switchPicker(record, key)
             set = function(value) record[key] = value end}
 end
 
+local function localSwitchPicker(record)
+    local names, targets, selected = {t("None")}, {0}, 1
+    local count = app.localout.hasVirtual() and 128 or 64
+    for target = 1, count do
+        if app.localout.available(target) then
+            names[#names + 1], targets[#targets + 1] = app.localout.name(target), target
+            if target == record.localSwitch then selected = #names end
+        end
+    end
+    if record.localSwitch > 0 and selected == 1 then
+        names[#names + 1] = t("Invalid assignment")
+        targets[#targets + 1] = record.localSwitch
+        selected = #names
+    end
+    return {type = "choice", values = names, w = scaled(180),
+        filter = function(value)
+            local target = targets[value]
+            return target == 0 or app.localout.available(target) == true
+        end,
+        get = function() return selected end,
+        set = function(value) selected, record.localSwitch = value, targets[value] end}
+end
+
 local function typePicker(view, record)
     local ids, names, positions = {}, {}, {}
     for index, id in ipairs(app.config.typeIds[app.data.header.protocol]) do
@@ -402,6 +425,62 @@ local function typePicker(view, record)
         set = function(value) record.type = ids[value]; view.renderRevision = nil end}
 end
 
+local function importPage(view, width)
+    local scan = view.importScan
+    local children = {heading("Import configuration", width)}
+    if not scan.done then
+        children[#children + 1] = hint("Searching model configurations ...", width)
+    elseif scan.error then
+        children[#children + 1] = hint(scan.error, width)
+    elseif #scan.sources == 0 then
+        children[#children + 1] = hint("No other model configuration found", width)
+    else
+        children[#children + 1] = field("Source model:", {
+            type = "choice", values = scan.names,
+            get = function() return view.importSource end,
+            set = function(value) view.importSource, view.renderRevision = value, nil end,
+        }, width)
+        if scan.errors[view.importSource] then
+            children[#children + 1] = hint(scan.errors[view.importSource], width)
+        end
+        children[#children + 1] = hint("Replaces all widget settings, tabs and controls. The source stays unchanged.", width)
+        children[#children + 1] = hint("Check switch, source and output assignments for the current model.", width)
+    end
+    return children
+end
+
+local function importActions(view)
+    return {
+        button("Import", function()
+            if not unchanged(view.importRevision) then return end
+            local scan = view.importScan
+            local source = scan.sources[view.importSource]
+            lvgl.confirm({title = t("Import configuration"),
+                message = t("Replace the current widget configuration with %s? Unsaved changes and editor drafts will be discarded.",
+                    scan.names[view.importSource]),
+                confirm = function()
+                    if not unchanged(view.importRevision) then return end
+                    local job = app.import(source, function(ok)
+                        view.pending, view.renderRevision = nil, nil
+                        if ok then
+                            view.importScan = nil
+                            view.tab = app.data.tabs[1].id
+                            navigate(view, "control")
+                        end
+                    end)
+                    if job then view.pending, view.renderRevision = job, nil end
+                end})
+        end, function()
+            local scan = view.importScan
+            return scan.done and not scan.error and scan.sources[view.importSource] ~= nil and not app.saveJob
+        end),
+        button("Cancel", function()
+            view.importScan = nil
+            navigate(view, "editor")
+        end),
+    }
+end
+
 local function editorPage(view, width)
     local record, kind = view.edit, view.editKind
     local children = {}
@@ -409,7 +488,26 @@ local function editorPage(view, width)
     local function add(caption, input, explanation)
         children[#children + 1] = field(caption, input, width, explanation)
     end
-    if kind == "config" then
+    if kind == "config" and view.editSection == "Virtuals" then
+        section("Virtual switches")
+        children[#children + 1] = hint("Selected switches are activated after Apply and on startup.", width)
+        children[#children + 1] = hint("Other activations are left unchanged. Remove assignments before deactivating.", width)
+        children[#children + 1] = actionRow({
+            button("Global", function() view.editSection, view.renderRevision = "Basic", nil end),
+        }, width)
+        for number = 1, 64 do
+            local id = app.localTargets[number + 64]
+            add(app.localout.name(number + 64) .. ":", {
+                type = "toggle",
+                get = function() return app.config.virtualEnabled(record, number) and 1 or 0 end,
+                set = function(value) app.config.setVirtualEnabled(record, number, value) end,
+                active = function()
+                    return not (app.config.virtualEnabled(app.data.header, number)
+                        and app.localTargets[number + 64])
+                end,
+            }, id and t("Assigned: %s", app.controls[id].name) or nil)
+        end
+    elseif kind == "config" then
         section("General")
         add("Name:", text(record, "name", 32))
         add("Auto-Save:", toggle(record, "autoSave"))
@@ -441,6 +539,20 @@ local function editorPage(view, width)
                 children[#children + 1] = hint("Apply CRSF before sending colors.", width)
             end
         end
+        if app.localout.canActivateVirtual() then
+            children[#children + 1] = actionRow({
+                button("Virtual switches", function() view.editSection, view.renderRevision = "Virtuals", nil end),
+            }, width)
+        end
+        section("Management")
+        children[#children + 1] = actionRow({
+            button("Import configuration", function()
+                if not unchanged(view.editRevision) then return end
+                view.importScan = app.storage.scan(app.modelsDir, app.path)
+                view.importSource, view.importRevision = 1, app.revision
+                navigate(view, "import")
+            end, function() return not app.saveJob end),
+        }, width)
     elseif kind == "tab" then
         section("General")
         add("Name:", text(record, "name", 32))
@@ -479,6 +591,15 @@ local function editorPage(view, width)
         if record.type ~= 5 then
             section("Exclusive group")
             add("Mutex group:", number(record, "group", 0, 255), "0: no group")
+        end
+        if record.type ~= 5 or record.localSwitch ~= 0 then
+            section("Local switch output")
+            add("Set switch:", localSwitchPicker(record), "L01..L64: Sticky")
+            children[#children + 1] = hint("Independent of CRSF/S.Port; active positions set the switch.", width)
+            if record.localSwitch > 0 then
+                local valid, err = app.localout.available(record.localSwitch)
+                if not valid then children[#children + 1] = hint(err, width) end
+            end
         end
     elseif view.editSection == "Appearance" then
         section("Appearance")
@@ -610,7 +731,7 @@ local function beginBuild(view, full)
         job.rowPad = 0
     end
     job.fixed = app.phase == "ready" and view.page ~= "control" and view.page ~= "info" and not view.pending
-    job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor")
+    job.scrollStatus = job.fixed and (view.page == "tab" or view.page == "editor" or view.page == "import")
     if job.fixed then
         local elementHeight = lvgl.UI_ELEMENT_HEIGHT or scaled(32)
         job.footerHeight = elementHeight + scaled(66)
@@ -642,6 +763,9 @@ local function pageHeader(view, job)
     end
     if view.page == "editor" and view.edit then
         params.title, params.subtitle = editorTitles[view.editKind], view.edit.name
+        if view.editKind == "config" and view.editSection == "Virtuals" then
+            params.title = t("Virtual switches")
+        end
         if view.editKind == "tab" and app.tabs and app.tabs[view.edit.id] then
             params.title = t("Edit tab")
         end
@@ -651,6 +775,8 @@ local function pageHeader(view, job)
         params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
     elseif view.page == "info" then
         params.title, params.subtitle = t("Info"), "MultiSwitch NG"
+    elseif view.page == "import" then
+        params.title, params.subtitle = t("Import configuration"), t("Source model:")
     end
     if app.phase == "ready" and (view.page == "control" or view.page == "tab") and not view.pending then
         local page = view.page
@@ -783,7 +909,7 @@ local function stepBuild(view)
             else
                 local items = {}
                 for _, section in ipairs({"Basic", "Inputs", "Appearance"}) do
-                    local item = button(section, function()
+                    local item = button(section == "Inputs" and "Inputs/outputs" or section, function()
                         view.editSection, view.renderRevision = section, nil
                     end)
                     item.checked = (view.editSection or "Basic") == section
@@ -825,6 +951,7 @@ local function stepBuild(view)
             if not app.tabs[view.tab] then view.tab = app.data.tabs[1].id end
             if view.page == "info" then nodes(job, infoPage(view, width), job.content, "finish")
             elseif view.page == "editor" then nodes(job, editorPage(view, width), job.content, "footer")
+            elseif view.page == "import" then nodes(job, importPage(view, width), job.content, "footer")
             elseif view.page == "move" then
                 job.targets = {names = {}, ids = {}, positions = {}}
                 job.phase = "targets"
@@ -892,6 +1019,7 @@ local function stepBuild(view)
             local actions
             if view.page == "editor" then actions = editorActions(view)
             elseif view.page == "move" then actions = moveActions(view)
+            elseif view.page == "import" then actions = importActions(view)
             else actions = {button("Control", function() navigate(view, "control") end)} end
             if app.data.header.autoSave == 0 then
                 actions[#actions + 1] = button("Save", app.save, function() return app.dirty and not app.saveJob end)
@@ -937,6 +1065,10 @@ end
 
 function M.refresh(view)
     local full = lvgl.isFullScreen() or lvgl.isAppMode()
+    if view.page == "import" and view.importScan and not view.importScan.done then
+        app.storage.stepScan(view.importScan)
+        if view.importScan.done then view.renderRevision = nil end
+    end
     if view.full and not full then
         release(view)
         view.page = "control"
