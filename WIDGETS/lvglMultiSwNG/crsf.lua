@@ -46,7 +46,8 @@ local function serialPush(payload)
 end
 
 function M.header(sender, header)
-    sender.destination, sender.interval = header.destination, header.interval
+    sender.destination = header.elrsVersion == 4 and 0 or header.destination
+    sender.interval = header.interval
     sender.sendColors = header.sendColors == 1
 end
 

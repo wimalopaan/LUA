@@ -110,6 +110,13 @@ local function reset()
     getSwitchValue = function(id) return switches[id] or false end
     getSourceValue = function(id) return sources[id] end
     getSwitchIndex, getSwitchName, setStickySwitch, LS_FUNC_STICKY = nil, nil, nil, nil
+    _G.switches = function()
+        local index = -64
+        return function()
+            index = index + 1
+            if index <= 64 then return index, "S" .. index end
+        end
+    end
     setVirtualSwitch, activateVirtualSwitch = nil, nil
     getValue = function() return quality end
     model = {getInfo = function() return {name = "Model/1"} end}
@@ -1677,7 +1684,7 @@ test("Info page shows localized software version and QR link without changing co
             equal(view.uiJob.page.params.prevButton, nil)
             equal(view.uiJob.page.params.nextButton, nil)
             equal(view.refs.softwareVersion.definition.text,
-                  language == "DE" and "Softwareversion: 4" or "Software version: 4")
+                  language == "DE" and "Softwareversion: 5" or "Software version: 5")
             equal(view.refs.website.definition.text, "https://github.com/wimalopaan/LUA")
             local qr = view.refs.websiteQR.definition
             local file = assert(hostIO.open(qr.file, "rb"))
@@ -2587,6 +2594,7 @@ test("Retired CRSF outputs survive full queues and subsequent preparation", func
     app.set(1, 80)
     local header = config.copy(app.data.header)
     header.destination = 55
+    header.elrsVersion = 3
     assert(commit(app, "config", header))
     equal(app.sender.off[0][1], pending)
     equal(offCount(app.sender), 4)
@@ -4414,6 +4422,483 @@ test("Retired simulator CRSF packets keep serial framing after selecting S.Port"
     equal(offCount(sender), 0)
 end)
 
+test("Tab selection switches migrate, persist and reserve positions against every control input", function()
+    local data = config.defaults()
+    data.tabs[1].selectSwitch = nil
+    finish(storage.save("tab-switch.lua", data, 1), storage.stepSave)
+    local loaded = finish(storage.load("tab-switch.lua"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.tabs[1].selectSwitch, 0)
+    equal(data.tabs[1].selectSwitch, nil)
+    data.tabs[1].selectSwitch = 12
+    finish(storage.save("tab-switch.lua", data, 2), storage.stepSave)
+    loaded = finish(storage.load("tab-switch.lua"), storage.stepLoad)
+    assert(loaded.result, loaded.error)
+    equal(loaded.result.tabs[1].selectSwitch, 12)
+    for _, value in ipairs({1.5, "12", 2147483648}) do
+        data.tabs[1].selectSwitch = value
+        local ok, err = config.validate(data)
+        assert(not ok)
+        contains(err, "Invalid tab.selectSwitch")
+    end
+    data.tabs[1].selectSwitch = 12
+    data.tabs[2] = config.copy(data.tabs[1])
+    data.tabs[2].id, data.tabs[2].address, data.tabs[2].name = 2, 1, "Second"
+    data.tabs[2].selectSwitch = -12
+    local ok, err = config.validate(data)
+    assert(not ok)
+    contains(err, "Switch already assigned to tab: Tab 1")
+    data.tabs[2].selectSwitch = 13
+    assert(config.validate(data))
+    for _, key in ipairs(config.inputSwitchKeys) do
+        for _, position in ipairs({12, -12}) do
+            data.controls[1][key], data.controls[1].visible = position, 0
+            ok, err = config.validate(data)
+            assert(not ok)
+            contains(err, "Switch already assigned to tab: Tab 1")
+            finish(storage.save("conflicting-tab.lua", data, 1), storage.stepSave)
+            loaded = finish(storage.load("conflicting-tab.lua"), storage.stepLoad)
+            assert(not loaded.result)
+            contains(loaded.error, "Switch already assigned to tab: Tab 1")
+        end
+        data.controls[1][key] = 0
+    end
+    data.controls[1].switch, data.controls[2].switch = 14, 14
+    assert(config.validate(data), "Control-to-control sharing must remain supported")
+    local builder = config.builder()
+    assert(config.append(builder, data.header))
+    data.tabs[1].selectSwitch = 0
+    assert(config.append(builder, data.tabs[1]))
+    assert(config.append(builder, data.controls[1]))
+    data.tabs[2].selectSwitch = -14
+    ok, err = config.append(builder, data.tabs[2])
+    assert(not ok)
+    contains(err, "Switch already assigned to control: Output 1")
+end)
+
+test("Tab and control switch pickers exclude mutual reservations and edits remain transactional", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local data = config.defaults()
+        data.controls[1].switch, data.controls[1].switch2, data.controls[1].activation = -1, 2, 3
+        data.controls[1].visible = 0
+        data.tabs[2] = config.copy(data.tabs[1])
+        data.tabs[2].id, data.tabs[2].address = 2, 1
+        data.tabs[2].selectSwitch, data.tabs[2].name = 4, "Second"
+        finish(storage.save("tab-picker.a.lua", data, 1), storage.stepSave)
+        local app = appInstance("tab-picker")
+        ready(app)
+        local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "tab"}
+        render(app, view)
+        press(app.t("Edit tab"))
+        render(app, view)
+        local picker = form(app.t("Selection switch:"))
+        local function choice(name)
+            for index, value in ipairs(picker.values) do
+                if value == name then return index end
+            end
+        end
+        for _, index in ipairs({1, 2, 3, 4}) do
+            assert(not choice("S" .. index) and not choice("S" .. -index))
+        end
+        equal(picker.values[1], app.t("None"))
+        picker.set(assert(choice("S5")))
+        equal(app.tabs[1].selectSwitch, 0)
+        press(app.t("Cancel"))
+        render(app, view)
+        equal(app.tabs[1].selectSwitch, 0)
+        press(app.t("Edit tab"))
+        render(app, view)
+        picker = form(app.t("Selection switch:"))
+        picker.set(assert(choice("S5")))
+        press(app.t("Apply"))
+        render(app, view)
+        equal(app.tabs[1].selectSwitch, 5)
+        settleAutosave(app)
+        local fresh = appInstance("tab-picker")
+        ready(fresh)
+        equal(fresh.tabs[1].selectSwitch, 5)
+        local tab = config.copy(app.tabs[1])
+        tab.selectSwitch = 1
+        assert(not commit(app, "tab", tab))
+        equal(app.tabs[1].selectSwitch, 5)
+        contains(app.error, app.t("Switch already assigned to tab: %s", tab.name))
+        view.page, view.editKind, view.editSection = "editor", "control", "Inputs"
+        view.edit, view.editRevision = config.copy(app.controls[1]), app.revision
+        view.renderRevision = nil
+        render(app, view)
+        picker = form(app.t("Switch:"))
+        assert(choice("S1"), "Existing control positions must remain available")
+        for _, index in ipairs({4, 5}) do
+            assert(not choice("S" .. index) and not choice("S" .. -index))
+        end
+        local control = config.copy(app.controls[1])
+        control.activation = -5
+        assert(not commit(app, "control", control))
+        equal(app.controls[1].activation, 3)
+        control.activation = 3
+        control.switch = 0
+        assert(commit(app, "control", control))
+        view.page, view.editKind = "editor", "tab"
+        view.edit, view.editRevision = config.copy(app.tabs[1]), app.revision
+        view.renderRevision = nil
+        render(app, view)
+        picker = form(app.t("Selection switch:"))
+        assert(choice("S1") and choice("S-1"), "Removing an assignment must free its position")
+        assert(choice("S5"), "A tab must retain its own reserved position")
+        picker.set(1)
+        press(app.t("Apply"))
+        render(app, view)
+        equal(app.tabs[1].selectSwitch, 0)
+    end
+end)
+
+test("Tab selection uses only rising edges, keeps manual navigation and ignores menu and hidden-view events", function()
+    local data = config.defaults()
+    data.controls[1].type = 4
+    for id = 1, 3 do
+        data.tabs[id] = {kind = "tab", id = id, name = "Tab " .. id, address = id - 1,
+                         columns = 2, height = 0, selectSwitch = id}
+    end
+    getSwitchName = function(index) return ({"SA^", "6pos2", "SB-"})[index] end
+    switches[2] = true
+    finish(storage.save("tab-edges.a.lua", data, 1), storage.stepSave)
+    local app = appInstance("tab-edges")
+    ready(app)
+    local view = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, view)
+    equal(view.tab, 1, "An active position at startup must not select its tab")
+    contains(view.uiJob.page.params.subtitle, "Tab 1 [SA^]")
+    view.uiJob.page.params.nextButton.press()
+    render(app, view)
+    equal(view.tab, 2)
+    contains(view.uiJob.page.params.subtitle, "Tab 2 [6pos2]")
+    view.uiJob.page.params.prevButton.press()
+    render(app, view)
+    equal(view.tab, 1, "A held position must not override manual navigation")
+    switches[2] = false
+    advance(app, 2)
+    local momentary = view.refs.c1.definition
+    momentary.press()
+    equal(app.values[1], 1)
+    switches[2] = true
+    render(app, view)
+    equal(view.tab, 2)
+    equal(app.values[1], 0, "Switch navigation must release held momentary buttons")
+    local unchanged = config.copy(app.tabs[2])
+    unchanged.name = "Renamed"
+    assert(commit(app, "tab", unchanged))
+    render(app, view)
+    equal(app.tabSelectionSerial, 1, "Unchanged assignments must retain their edge baseline")
+    press("Global")
+    render(app, view)
+    switches[3] = true
+    render(app, view)
+    equal(view.page, "editor")
+    equal(view.tab, 2)
+    press("Cancel")
+    render(app, view)
+    equal(view.tab, 2, "Menu events must not replay when returning to controls")
+    switches[3] = false
+    advance(app)
+    switches[3] = true
+    render(app, view)
+    equal(view.tab, 3)
+    full = false
+    render(app, view)
+    switches[1] = true
+    advance(app)
+    full = true
+    render(app, view)
+    equal(view.tab, 3, "Hidden-view events must not replay when entering fullscreen")
+    switches[1] = false
+    advance(app)
+    switches[1] = true
+    render(app, view)
+    equal(view.tab, 1)
+    local other = {zone = {w = 480, h = 272}, app = app, tab = 1, page = "control"}
+    render(app, other)
+    switches[2] = false
+    advance(app)
+    switches[2] = true
+    render(app, view)
+    render(app, other)
+    equal(view.tab, 2)
+    equal(other.tab, 2, "Each shared view must receive the edge")
+    unchanged = config.copy(app.tabs[1])
+    unchanged.selectSwitch = 6
+    switches[6] = true
+    assert(commit(app, "tab", unchanged))
+    render(app, view)
+    equal(view.tab, 2, "Applying an already-active new position must not create an edge")
+    switches[6] = false
+    advance(app)
+    switches[6] = true
+    render(app, view)
+    equal(view.tab, 1)
+    equal(app.tabs[1].name, "Tab 1", "Displayed switch names must not modify stored tab names")
+end)
+
+test("Unavailable tab switches report errors and recover without creating a false edge", function()
+    local data = config.defaults()
+    data.tabs[1].selectSwitch = 4
+    finish(storage.save("tab-unavailable.a.lua", data, 1), storage.stepSave)
+    local read = getSwitchValue
+    getSwitchValue = function(index)
+        if index ~= 4 then return read(index) end
+    end
+    local app = appInstance("tab-unavailable")
+    ready(app)
+    advance(app)
+    contains(app.operationStatus(), "Tab switch unavailable: Tab 1")
+    getSwitchValue = read
+    switches[4] = true
+    advance(app)
+    assert(not string.find(app.operationStatus(), "Tab switch unavailable", 1, true))
+    equal(app.tabSelectionSerial, 0)
+    switches[4] = false
+    advance(app)
+    switches[4] = true
+    advance(app)
+    equal(app.tabSelectionSerial, 1)
+end)
+
+test("Hidden widgets discard tab edges in background even without a compact refresh", function()
+    local main = assert(loadfile(root .. "main.lua"))()
+    local widget = main.create({w = 480, h = 272}, {}, root)
+    for _ = 1, 200 do now = now + 1; main.background(widget) end
+    local app = widget.app
+    equal(app.phase, "ready")
+    local first = config.copy(app.tabs[1])
+    first.selectSwitch = 1
+    assert(commit(app, "tab", first))
+    local second = app.newTab()
+    second.selectSwitch = 2
+    assert(commit(app, "tab", second))
+    render(app, widget)
+    equal(widget.tab, 1)
+    full = false
+    switches[2] = true
+    now = now + 1
+    main.background(widget)
+    equal(widget.full, true, "No compact refresh should have run")
+    full = true
+    main.refresh(widget)
+    render(app, widget)
+    equal(widget.tab, 1)
+    switches[2] = false
+    now = now + 1
+    main.background(widget)
+    switches[2] = true
+    now = now + 1
+    main.background(widget)
+    render(app, widget)
+    equal(widget.tab, second.id)
+end)
+
+test("Tab polling stays bounded and one recovering switch cannot clear another switch's error", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    for id = 1, 20 do
+        data.tabs[id] = {kind = "tab", id = id, name = "Tab " .. id, address = id - 1,
+                         columns = 2, height = 0, selectSwitch = id}
+    end
+    finish(storage.save("tab-poll.a.lua", data, 1), storage.stepSave)
+    local app = appInstance("tab-poll")
+    ready(app)
+    local unavailable, reads = {[1] = true, [2] = true}, 0
+    getSwitchValue = function(index)
+        reads = reads + 1
+        if not unavailable[index] then return false end
+    end
+    for _ = 1, 3 do
+        reads = 0
+        advance(app)
+        equal(reads, 8)
+    end
+    equal(app.tabInputStatus.inputErrorCount, 2)
+    unavailable[2] = nil
+    advance(app, 3)
+    equal(app.tabInputStatus.inputErrorCount, 1)
+    contains(app.operationStatus(), "Tab switch unavailable")
+    unavailable[1] = nil
+    advance(app, 3)
+    equal(app.tabInputStatus.inputErrorCount, 0)
+    assert(not string.find(app.operationStatus(), "Tab switch unavailable", 1, true))
+end)
+
+test("Conflicting tab switch imports and cold loads never replace live or saved configurations", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.tabs[1].selectSwitch, data.controls[1].switch = 4, -4
+    local source = "model_54616273"
+    finish(storage.save(modelsDir .. source .. ".a.lua", data, 1), storage.stepSave)
+    local app = appInstance()
+    ready(app)
+    settleAutosave(app)
+    local original, writes = app.data, writeCount
+    local job = assert(app.import(source))
+    finish(job, function() advance(app) end)
+    assert(not job.success)
+    contains(job.error, "Switch already assigned to tab: Tab 1")
+    equal(app.data, original)
+    equal(writeCount, writes)
+    local broken = appInstance(modelsDir .. source)
+    ready(broken)
+    equal(broken.phase, "error")
+    equal(broken.data, nil)
+    contains(broken.error, "Switch already assigned to tab: Tab 1")
+    equal(writeCount, writes)
+end)
+
+test("Control captions show operating switches but never activation switches or alter saved names", function()
+    local data = config.defaults()
+    data.header.autoSave = 0
+    data.tabs[1].height = 60
+    data.controls[1].switch = 1
+    data.controls[2].type, data.controls[2].switch = 2, 2
+    data.controls[3].type, data.controls[3].switch, data.controls[3].switch2 = 3, 3, 4
+    data.controls[4].type, data.controls[4].switch = 4, 5
+    data.controls[5].type = 5
+    data.controls[6].activation = 10
+    data.controls[7].type, data.controls[7].switch2 = 3, 6
+    data.controls[8].switch, data.controls[8].activation = -1, 10
+    local names = {[1] = "SA^", [2] = "6pos2", [3] = "SB^", [4] = "SBv",
+                   [5] = "SC^", [6] = "SCv", [10] = "ENABLE", [-1] = "!SA^"}
+    getSwitchName = function(index) return names[index] end
+    finish(storage.save("control-caption.a.lua", data, 1), storage.stepSave)
+    local app = appInstance("control-caption")
+    ready(app)
+    for _, screen in ipairs({{320, 240}, {480, 272}, {800, 480}}) do
+        LCD_W, LCD_H = screen[1], screen[2]
+        local view = {zone = {w = LCD_W, h = LCD_H}, app = app, page = "control"}
+        render(app, view)
+        equal(view.refs.c1.definition.text, "Output 1 [SA^]")
+        equal(view.refs.c4.definition.text, "Output 4 [SC^]")
+        equal(view.refs.c6.definition.text, "Output 6")
+        equal(view.refs.c8.definition.text, "Output 8 [!SA^]")
+        assert(find(function(item) return item.type == "label" and item.text == "Output 2 [6pos2]" end))
+        equal(view.refs.c3title.definition.text, "Output 3 [SB^ / SBv]")
+        equal(view.refs.c7title.definition.text, "Output 7 [SCv]")
+        for _, id in ipairs({3, 7}) do
+            local positions = view.refs["c" .. id].definition
+            local caption = view.refs["c" .. id .. "title"].definition
+            equal(positions.y, caption.h)
+            equal(positions.h + caption.h, 60)
+            for position = 0, 2 do
+                assert(not view.refs["c" .. id .. "p" .. position].definition.active())
+            end
+        end
+        assert(not find(function(item)
+            return type(item.text) == "string" and string.find(item.text, "ENABLE", 1, true)
+        end))
+        press("Tab settings")
+        render(app, view)
+        assert(find(function(item) return item.type == "label" and item.text == "Output 1 [SA^]" end))
+        assert(find(function(item) return item.type == "label" and item.text == "Output 3 [SB^ / SBv]" end))
+    end
+    save(app)
+    local fresh = appInstance("control-caption")
+    ready(fresh)
+    for id = 1, 8 do equal(fresh.controls[id].name, "Output " .. id) end
+end)
+
+test("ELRS versions migrate legacy destinations and reject invalid explicit versions", function()
+    for _, destination in ipairs({0, 55}) do
+        local data = config.defaults()
+        data.header.elrsVersion, data.header.destination = nil, destination
+        finish(storage.save("legacy-elrs.lua", data, 1), storage.stepSave)
+        local loaded = finish(storage.load("legacy-elrs.lua"), storage.stepLoad)
+        assert(loaded.result, loaded.error)
+        equal(loaded.result.header.elrsVersion, destination == 0 and 4 or 3)
+        equal(data.header.elrsVersion, nil)
+        local sender = crsf.new()
+        configure(sender, loaded.result, {[1] = 1})
+        frames = {}
+        crsf.tick(sender, 0)
+        equal(frames[1].payload[1], destination)
+    end
+    for _, version in ipairs({2, 5, 3.5, "4"}) do
+        local data = config.defaults()
+        data.header.elrsVersion = version
+        local builder = config.builder()
+        local ok, err = config.append(builder, data.header)
+        assert(not ok)
+        contains(err, "Invalid config.elrsVersion")
+    end
+end)
+
+test("ELRS selection defaults to V4, preserves V3 drafts and persists the effective destination", function()
+    for _, language in ipairs({"EN", "DE"}) do
+        getGeneralSettings = function() return {language = language} end
+        local app = appInstance("elrs-ui-" .. language)
+        ready(app)
+        local version = app.t("ELRS version:")
+        local destination = app.t("Destination:")
+        local view = {zone = {w = 480, h = 272}, app = app, page = "control"}
+        render(app, view)
+        press("Global")
+        render(app, view)
+        equal(form(version).get(), 2)
+        equal(table.concat(form(version).values, ","), "ELRS V3,ELRS V4")
+        assert(not find(function(item) return item.text == destination end))
+        form(version).set(1)
+        render(app, view)
+        form(destination).set(55)
+        equal(app.data.header.elrsVersion, 4)
+        equal(app.sender.destination, 0)
+        press(app.t("Cancel"))
+        render(app, view)
+        press("Global")
+        render(app, view)
+        equal(form(version).get(), 2)
+        form(version).set(1)
+        render(app, view)
+        equal(form(destination).get(), 0)
+        form(destination).set(55)
+        press(app.t("Apply"))
+        render(app, view)
+        equal(app.sender.destination, 55)
+        app.set(1, 1)
+        frames = {}
+        advance(app, 4)
+        assert(find(function(frame) return frame.payload[1] == 55 and frame.payload[4] == 0x07 end, frames))
+        press("Global")
+        render(app, view)
+        form(version).set(2)
+        render(app, view)
+        assert(not find(function(item) return item.text == destination end))
+        equal(app.sender.destination, 55)
+        form(version).set(1)
+        render(app, view)
+        equal(form(destination).get(), 55)
+        form(version).set(2)
+        render(app, view)
+        press(app.t("Apply"))
+        render(app, view)
+        equal(app.sender.destination, 0)
+        equal(app.data.header.destination, 55)
+        frames = {}
+        app.set(1, 0)
+        advance(app, 8)
+        assert(find(function(frame) return frame.payload[1] == 0 and frame.payload[4] == 0x07 end, frames))
+        settleAutosave(app)
+        local fresh = appInstance("elrs-ui-" .. language)
+        ready(fresh)
+        equal(fresh.data.header.elrsVersion, 4)
+        equal(fresh.data.header.destination, 55)
+        equal(fresh.sender.destination, 0)
+        local header = config.copy(fresh.data.header)
+        header.elrsVersion = 3
+        assert(commit(fresh, "config", header))
+        settleAutosave(fresh)
+        local legacy = appInstance("elrs-ui-" .. language)
+        ready(legacy)
+        equal(legacy.data.header.elrsVersion, 3)
+        equal(legacy.sender.destination, 55)
+    end
+end)
+
 test("Protocol editor preserves drafts and only shows supported settings and types", function()
     local app = appInstance()
     ready(app)
@@ -4423,6 +4908,8 @@ test("Protocol editor preserves drafts and only shows supported settings and typ
     press("Global")
     render(app, view)
     form("Name:").set("Protocol draft")
+    form("ELRS version:").set(1)
+    render(app, view)
     form("Destination:").set(42)
     form("LED colors:").set(1)
     form("Protocol:").set(2)

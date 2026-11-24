@@ -3,12 +3,13 @@
 
 local app = ...
 app.modelsDir = app.dir .. "models/"
-app.softwareVersion = 4
+app.softwareVersion = 5
 app.website = "https://github.com/wimalopaan/LUA"
 app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "localout", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0
 app.values, app.inputIndex = {}, 1
 app.inputErrors, app.inputErrorCount = {}, 0
+app.tabSelectionSerial = 0
 function app.t(message, ...)
     if app.i18n then return app.i18n.t(message, ...) end
     if select("#", ...) == 0 then return message end
@@ -40,6 +41,13 @@ function app.operationStatus()
     end
     local localError = app.localout.status()
     if localError then status = status and (status .. "; " .. localError) or localError end
+    local tabStatus = app.tabInputStatus
+    if tabStatus and tabStatus.inputErrorCount > 0 then
+        local tab = app.tabs[tabStatus.inputErrorId]
+        local detail = tab and tab.name or t("%d tab(s)", tabStatus.inputErrorCount)
+        local error = t("Tab switch unavailable: %s", detail)
+        status = status and (status .. "; " .. error) or error
+    end
     status = status or t("Outputs ready")
     if progress then status = progress .. "; " .. status end
     if app.sender.notice then return status .. "; " .. app.sender.notice end
@@ -83,6 +91,8 @@ local function completePrepare(job)
         app.inputErrorId = state.inputErrorId
         app.addresses, app.sender, app.backend = state.addresses, state.sender, state.backend
         app.tabOrder, app.tabControls = state.tabOrder, state.tabControls
+        app.tabInputs, app.tabInputIndex = state.tabInputs, 1
+        app.tabInputStatus = state.tabInputStatus
         app.visibleControls, app.masks = state.visibleControls, state.masks
         app.usedAddresses = state.usedAddresses
         app.maxTabId, app.maxControlId = state.maxTabId, state.maxControlId
@@ -190,7 +200,8 @@ function app.newTab()
     while app.usedAddresses[address] and address < count do address = address + 1 end
     if address == count then app.error = t("No unused switch address"); return end
     local id = app.maxTabId + 1
-    return {kind = "tab", id = id, name = t("Tab %d", id), address = address, columns = 2, height = 0}
+    return {kind = "tab", id = id, name = t("Tab %d", id), address = address, columns = 2, height = 0,
+            selectSwitch = 0}
 end
 
 function app.newControl(tab)
@@ -342,6 +353,28 @@ local function inputs()
     end
 end
 
+local function tabInputs()
+    local tabs = app.data.tabs
+    for _ = 1, math.min(8, #tabs) do
+        if app.tabInputIndex > #tabs then app.tabInputIndex = 1 end
+        local tab = tabs[app.tabInputIndex]
+        local input = app.tabInputs[tab.id]
+        if input then
+            local value = getSwitchValue(input.switch)
+            if type(value) ~= "boolean" then
+                input.value = nil
+            else
+                if input.value == false and value then
+                    app.tabSelection, app.tabSelectionSerial = tab.id, app.tabSelectionSerial + 1
+                end
+                input.value = value
+            end
+            updateInputError(app.tabInputStatus, tab.id, type(value) ~= "boolean")
+        end
+        app.tabInputIndex = app.tabInputIndex + 1
+    end
+end
+
 function app.tick()
     local now = getTime()
     if app.lastTick == now then return end
@@ -375,6 +408,7 @@ function app.tick()
         if app.data then
             app.localout.tick()
             inputs()
+            tabInputs()
             if app.backend.colors then
                 local quality = getValue("RQly")
                 if type(quality) == "number" then

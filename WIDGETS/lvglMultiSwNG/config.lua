@@ -8,6 +8,7 @@ M.types = {t("Button"), t("Toggle"), t("3Pos"), t("Momentary"), t("Slider")}
 M.protocols = {"CRSF", "S.Port WM", "S.Port ACW 1.5", "S.Port ACW 1.4"}
 M.typeIds = {[0] = {1, 2, 3, 4, 5}, [1] = {1, 2, 3, 4}, [2] = {1, 2, 4}}
 M.typeIds[3] = M.typeIds[2]
+M.inputSwitchKeys = {"switch", "switch2", "activation"}
 
 local function integer(v, low, high)
     return type(v) == "number" and v == math.floor(v) and v >= low and v <= high
@@ -16,14 +17,14 @@ end
 local schemas = {
     config = {
         version = {1, 1}, generation = {0, 2147483647}, name = 32,
-        destination = {0, 255}, interval = {5, 1000}, sendColors = {0, 1}, autoSave = {0, 1},
+        destination = {0, 255}, elrsVersion = {3, 4}, interval = {5, 1000}, sendColors = {0, 1}, autoSave = {0, 1},
         buttonSpacing = {-1, 40},
         protocol = {0, 3}, sportPhysicalId = {0, 0x1b}, sportAppId = {0, 255},
         virtualSwitches = 64,
     },
     tab = {
         id = {1, 2147483647}, name = 32, address = {0, 255},
-        columns = {1, 4}, height = {0, 240},
+        columns = {1, 4}, height = {0, 240}, selectSwitch = {-2147483648, 2147483647},
     },
     control = {
         id = {1, 2147483647}, tab = {1, 2147483647}, name = 32, leftText = 32, rightText = 32,
@@ -91,11 +92,12 @@ end
 function M.defaults()
     local config = {
         header = {kind = "config", version = 1, generation = 0, name = "MultiSwitch NG",
-                  destination = 0, interval = 100, sendColors = 0, autoSave = 1,
+                  destination = 0, elrsVersion = 4, interval = 100, sendColors = 0, autoSave = 1,
                   buttonSpacing = -1,
                   protocol = 0, sportPhysicalId = 0, sportAppId = 0x51,
                   virtualSwitches = string.rep("0", 64)},
-        tabs = {{kind = "tab", id = 1, name = t("Tab %d", 1), address = 0, columns = 2, height = 0}},
+        tabs = {{kind = "tab", id = 1, name = t("Tab %d", 1), address = 0, columns = 2, height = 0,
+                 selectSwitch = 0}},
         controls = {},
     }
     for i = 1, 8 do config.controls[i] = M.newControl(i, 1, i) end
@@ -117,19 +119,43 @@ function M.address(control, tab)
     return control.address
 end
 
+function M.reservedSwitches(data, kind, id)
+    local reserved = {}
+    for _, tab in ipairs(data.tabs) do
+        if tab.selectSwitch ~= 0 and not (kind == "tab" and tab.id == id) then
+            reserved[math.abs(tab.selectSwitch)] = t("Switch already assigned to tab: %s", tab.name)
+        end
+    end
+    if kind == "tab" then
+        for _, control in ipairs(data.controls) do
+            for _, key in ipairs(M.inputSwitchKeys) do
+                if control[key] ~= 0 then
+                    reserved[math.abs(control[key])] = t("Switch already assigned to control: %s", control.name)
+                end
+            end
+        end
+    end
+    return reserved
+end
+
 function M.builder()
-    return {config = {tabs = {}, controls = {}}, tabs = {}, ids = {}, endpoints = {}, localSwitches = {}}
+    return {config = {tabs = {}, controls = {}}, tabs = {}, ids = {}, endpoints = {},
+            localSwitches = {}, tabSwitches = {}, inputSwitches = {}}
 end
 
 function M.append(builder, record)
     if type(record) == "table" and record.kind == "config" then
         record = M.copy(record)
+        if record.elrsVersion == nil then record.elrsVersion = record.destination == 0 and 4 or 3 end
         if record.autoSave == nil then record.autoSave = 0 end
         if record.buttonSpacing == nil then record.buttonSpacing = -1 end
         if record.protocol == nil then record.protocol = 0 end
         if record.sportPhysicalId == nil then record.sportPhysicalId = 0 end
         if record.sportAppId == nil then record.sportAppId = 0x51 end
         if record.virtualSwitches == nil then record.virtualSwitches = string.rep("0", 64) end
+    elseif type(record) == "table" and record.kind == "tab" and record.selectSwitch == nil then
+        record = M.copy(record)
+        record.selectSwitch = 0
     elseif type(record) == "table" and record.kind == "control"
         and (record.sportType == nil or record.sportOptions == nil or record.sportPwmOn == nil
             or record.leftText == nil or record.rightText == nil or record.localSwitch == nil) then
@@ -151,9 +177,21 @@ function M.append(builder, record)
         return nil, t("Missing configuration header")
     elseif record.kind == "tab" then
         if builder.tabs[record.id] then return nil, t("Duplicate tab ID") end
+        if record.selectSwitch ~= 0 then
+            local index = math.abs(record.selectSwitch)
+            local owner = builder.tabSwitches[index]
+            if owner then return nil, t("Switch already assigned to tab: %s", owner.name) end
+            owner = builder.inputSwitches[index]
+            if owner then return nil, t("Switch already assigned to control: %s", owner.name) end
+            builder.tabSwitches[index] = record
+        end
         builder.tabs[record.id] = record
         config.tabs[#config.tabs + 1] = record
     else
+        for _, key in ipairs(M.inputSwitchKeys) do
+            local owner = builder.tabSwitches[math.abs(record[key])]
+            if owner then return nil, t("Switch already assigned to tab: %s", owner.name) end
+        end
         if config.header.protocol == 1 and record.type == 5 then
             return nil, t("Slider is not supported by S.Port WM: %s", record.name)
         end
@@ -177,6 +215,9 @@ function M.append(builder, record)
             builder.localSwitches[record.localSwitch] = true
         end
         builder.ids[record.id], builder.endpoints[endpoint] = true, true
+        for _, key in ipairs(M.inputSwitchKeys) do
+            if record[key] ~= 0 then builder.inputSwitches[math.abs(record[key])] = record end
+        end
         config.controls[#config.controls + 1] = record
     end
     return true

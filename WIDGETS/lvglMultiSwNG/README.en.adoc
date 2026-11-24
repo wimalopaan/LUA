@@ -43,6 +43,14 @@ all modified widget modules, and `Logo_small_64_t.png`, `Logo_30_inv.png`,
 The `tests/` directory is not required on the radio. The widget is named `MultiSw NG`.
 There are no functional widget options.
 
+When `app.softwareVersion` in `app.lua` changes on `main`, GitHub Actions
+automatically creates a widget-specific release tagged
+`lvglMultiSwNG-v<version>`, with `lvglMultiSwNG_<version>.zip` attached.
+The ZIP contains only this widget's tracked files under `WIDGETS/lvglMultiSwNG/`,
+excluding tests and model configurations. Extract it into the SD card's root.
+Changes without a new software version do not create a release, and published
+versions are never overwritten.
+
 The initial configuration contains one tab with eight latching buttons,
 default address 0 and outputs 1 through 8. In the normal widget window,
 the color wimalopaan logo, the configured widget name and up to two status lines
@@ -78,6 +86,18 @@ image::.images/w2.png[Operating page with different control types and exclusive 
   On the operating page it appears below the navigation row, beside the status.
 * `New tab` opens an editor for a new, initially empty tab.
   An unused address is suggested as its default address.
+* The tab editor offers a `Selection switch`, such as an SA or six-position
+  switch position. Only an inactive-to-active edge selects the tab.
+  Manual tab buttons remain usable; a held position does not force navigation.
+  Startup and newly applied assignments only establish the initial state.
+  Edges during settings dialogs or outside fullscreen do not navigate and
+  are not replayed later. The assigned position appears in the tab title
+  without changing its stored name. A position, including its negated form,
+  cannot be shared with another tab or with any control's switch, second
+  switch or activation, including invisible controls. Other positions of the
+  same physical switch remain available. Reserved positions are omitted from
+  the picker; apply, load and import also validate assignments.
+  Existing tabs without an assignment retain their previous behavior.
 * `Tab settings` shows a compact control list with the name,
   address/output and an `Edit` button side by side in each row.
   If a control's effective address differs from the tab's default address,
@@ -94,7 +114,9 @@ image::.images/w2.png[Operating page with different control types and exclusive 
   The last tab cannot be deleted. Deleting a tab also deletes its controls.
 * Each control has a name, type, address, output, visibility,
   exclusive group, colors, font, optional button image,
-  and physical switch/source assignments.
+  and physical switch/source assignments. Assigned operating switches appear
+  as a name suffix; 3Pos controls show both assigned positions separated by `/`.
+  Stored names are unchanged, and activation switches are not shown in names.
   `Move` in the control editor opens a separate page with the target tab,
   an address preview, and actions to confirm or cancel.
   The control editor itself has no tab selector.
@@ -252,8 +274,9 @@ set the two outer labels, each limited to 32 bytes.
 These user-defined texts are stored unchanged and are neither translated
 nor replaced with `L`/`R`.
 The center button displays the translated `Off`.
-There is no heading above the group; the control name remains available
-for management. If space is limited, a smaller font is used first.
+There is no heading above touch-only groups. When operating switches are
+assigned, a caption shows the control name and switch positions.
+If space is limited, a smaller font is used first.
 Older configurations without the new fields receive suitable default labels
 when loaded. Once saved, these labels also remain language-independent.
 Positions are selected directly; pressing the same button again does not change
@@ -311,8 +334,12 @@ and realm `0xa1`. EdgeTX adds the CRCs.
   Enable it under `Global`.
   Colors are retransmitted after configuration changes and when `RQly` returns.
 
-The CRSF destination address and repeat interval are configured under `Global`,
-not through widget options. Interval units are 10 ms;
+The ELRS version and repeat interval are configured under `Global`,
+not through widget options. The default is `ELRS V4`, with a fixed CRSF destination of `0x00`.
+Selecting `ELRS V3` shows the existing destination field; its value is retained
+when switching versions. Existing configurations without a version selection
+use V3 for a nonzero destination and V4 otherwise.
+Interval units are 10 ms;
 the default 100 means one second.
 Changes are sent promptly regardless of this repeat interval.
 At most one packet is handed to EdgeTX per background step.

@@ -13,6 +13,7 @@ end
 local function navigate(view, page)
     release(view)
     view.page, view.renderRevision = page, nil
+    view.tabSelectionSeen = app.tabSelectionSerial
 end
 
 local function commit(view, kind, record, remove, accepted)
@@ -166,6 +167,25 @@ local function selectTab(view, id)
     view.tab, view.renderRevision = id, nil
 end
 
+local function switchName(index)
+    local name = type(getSwitchName) == "function" and getSwitchName(index)
+    return name or t("Unknown switch (%d)", index)
+end
+
+local function tabTitle(tab)
+    if tab.selectSwitch == 0 then return tab.name end
+    return tab.name .. " [" .. switchName(tab.selectSwitch) .. "]"
+end
+
+local function controlTitle(control)
+    if control.type == 5 then return control.name end
+    local names = {}
+    if control.switch ~= 0 then names[#names + 1] = switchName(control.switch) end
+    if control.type == 3 and control.switch2 ~= 0 then names[#names + 1] = switchName(control.switch2) end
+    if #names == 0 then return control.name end
+    return control.name .. " [" .. table.concat(names, " / ") .. "]"
+end
+
 local function threePosition(control, width, height, active, set)
     local textPad, gap = scaled(2), scaled(2)
     local buttonWidth = math.max(1, math.floor((width - 2 * gap) / 3))
@@ -210,7 +230,7 @@ local function controlBody(view, control, width, height)
     end
     local common = {
         type = control.type == 4 and "momentaryButton" or "button",
-        name = "c" .. id, text = control.name, w = width, h = height,
+        name = "c" .. id, text = controlTitle(control), w = width, h = height,
         color = control.color, textColor = control.textColor, font = control.font,
         active = active,
     }
@@ -225,7 +245,19 @@ local function controlBody(view, control, width, height)
         common.press = function() release(view); view.held = id; set(1) end
         common.release = function() if view.held == id then release(view) end end
     elseif control.type == 3 then
-        return threePosition(control, width, height, active, set)
+        if control.switch == 0 and control.switch2 == 0 then
+            return threePosition(control, width, height, active, set)
+        end
+        local _, lineHeight = lcd.sizeText("M", SMLSIZE)
+        local captionHeight = math.min(lineHeight, math.floor(height / 2))
+        local positions = threePosition(control, width, height - captionHeight, active, set)
+        positions.x, positions.y = 0, captionHeight
+        return {type = "box", w = width, h = height, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
+                children = {
+                    {type = "label", name = "c" .. id .. "title", text = controlTitle(control),
+                     w = width, h = captionHeight, font = SMLSIZE, color = control.textColor, align = CENTER},
+                    positions,
+                }}
     else
         local input = {type = control.type == 2 and "toggle" or "slider", w = width - 8,
                        h = math.max(20, height - 24), active = active}
@@ -241,7 +273,7 @@ local function controlBody(view, control, width, height)
                      scrollBar = false, scrollDir = lvgl.SCROLL_OFF, children = {input}}
         end
         return {type = "box", w = width, h = height, flexFlow = lvgl.FLOW_COLUMN,
-                children = {{type = "label", text = control.name, font = control.font,
+                children = {{type = "label", text = controlTitle(control), font = control.font,
                              color = control.textColor, w = width - 8, align = CENTER}, input}}
     end
     if control.image ~= "" then
@@ -346,7 +378,7 @@ local function tabControlRow(view, width, control)
     return {type = "box", w = width, h = height + gap, scrollBar = false, scrollDir = lvgl.SCROLL_OFF,
             children = {
                 {type = "label", x = 0, y = gap / 2, w = addressX - gap, h = height,
-                 text = control.name, align = LEFT | VCENTER},
+                 text = controlTitle(control), align = LEFT | VCENTER},
                 {type = "label", x = addressX, y = gap / 2, w = addressWidth, h = height,
                  text = address .. " / " .. control.output, align = LEFT | VCENTER,
                  color = address ~= tab.address and RED or nil},
@@ -381,11 +413,48 @@ local function movePage(view, width, targets)
 end
 
 local function switchPicker(record, key)
+    local reserved = app.config.reservedSwitches(app.data, record.kind, record.id)
+    local function set(value)
+        local conflict = reserved[math.abs(value)]
+        if conflict then app.error = conflict; return end
+        record[key] = value
+    end
+    if key == "selectSwitch" or next(reserved) then
+        local names, indices, selected = {t("None")}, {0}, 1
+        -- Native switch pickers only filter categories, not individual positions.
+        if type(switches) == "function" then
+            for index, name in switches() do
+                if index ~= 0 and not reserved[math.abs(index)] then
+                    names[#names + 1], indices[#indices + 1] = name, index
+                    if index == record[key] then selected = #names end
+                end
+            end
+        else
+            app.error = t("Switch enumeration API unavailable")
+        end
+        if record[key] ~= 0 and selected == 1 then
+            names[#names + 1], indices[#indices + 1] = t("Invalid assignment"), record[key]
+            selected = #names
+        end
+        return {type = "choice", values = names, w = scaled(150),
+                get = function() return selected end,
+                filter = function(value)
+                    local index = indices[value]
+                    return index ~= nil and not reserved[math.abs(index)]
+                end,
+                set = function(value)
+                    local index = indices[value]
+                    if index ~= nil then
+                        set(index)
+                        if record[key] == index then selected = value end
+                    end
+                end}
+    end
     local filter = lvgl.SW_SWITCH | lvgl.SW_TRIM | lvgl.SW_LOGICAL_SWITCH | lvgl.SW_CLEAR
     if lvgl.SW_VIRTUAL then filter = filter | lvgl.SW_VIRTUAL end
     return {type = "switch", filter = filter, w = scaled(150),
             get = function() return record[key] end,
-            set = function(value) record[key] = value end}
+            set = set}
 end
 
 local function localSwitchPicker(record)
@@ -528,7 +597,12 @@ local function editorPage(view, width)
             children[#children + 1] = hint("ACW: no 3Pos, sliders or LED color transmission.", width)
             children[#children + 1] = hint("Type, options and on-PWM are set per control.", width)
         else
-            add("Destination:", number(record, "destination", 0, 255))
+            add("ELRS version:", {type = "choice", values = {"ELRS V3", "ELRS V4"}, w = scaled(180),
+                get = function() return record.elrsVersion - 2 end,
+                set = function(value) record.elrsVersion = value + 2; view.renderRevision = nil end})
+            if record.elrsVersion == 3 then
+                add("Destination:", number(record, "destination", 0, 255))
+            end
             add("LED colors:", toggle(record, "sendColors"))
             children[#children + 1] = actionRow({
                 button("Send colors now", function() app.backend.colors(app.sender, true) end,
@@ -556,6 +630,7 @@ local function editorPage(view, width)
     elseif kind == "tab" then
         section("General")
         add("Name:", text(record, "name", 32))
+        add("Selection switch:", switchPicker(record, "selectSwitch"))
         add("Default address:", number(record, "address", 0, 255), "Changes all -1 controls")
         section("Layout")
         add("Columns:", number(record, "columns", 1, 4))
@@ -770,7 +845,7 @@ local function pageHeader(view, job)
             params.title = t("Edit tab")
         end
     elseif view.page == "tab" and app.tabs and app.tabs[view.tab] then
-        params.title, params.subtitle = t("Tab settings"), app.tabs[view.tab].name
+        params.title, params.subtitle = t("Tab settings"), tabTitle(app.tabs[view.tab])
     elseif view.page == "move" and view.moveControl then
         params.title, params.subtitle = t("Move control to another tab"), view.moveControl.name
     elseif view.page == "info" then
@@ -781,7 +856,7 @@ local function pageHeader(view, job)
     if app.phase == "ready" and (view.page == "control" or view.page == "tab") and not view.pending then
         local page = view.page
         local tabs, selected = app.data.tabs, app.tabOrder[view.tab]
-        params.subtitle = tabs[selected].name .. " (" .. selected .. "/" .. #tabs .. ")"
+        params.subtitle = tabTitle(tabs[selected]) .. " (" .. selected .. "/" .. #tabs .. ")"
         local function navigation(offset)
             local target = selected + offset
             local function active()
@@ -1063,8 +1138,25 @@ local function stepBuild(view)
     if job.failed then view.buildJob = nil end
 end
 
+function M.background(view)
+    if not (lvgl.isFullScreen() or lvgl.isAppMode()) or view.page ~= "control"
+        or app.phase ~= "ready" or view.pending then
+        view.tabSelectionSeen = app.tabSelectionSerial
+    end
+end
+
 function M.refresh(view)
     local full = lvgl.isFullScreen() or lvgl.isAppMode()
+    local serial = app.tabSelectionSerial
+    if view.tabSelectionSeen ~= serial then
+        local seen = view.tabSelectionSeen
+        view.tabSelectionSeen = serial
+        if seen ~= nil and full and view.full and view.page == "control"
+            and app.phase == "ready" and not view.pending and not app.prepare
+            and app.tabs[app.tabSelection] and view.tab ~= app.tabSelection then
+            selectTab(view, app.tabSelection)
+        end
+    end
     if view.page == "import" and view.importScan and not view.importScan.done then
         app.storage.stepScan(view.importScan)
         if view.importScan.done then view.renderRevision = nil end
