@@ -809,7 +809,7 @@ local L -- current texts
 local function language()
     local ok, gs = pcall(function() return getGeneralSettings and getGeneralSettings() end)
     local l = ok and type(gs) == "table" and gs.language or ""
-    return string.lower(tostring(l)):sub(1, 2) == "de" and "de" or "en"
+    return string.sub(string.lower(tostring(l)), 1, 2) == "de" and "de" or "en"
 end
 
 -------------------------------------------------------------- scanning ---
