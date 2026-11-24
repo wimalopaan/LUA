@@ -91,9 +91,14 @@ It runs in your browser without uploading files.
    into the detected target directory, currently `models/`.
 4. Replace the model's `MultiSwE/L` with `MultiSw NG` and check outputs on the ground.
 
+Alternatively, `tools/msw2ng.lua` converts on the radio: copy it to
+`/SCRIPTS/TOOLS/`, start `MultiSw -> NG`, check the old configurations and,
+if needed, adjust target model, tab address and NG settings.
+It also assigns `external_switch` targets as local switches.
+
 Old configuration and model files remain unchanged.
-Review the tool's warnings: `external_switch`, virtual inputs,
-telemetry actions, SHM and status passthrough are not migrated;
-dependent mixers and local switches require manual adjustments.
+Review the tool's warnings: virtual inputs, telemetry actions, SHM and
+status passthrough are not migrated; dependent mixers require manual
+adjustments. The browser tool leaves `external_switch` unassigned.
 According to the tool's documentation, generated files have been tested
 with NG loading modules, but not yet on a radio.

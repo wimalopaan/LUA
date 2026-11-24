@@ -92,9 +92,14 @@ Es läuft im Browser ohne Upload.
    ZIP in das ermittelte Zielverzeichnis übernehmen, aktuell `models/`.
 4. Im Modell `MultiSwE/L` durch `MultiSw NG` ersetzen und Ausgänge am Boden prüfen.
 
+Alternativ wandelt `tools/msw2ng.lua` direkt am Sender um: nach
+`/SCRIPTS/TOOLS/` kopieren, `MultiSw -> NG` starten, alte Konfigurationen
+anhaken und bei Bedarf Ziel-Modell, Tab-Adresse und NG-Einstellungen anpassen.
+Dabei werden auch `external_switch`-Ziele als lokale Schalter übernommen.
+
 Alte Konfigurations- und Modelldateien bleiben unverändert.
-Die Werkzeugwarnungen beachten: `external_switch`, virtuelle Eingänge,
-Telemetrieaktionen, SHM und Statusdurchleitung werden nicht übernommen;
-abhängige Mischer und lokale Schalter benötigen Nacharbeit.
+Die Werkzeugwarnungen beachten: virtuelle Eingänge, Telemetrieaktionen, SHM
+und Statusdurchleitung werden nicht übernommen; abhängige Mischer benötigen
+Nacharbeit. Das Browser-Werkzeug ordnet `external_switch` nicht zu.
 Laut Werkzeugdokumentation wurden die erzeugten Dateien mit den NG-Lademodulen,
 aber noch nicht auf einem Sender getestet.
