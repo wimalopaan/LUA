@@ -1,5 +1,7 @@
 = MultiSwitchNG (mswNG) fuer monochrome EdgeTX-LCDs
 
+Kontakt: Wilhelm Meier - mailto:wilhelm.wm.meier@googlemail.com[wilhelm.wm.meier@googlemail.com]
+
 == Installation
 
 Den gemeinsamen Unterordner `SCRIPTS/LIB/mswNG` auf die SD-Karte kopieren.
