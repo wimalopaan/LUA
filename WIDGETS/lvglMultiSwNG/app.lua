@@ -3,7 +3,7 @@
 
 local app = ...
 app.modelsDir = app.dir .. "models/"
-app.softwareVersion = 5
+app.softwareVersion = 6
 app.website = "https://github.com/wimalopaan/LUA"
 app.modules = {"i18n", "config", "storage", "outputs", "crsf", "sport", "localout", "runtime", "ui"}
 app.moduleIndex, app.phase, app.revision = 1, "modules", 0

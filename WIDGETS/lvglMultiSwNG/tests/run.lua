@@ -1684,7 +1684,7 @@ test("Info page shows localized software version and QR link without changing co
             equal(view.uiJob.page.params.prevButton, nil)
             equal(view.uiJob.page.params.nextButton, nil)
             equal(view.refs.softwareVersion.definition.text,
-                  language == "DE" and "Softwareversion: 5" or "Software version: 5")
+                  (language == "DE" and "Softwareversion: " or "Software version: ") .. app.softwareVersion)
             equal(view.refs.website.definition.text, "https://github.com/wimalopaan/LUA")
             local qr = view.refs.websiteQR.definition
             local file = assert(hostIO.open(qr.file, "rb"))
