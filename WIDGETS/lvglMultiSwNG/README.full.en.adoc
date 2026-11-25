@@ -669,9 +669,46 @@ describe the current capabilities.
 4. Replace the model's `MultiSwE/L` widget with `MultiSw NG`.
    The tool does not modify old configuration files or EdgeTX model files.
 
-Review the tool's warnings before migrating. In particular, logical/virtual
-switches set by buttons (`external_switch`), virtual inputs, telemetry actions,
-SHM and status passthrough are not migrated. Mixers relying on these stop
+==== Converting on the radio
+
+`tools/msw2ng.lua` performs the conversion directly on the radio.
+Copy it to `/SCRIPTS/TOOLS/msw2ng.lua` and start `MultiSw -> NG` from the
+radio's Tools menu; `lvglMultiSwNG` must be installed.
+
+1. The tool lists all old configurations
+   (`/WIDGETS/lvglMultiSw/<Model>_<Address>.lua`) with the model each one
+   belongs to. Files of renamed models are shown with `?`;
+   empty or truncated files are marked unusable.
+2. `ENTER` checks or unchecks a configuration; the first line checks all
+   configurations that belong to a model.
+3. A long `ENTER` (or `PAGE`, or tapping `>`) opens the relation between old
+   and new settings: target model and tab address of the configuration and,
+   for all tabs of the target model, protocol, interval, CRSF destination and
+   S.Port IDs. The values are prefilled from the old widget options in the
+   model file; `destination` comes from the old `commandBroadcastAddress`.
+4. `Convert checked` writes one NG configuration per model into the folder
+   used by the installed NG version, in the other save slot with a higher
+   generation. The checked configurations of a model become its tabs,
+   ordered by tab address. Replacing an existing NG configuration requires
+   confirmation.
+5. Each written file is loaded once with `config.lua` and `storage.lua` of the
+   installed widget. A report lists everything that was not migrated;
+   the rotary encoder scrolls.
+
+Buttons that set a logical or virtual switch (`external_switch`) get the
+corresponding local switch (`Set switch`), resolved with `getSwitchName`;
+used `VS` switches are activated in the configuration. Sliders, duplicate
+targets and switches that are also the control's own input are reported
+instead. Logical switches must be `Sticky`, as with the old widget.
+Old files are not executed: only literal table syntax passes a check before
+a file is loaded with an empty environment. The tool does not change old
+configuration files or EdgeTX model files and works in small steps per call.
+Then replace `MultiSwE/L` with `MultiSw NG`; if an NG widget is already
+on the loaded model, reload the model.
+
+Review the tool's warnings before migrating. In particular, virtual inputs, telemetry actions,
+SHM and status passthrough are not migrated. Switches set by buttons
+(`external_switch`) are only assigned by the radio tool. Mixers relying on these stop
 working without manual adjustments; reassign supported local switches in the
 NG control editor where needed. The tool also reports mappings or control
 types that violate NG rules. Check sources, addresses, outputs and switches

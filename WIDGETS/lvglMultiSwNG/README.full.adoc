@@ -667,10 +667,50 @@ Werkzeugdokumentation] beschreiben den aktuellen Funktionsumfang.
    Alte Konfigurationsdateien und EdgeTX-Modelldateien werden vom Werkzeug
    nicht verändert.
 
+==== Konvertieren am Sender
+
+`tools/msw2ng.lua` führt die Konvertierung direkt am Sender aus.
+Die Datei nach `/SCRIPTS/TOOLS/msw2ng.lua` kopieren und `MultiSw -> NG` im
+Tools-Menü des Senders starten; `lvglMultiSwNG` muss installiert sein.
+
+1. Das Werkzeug listet alle alten Konfigurationen
+   (`/WIDGETS/lvglMultiSw/<Modell>_<Adresse>.lua`) mit dem zugehörigen Modell.
+   Dateien umbenannter Modelle erscheinen mit `?`;
+   leere oder abgeschnittene Dateien sind als unbrauchbar markiert.
+2. `ENTER` setzt oder entfernt den Haken einer Konfiguration; die erste Zeile
+   hakt alle Konfigurationen an, die zu einem Modell gehören.
+3. Langes `ENTER` (oder `PAGE`, oder Tippen auf `>`) öffnet die Zuordnung
+   zwischen alten und neuen Einstellungen: Ziel-Modell und Tab-Adresse der
+   Konfiguration sowie für alle Tabs des Ziel-Modells Protokoll, Intervall,
+   CRSF-Ziel und S.Port-IDs. Die Werte sind aus den alten Widget-Optionen der
+   Modelldatei vorbelegt; `destination` stammt aus dem alten
+   `commandBroadcastAddress`.
+4. `Angehakte umwandeln` schreibt je Modell eine NG-Konfiguration in den
+   Ordner der installierten NG-Version, in den anderen Speicherslot mit
+   höherer Generation. Die angehakten Konfigurationen eines Modells werden
+   seine Tabs, sortiert nach Tab-Adresse. Das Ersetzen einer vorhandenen
+   NG-Konfiguration erfordert eine Bestätigung.
+5. Jede geschriebene Datei wird einmal mit `config.lua` und `storage.lua` des
+   installierten Widgets geladen. Ein Bericht listet alles, was nicht
+   übernommen wurde; der Drehgeber scrollt.
+
+Buttons, die einen logischen oder virtuellen Schalter setzen
+(`external_switch`), erhalten den entsprechenden lokalen Schalter
+(`Schalter setzen`), aufgelöst mit `getSwitchName`; verwendete `VS`-Schalter
+werden in der Konfiguration aktiviert. Slider, doppelte Ziele und Schalter,
+die zugleich Eingang des Elements sind, werden stattdessen gemeldet.
+Logische Schalter müssen wie beim alten Widget `Sticky` sein.
+Alte Dateien werden nicht ausgeführt: Nur reine Tabellensyntax besteht eine
+Prüfung, danach wird die Datei mit leerer Umgebung geladen. Das Werkzeug
+verändert weder alte Konfigurationsdateien noch EdgeTX-Modelldateien und
+arbeitet in kleinen Schritten pro Aufruf.
+Anschließend `MultiSwE/L` durch `MultiSw NG` ersetzen; ist im geladenen Modell
+bereits ein NG-Widget, das Modell neu laden.
+
 Die Hinweise des Werkzeugs vor der Übernahme prüfen. Insbesondere werden
-von Buttons gesetzte logische/virtuelle Schalter (`external_switch`),
 virtuelle Eingänge, Telemetrieaktionen, SHM und Statusdurchleitung nicht
-übernommen. Davon abhängige Mischer funktionieren ohne Nacharbeit nicht mehr;
+übernommen. Von Buttons gesetzte Schalter (`external_switch`) ordnet nur das
+Werkzeug am Sender zu. Davon abhängige Mischer funktionieren ohne Nacharbeit nicht mehr;
 unterstützte lokale Schalter bei Bedarf im NG-Elementeditor neu zuordnen.
 Das Werkzeug meldet auch Zuordnungen oder Elementtypen, die gegen NG-Regeln
 verstoßen. Quellen, Adressen, Ausgänge und Schalter nach der Konvertierung
